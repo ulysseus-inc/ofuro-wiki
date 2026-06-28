@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-THIRD-PARTY OPEN SOURCE COMPONENTS
-
-This software incorporates components from third-party open source projects,
-some of which are licensed under terms other than MIT (for example, BlockSuite
-files under MPL-2.0 and libvips under LGPL-3.0-or-later). Those components
-retain their original licenses on a per-file / per-component basis.
-See the NOTICE file for full attribution and license details.
