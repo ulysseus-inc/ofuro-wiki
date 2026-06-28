@@ -1,0 +1,18 @@
+query getPrompts {
+  listCopilotPrompts {
+    name
+    model
+    action
+    config {
+      frequencyPenalty
+      presencePenalty
+      temperature
+      topP
+    }
+    messages {
+      role
+      content
+      params
+    }
+  }
+}

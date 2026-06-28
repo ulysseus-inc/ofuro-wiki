@@ -1,0 +1,12 @@
+{
+  "name": "@types/ofuro__env",
+  "license": "MIT",
+  "private": true,
+  "types": "./__all.d.ts",
+  "type": "module",
+  "dependencies": {
+    "@blocksuite/affine": "workspace:*",
+    "@ofuro/env": "workspace:*"
+  },
+  "version": "0.26.1"
+}

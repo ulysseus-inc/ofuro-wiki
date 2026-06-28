@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: セキュリティ脆弱性の報告 / Security vulnerability
+    url: https://github.com/ulysseus-inc/ofuro-wiki/security/advisories/new
+    about: 脆弱性は公開 Issue ではなく、非公開の Security Advisory で報告してください（SECURITY.md 参照）。

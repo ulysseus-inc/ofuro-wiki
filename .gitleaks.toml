@@ -1,0 +1,24 @@
+# gitleaks 設定 — ofuro-wiki
+# デフォルトルールを継承しつつ、確認済みの誤検知（第三者同梱の公開キー等）を許可リスト化する。
+# 監査記録: docs/oss-secret-scan.md / OSS公開計画 T7
+[extend]
+useDefault = true
+
+[allowlist]
+description = "確認済みの誤検知・非公開ローカルファイル"
+
+paths = [
+  # yarn 同梱バイナリ。Algolia の npm-search 公開キー(appId:OFCNCOG2CU)を含むが
+  # これは全世界の yarn に同梱される読み取り専用の公開キーで秘密ではない。
+  '''frontend/\.yarn/releases/.*''',
+  # ローカル限定の開発設定（.gitignore 済み・リポジトリ非公開）。
+  '''\.claude/.*''',
+]
+
+# regex は行全体に対して照合する（既定はシークレット値のみ）。
+regexTarget = "line"
+regexes = [
+  # NestJS スターター README の CircleCI shields.io バッジ用公開トークン（履歴に残存）。
+  # 現行 backend/README.md では置換済み。
+  '''shields\.io/circleci/build/github/nestjs/nest/master\?token=''',
+]

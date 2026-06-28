@@ -1,0 +1,41 @@
+name: バグ報告 / Bug report
+description: 不具合を報告する
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ご報告ありがとうございます。再現に必要な情報をご記入ください。
+        ⚠️ セキュリティ脆弱性は、この Issue ではなく SECURITY.md の手順で非公開に報告してください。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 事象 / What happened
+      description: 何が起きたか、期待した動作との違いを記述してください。
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境 / Environment
+      description: バージョン（コミットハッシュ）、ブラウザ、OS、デプロイ方法など
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: ログ・スクリーンショット / Logs, screenshots
+      description: 関連するコンソールログやスクリーンショットがあれば添付してください。
+    validations:
+      required: false

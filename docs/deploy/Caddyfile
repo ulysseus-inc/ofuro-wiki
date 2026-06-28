@@ -1,0 +1,29 @@
+# ofuro-wiki — Caddy リバースプロキシ設定サンプル
+#
+# Caddy は Let's Encrypt の証明書取得・更新を自動化してくれます。
+#
+# 使い方:
+#   1. Caddy をインストール: https://caddyserver.com/docs/install
+#   2. このファイルを /etc/caddy/Caddyfile にコピー
+#   3. wiki.example.com を自ドメインに置換
+#   4. systemctl reload caddy
+
+wiki.example.com {
+    # WebSocket（Yjs リアルタイム同期）
+    @websocket {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket localhost:3010
+
+    # アプリケーション本体
+    reverse_proxy localhost:3010 {
+        # アップロードサイズ（Blob/画像アップロード用）
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # アップロードサイズ制限
+    request_body {
+        max_size 100MB
+    }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@ofuro/routes",
+  "license": "MIT",
+  "version": "0.26.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "r build.ts"
+  },
+  "devDependencies": {
+    "@ofuro-tools/cli": "workspace:*",
+    "@ofuro-tools/utils": "workspace:*",
+    "path-to-regexp": "^8.3.0",
+    "query-string": "^9.1.1",
+    "vitest": "^3.2.4"
+  },
+  "peerDependencies": {
+    "react": "^19.2.1",
+    "react-router-dom": "^7.12.0"
+  }
+}

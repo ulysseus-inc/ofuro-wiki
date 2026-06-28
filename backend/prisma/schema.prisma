@@ -1,0 +1,332 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique @db.VarChar(255)
+  name           String?   @db.VarChar(255)
+  avatarUrl      String?   @map("avatar_url")
+  passwordHash   String?   @map("password_hash")
+  emailVerified  Boolean   @default(false) @map("email_verified")
+  isAdmin                Boolean   @default(false) @map("is_admin")
+  receiveInvitationEmail Boolean   @default(false) @map("receive_invitation_email")
+  receiveMentionEmail    Boolean   @default(false) @map("receive_mention_email")
+  receiveCommentEmail    Boolean   @default(false) @map("receive_comment_email")
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
+  memberships        WorkspaceMember[]
+  sessions           Session[]
+  docSnapshots       DocSnapshot[]
+  docUpdates         DocUpdate[]
+  docHistories       DocHistory[]
+  createdDocs        DocMeta[]         @relation("DocCreatedBy")
+  updatedDocs        DocMeta[]         @relation("DocUpdatedBy")
+  docPermissions     DocPermission[]
+  invitationsSent    Invitation[]
+  userSpaces         UserSpace[]
+  comments           Comment[]         @relation("CommentAuthor")
+  replies            Reply[]           @relation("ReplyAuthor")
+  notifications      Notification[]
+  emailTokens        EmailToken[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id         String    @id @default(uuid()) @db.Uuid
+  name       String?   @db.VarChar(255)
+  avatarKey  String?   @map("avatar_key")
+  public     Boolean   @default(false)
+  ownerId    String    @map("owner_id") @db.Uuid
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  owner      User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members    WorkspaceMember[]
+  snapshots  DocSnapshot[]
+  updates    DocUpdate[]
+  histories  DocHistory[]
+  docs       DocMeta[]
+  blobs      Blob[]
+  invitations Invitation[]
+  userSpaces UserSpace[]
+  searchIndex SearchIndex[]
+  comments    Comment[]
+
+  @@index([ownerId], map: "idx_workspaces_owner")
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  role         String   @default("member") @db.VarChar(50)
+  status       String   @default("accepted") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+model DocSnapshot {
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  docId        String    @map("doc_id") @db.VarChar(255)
+  blob         Bytes
+  timestamp    DateTime  @default(now()) @db.Timestamptz()
+  editorId     String?   @map("editor_id") @db.Uuid
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  editor       User?     @relation(fields: [editorId], references: [id])
+
+  @@id([workspaceId, docId])
+  @@index([editorId], map: "idx_doc_snapshots_editor")
+  @@map("doc_snapshots")
+}
+
+model DocUpdate {
+  id           BigInt   @id @default(autoincrement())
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  docId        String   @map("doc_id") @db.VarChar(255)
+  blob         Bytes
+  timestamp    DateTime @default(now()) @db.Timestamptz()
+  editorId     String?  @map("editor_id") @db.Uuid
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  editor       User?     @relation(fields: [editorId], references: [id])
+
+  @@index([workspaceId, docId, timestamp], map: "idx_doc_updates_lookup")
+  @@map("doc_updates")
+}
+
+model DocHistory {
+  id           BigInt   @id @default(autoincrement())
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  docId        String   @map("doc_id") @db.VarChar(255)
+  blob         Bytes
+  timestamp    DateTime @db.Timestamptz()
+  editorId     String?  @map("editor_id") @db.Uuid
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  editor       User?     @relation(fields: [editorId], references: [id])
+
+  @@index([workspaceId, docId, timestamp], map: "idx_doc_histories_lookup")
+  @@index([editorId], map: "idx_doc_histories_editor")
+  @@map("doc_histories")
+}
+
+model DocMeta {
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  docId        String    @map("doc_id") @db.VarChar(255)
+  title        String?
+  mode         String    @default("page") @db.VarChar(20)
+  public       Boolean   @default(false)
+  defaultRole  String    @default("reader") @map("default_role") @db.VarChar(50)
+  createdById  String?   @map("created_by") @db.Uuid
+  updatedById  String?   @map("updated_by") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy    User?           @relation("DocCreatedBy", fields: [createdById], references: [id])
+  updatedBy    User?           @relation("DocUpdatedBy", fields: [updatedById], references: [id])
+  permissions  DocPermission[]
+
+  @@id([workspaceId, docId])
+  @@index([createdById], map: "idx_doc_meta_created_by")
+  @@index([updatedById], map: "idx_doc_meta_updated_by")
+  @@map("doc_meta")
+}
+
+model DocPermission {
+  id           String   @id @default(uuid()) @db.Uuid
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  docId        String   @map("doc_id") @db.VarChar(255)
+  userId       String   @map("user_id") @db.Uuid
+  role         String   @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  doc          DocMeta  @relation(fields: [workspaceId, docId], references: [workspaceId, docId], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, docId, userId])
+  @@index([userId], map: "idx_doc_permissions_user")
+  @@map("doc_permissions")
+}
+
+model Blob {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  key          String    @db.VarChar(255)
+  mime         String?   @db.VarChar(255)
+  size         BigInt?
+  storagePath  String    @map("storage_path")
+  deleted      Boolean   @default(false)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, key])
+  @@map("blobs")
+}
+
+model Invitation {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  inviterId    String    @map("inviter_id") @db.Uuid
+  email        String?   @db.VarChar(255)
+  role         String    @default("member") @db.VarChar(50)
+  expireTime   DateTime? @map("expire_time") @db.Timestamptz()
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter      User      @relation(fields: [inviterId], references: [id])
+
+  @@index([workspaceId], map: "idx_invitations_workspace")
+  @@index([inviterId], map: "idx_invitations_inviter")
+  @@map("invitations")
+}
+
+model UserSpace {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  workspaceId  String    @map("workspace_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@map("user_spaces")
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  tokenHash  String   @map("token_hash") @db.VarChar(255)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz()
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_sessions_user")
+  @@index([expiresAt], map: "idx_sessions_expires")
+  @@map("sessions")
+}
+
+model SearchIndex {
+  id           BigInt   @id @default(autoincrement())
+  workspaceId  String   @map("workspace_id") @db.Uuid
+  docId        String   @map("doc_id") @db.VarChar(255)
+  blockId      String?  @map("block_id") @db.VarChar(255)
+  title        String?
+  content      String
+  blockType    String?  @map("block_type") @db.VarChar(50)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, docId], map: "idx_search_workspace")
+  @@map("search_index")
+}
+
+model ServerSetting {
+  key        String   @id @db.VarChar(255)
+  value      String
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  @@map("server_settings")
+}
+
+model BackupRecord {
+  id              String   @id @default(uuid()) @db.Uuid
+  filename        String
+  size            BigInt
+  workspaceCount  Int      @map("workspace_count")
+  docCount        Int      @map("doc_count")
+  blobCount       Int      @map("blob_count")
+  status          String   @default("completed") @db.VarChar(50)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  createdBy       String?  @map("created_by") @db.Uuid
+
+  @@map("backup_records")
+}
+
+model Comment {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  docId       String   @map("doc_id") @db.VarChar(255)
+  userId      String   @map("user_id") @db.Uuid
+  content     Json     @db.JsonB
+  resolved    Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation("CommentAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  replies     Reply[]
+
+  @@index([workspaceId, docId], map: "idx_comment_workspace_doc")
+  @@map("comments")
+}
+
+model Reply {
+  id        String   @id @default(uuid()) @db.Uuid
+  commentId String   @map("comment_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  content   Json     @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user      User     @relation("ReplyAuthor", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([commentId], map: "idx_replies_comment")
+  @@index([userId], map: "idx_replies_user")
+  @@map("replies")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      String   @db.VarChar(50)
+  level     String   @default("Default") @db.VarChar(20)
+  body      Json     @db.JsonB
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt], map: "idx_notification_user")
+  @@map("notifications")
+}
+
+model EmailToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique @db.VarChar(255)
+  type      String   @db.VarChar(50)
+  email     String?  @db.VarChar(255)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt], map: "idx_email_tokens_expires")
+  @@map("email_tokens")
+}

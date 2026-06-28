@@ -1,0 +1,26 @@
+{
+  "name": "@ofuro/env",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  },
+  "exports": {
+    "./automation": "./src/automation.ts",
+    "./global": "./src/global.ts",
+    "./constant": "./src/constant.ts",
+    "./workspace": "./src/workspace.ts",
+    "./filter": "./src/filter.ts",
+    "./blocksuite": "./src/blocksuite/index.ts",
+    "./worker": "./src/worker.ts"
+  },
+  "peerDependencies": {
+    "@blocksuite/affine": "workspace:*",
+    "@ofuro/templates": "workspace:*"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "version": "0.26.1"
+}

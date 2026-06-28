@@ -1,0 +1,104 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # #8: バージョンを git tag から渡す
+        # 例: docker compose build --build-arg VERSION=$(git describe --tags)
+        VERSION: ${APP_VERSION:-0.1.0}
+    ports:
+      - "3010:3010"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # #3: PostgreSQL 接続 — パスワードは .env で管理
+      DATABASE_URL: postgresql://${POSTGRES_USER:-ofuro}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ofuro_wiki}
+      # #1: 本番では必ず強いランダム値を設定すること
+      JWT_SECRET: ${JWT_SECRET}
+      BLOB_STORAGE_PATH: /data/blobs
+      BACKUP_STORAGE_PATH: /data/backups
+      NODE_ENV: production
+      # #10: メール内リンク等に使用するベースURL
+      BASE_URL: ${BASE_URL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # #2: CORS — * で全許可、ドメイン指定で絞り込み
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+      # #8: バージョン（build-arg から ENV に渡される）
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      MAILER_HOST: ${MAILER_HOST:-}
+      MAILER_PORT: ${MAILER_PORT:-}
+      MAILER_USER: ${MAILER_USER:-}
+      MAILER_PASSWORD: ${MAILER_PASSWORD:-}
+      MAILER_SENDER: ${MAILER_SENDER:-}
+      MAILER_IGNORE_TLS: ${MAILER_IGNORE_TLS:-false}
+      # HTTP環境では false、HTTPS環境では true（未設定時は NODE_ENV=production で true）
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    volumes:
+      - blobdata:/data/blobs
+      - ${BACKUP_HOST_PATH:-./backups}:/data/backups
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3010/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+
+  postgres:
+    # #26: pgroonga(全文検索) に pgvector(意味検索) をビルド追加した独自イメージ
+    # image: は GHCR 配布イメージ（本番は pull のみ）、build: はローカル開発用。
+    # 両方記載することで `docker compose build` はローカルビルド、`docker compose pull`
+    # は GHCR から取得、と環境に応じて使い分けられる。
+    image: ${POSTGRES_IMAGE:-ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest}
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/prisma/migrations/pgroonga-init.sql:/docker-entrypoint-initdb.d/01-pgroonga.sql:ro
+    environment:
+      # #3: PostgreSQL 認証情報 — .env で管理
+      POSTGRES_DB: ${POSTGRES_DB:-ofuro_wiki}
+      POSTGRES_USER: ${POSTGRES_USER:-ofuro}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # #34 フェーズ1: 破壊的操作の追跡性を確保するログ設定。
+    # log_statement=mod で INSERT/UPDATE/DELETE/TRUNCATE/DDL を記録し、
+    # log_line_prefix に %u@%d app=%a を含めて「誰が・どのDB・どのアプリか」を
+    # 各ステートメント行に残す。出力は stderr → Docker ログで確認する。
+    # （log_connections は healthcheck の pg_isready が 5 秒毎に接続ログを出して
+    #  監査ログを埋もれさせるため有効化しない。接続元監査が必要になったら
+    #  healthcheck 間隔の緩和や pgaudit と併せて検討する。）
+    command:
+      - "postgres"
+      - "-c"
+      - "log_statement=mod"
+      - "-c"
+      - "log_line_prefix=%m [%p] %u@%d app=%a "
+    ports:
+      # #34 フェーズ1: DB ポート公開は環境で切替可能にする。
+      # - 既定はループバック限定（単体 ofuro-wiki デプロイ向けの安全側）。
+      #   アプリは compose ネットワーク postgres:5432 で接続するため影響なし。
+      # - 別サービス同居など、社内LANの他ホストから DB へ直接書き込む構成では
+      #   .env で POSTGRES_PUBLISH を設定する。
+      #   安全のため全公開(0.0.0.0)より信頼できるLANの特定IPを推奨:
+      #   例) POSTGRES_PUBLISH=<server-ip>:5432:5432
+      #   さらに外部露出対策としてファイアウォールで 5432 を既知ホストのみ許可する想定。
+      - "${POSTGRES_PUBLISH:-127.0.0.1:5432:5432}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ofuro} -d ${POSTGRES_DB:-ofuro_wiki}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    profiles:
+      - dev
+
+volumes:
+  pgdata:
+  blobdata:

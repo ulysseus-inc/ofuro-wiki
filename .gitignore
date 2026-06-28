@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output
+backend/dist/
+backend/generated/
+frontend/.next/
+frontend/packages/frontend/apps/web/dist/
+
+# Yarn
+frontend/.yarn/install-state.gz
+frontend/.pnp.*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Data (runtime storage only — not source data files)
+/data/
+/backend/data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
+
+# Tools
+.claude/
+.serena/
+CLAUDE.md
+
+# Runtime / session
+backend/cookie_jar
+
+# Backups
+backups/
+
+# Logs
+*.log
+
+# Test artifacts
+e2e/test-results/
+e2e/playwright-report/

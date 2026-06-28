@@ -1,0 +1,32 @@
+{
+  "name": "@ofuro/mobile",
+  "license": "MIT",
+  "version": "0.26.1",
+  "description": "ofuro-wiki Mobile Web application",
+  "private": true,
+  "browser": "src/index.tsx",
+  "scripts": {
+    "build": "ofuro bundle",
+    "dev": "ofuro bundle --dev"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@ofuro/component": "workspace:*",
+    "@ofuro/core": "workspace:*",
+    "@ofuro/env": "workspace:*",
+    "@ofuro/i18n": "workspace:*",
+    "@ofuro/nbstore": "workspace:*",
+    "@ofuro/track": "workspace:*",
+    "@sentry/react": "^9.47.1",
+    "@toeverything/infra": "workspace:*",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-router-dom": "^6.30.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.2",
+    "cross-env": "^10.1.0",
+    "typescript": "^5.7.2"
+  }
+}

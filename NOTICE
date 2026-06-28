@@ -1,0 +1,138 @@
+ofuro-wiki — Third-Party Open Source Notices
+==============================================
+
+This software incorporates components from the following open source projects.
+
+-------------------------------------------------------------------------------
+
+## AFFiNE Frontend
+
+Source:       https://github.com/toeverything/AFFiNE
+Upstream:     v0.26.1 / commit 8192a492d9445f9130885a08f82f577260c8c5cb
+              (canary, 2026-02-08) を派生元とする
+Files:        frontend/packages/frontend/**
+              frontend/packages/common/**
+Copyright:    Copyright (c) 2022-present TOEVERYTHING PTE. LTD.
+              Modifications Copyright (c) 2024-present Ulysseus Co., Ltd.
+              and ofuro-wiki contributors
+License:      MIT License
+
+Note: ofuro-wiki incorporates only the MIT-licensed parts of upstream AFFiNE.
+The proprietary (EE) parts — packages/backend and packages/common/native —
+are NOT included in this repository. Package names were renamed from
+@affine/* to @ofuro/* (and @affine-tools/* to @ofuro-tools/*).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+
+## BlockSuite
+
+Source:       https://github.com/toeverything/blocksuite
+Upstream:     bundled with AFFiNE v0.26.1 / commit
+              8192a492d9445f9130885a08f82f577260c8c5cb を派生元とする
+Files:        frontend/blocksuite/**
+Copyright:    Copyright (c) 2022-present TOEVERYTHING PTE. LTD.
+              Modifications and additions Copyright (c) 2024-present
+              Ulysseus Co., Ltd. and ofuro-wiki contributors
+License:      Mozilla Public License Version 2.0 (MPL-2.0)
+
+This Source Code Form is subject to the terms of the Mozilla Public License,
+v. 2.0. If a copy of the MPL was not distributed with this file, You can
+obtain one at https://mozilla.org/MPL/2.0/.
+
+Under MPL-2.0, modifications to BlockSuite files must be made available under
+the same license. The rest of ofuro-wiki is not affected by this requirement.
+
+ofuro-wiki's changes under frontend/blocksuite/** relative to the upstream
+fork point (excluding the @ofuro/* renaming, which is mechanical) are:
+  - 61 modified files and 15 added files (e.g. the custom columns block under
+    frontend/blocksuite/affine/blocks/columns/**).
+These modified and added files are likewise made available under MPL-2.0; their
+full source is published in this repository, satisfying the disclosure
+requirement. The demo-only @blocksuite/playground package was removed.
+
+Full license text: https://www.mozilla.org/en-US/MPL/2.0/
+
+-------------------------------------------------------------------------------
+
+## MPL-2.0 dependencies (third-party, used unmodified)
+
+The following npm dependencies are licensed under the Mozilla Public License
+Version 2.0 (MPL-2.0). They are used **without modification**; therefore the
+MPL-2.0 source-disclosure obligation is satisfied by the upstream projects and
+does not extend to ofuro-wiki's own source code.
+
+- lightningcss (and platform binaries, e.g. lightningcss-linux-x64-gnu)
+  Source: https://github.com/parcel-bundler/lightningcss
+- @toeverything/pdf-viewer / @toeverything/pdf-viewer-types
+  Source: https://github.com/toeverything/pdf-viewer
+- @toeverything/pdfium
+  Source: https://github.com/toeverything/pdf-viewer
+- @toeverything/theme
+  Source: https://github.com/toeverything/design
+
+dompurify is dual-licensed (MPL-2.0 OR Apache-2.0); ofuro-wiki uses it under
+the Apache-2.0 option.
+  Source: https://github.com/cure53/DOMPurify
+
+MPL-2.0 full text: https://www.mozilla.org/en-US/MPL/2.0/
+
+-------------------------------------------------------------------------------
+
+## libvips (via @img/sharp-libvips-*)
+
+Source:       https://github.com/libvips/libvips
+              https://github.com/lovell/sharp-libvips
+Component:    @img/sharp-libvips-* (prebuilt native library used by sharp)
+License:      LGPL-3.0-or-later
+
+libvips is a dynamically-linked native library. It is distributed unmodified
+and can be replaced by the user with a compatible build. As LGPL-3.0 (not a
+strong copyleft for dynamic linking), it imposes no source-disclosure
+obligation on ofuro-wiki's own code beyond providing this attribution and the
+ability to relink/replace the library.
+
+LGPL-3.0 full text: https://www.gnu.org/licenses/lgpl-3.0.html
+
+-------------------------------------------------------------------------------
+
+## Build-time only tooling (not part of the distributed runtime)
+
+The following component is used at build time only and is NOT included in the
+distributed/runtime artifacts:
+
+- @sentry/cli (FSL-1.1-MIT) — pulled in transitively as a build tool.
+  ofuro-wiki does not initialize any Sentry runtime SDK and sets no DSN; no
+  telemetry is transmitted. See the project README and the privacy
+  verification record under docs/ for the end-to-end measurement.
+
+-------------------------------------------------------------------------------
+
+## Other attributions
+
+- argparse — Python-2.0
+- caniuse-lite — CC-BY-4.0
+- jszip — dual-licensed (MIT OR GPL-3.0-or-later); used under the MIT option.
+
+A full machine-generated inventory of dependency licenses is available in
+THIRD-PARTY-LICENSES.md and the accompanying THIRD-PARTY-frontend.csv /
+THIRD-PARTY-backend.csv files.
+
+-------------------------------------------------------------------------------

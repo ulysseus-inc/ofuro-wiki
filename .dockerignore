@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+**/.git
+**/.env
+**/.env.local
+**/coverage
+**/*.swp
+**/*.swo
+.DS_Store
+docs/
+e2e/
+frontend/.yarn/cache
+frontend/.yarn/install-state.gz

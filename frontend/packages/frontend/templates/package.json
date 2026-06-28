@@ -1,0 +1,21 @@
+{
+  "name": "@ofuro/templates",
+  "license": "MIT",
+  "private": true,
+  "sideEffect": false,
+  "version": "0.26.1",
+  "scripts": {
+    "build": "node ./build-edgeless.mjs && node ./build-stickers.mjs",
+    "postinstall": "yarn build"
+  },
+  "type": "module",
+  "exports": {
+    "./onboarding.zip": "./onboarding/onboarding.zip",
+    "./edgeless": "./edgeless-templates.gen.ts",
+    "./stickers": "./stickers-templates.gen.ts",
+    "./build-edgeless": "./build-edgeless.mjs"
+  },
+  "devDependencies": {
+    "jszip": "^3.10.1"
+  }
+}
