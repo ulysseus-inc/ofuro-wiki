@@ -33,6 +33,26 @@ IPアドレス（192.168.x.x 等）でアクセス、またはオフライン環
 
 どのパターンでも共通の手順です。
 
+### 0. Docker のインストール
+
+Docker と Docker Compose (v2) が必要です。未インストールの場合：
+
+```bash
+# Ubuntu
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2
+
+# 実行ユーザーを docker グループに追加（sudo なしで docker を使う場合。再ログインで反映）
+sudo usermod -aG docker $USER
+
+# 確認
+docker --version && docker compose version
+```
+
+> **Ubuntu 以外**（Debian ほか）: `docker-compose-v2` パッケージは Ubuntu 独自のため、
+> [Docker 公式ドキュメント](https://docs.docker.com/engine/install/) に従い
+> `docker-ce` + `docker-compose-plugin` をインストールしてください。
+
 ### 1. リポジトリの取得
 
 ```bash
@@ -180,35 +200,31 @@ jobs:
           cache-to: type=gha,mode=max
 ```
 
-**`docker-compose.yml` の変更**
+**イメージの指定（`.env` に追記するだけ。compose の書き換えは不要）**
 
-サーバー上の `docker-compose.yml` で `build:` ディレクティブを `image:` に変更します：
-
-```yaml
-services:
-  app:
-    # build: .   ← 削除
-    image: ghcr.io/<org>/<repo>:latest   # ← 追加
-    ...
-  postgres:
-    # build: ...                                ← 削除（サーバーではビルドしない）
-    image: ghcr.io/<org>/<repo>-postgres:latest # ← pgroonga + pgvector の配布イメージ
-    ...
+```bash
+# .env に追記
+APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
+POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
 ```
 
-> **postgres イメージ（#26）**: pgroonga + pgvector の独自イメージは GitHub Actions で
-> `ghcr.io/<org>/<repo>-postgres:latest` に push されます。本番サーバーでは `build:` を
-> 削除して `image:` に差し替えることで、`docker compose pull` で取得できます。
+`docker-compose.yml` は `image: ${APP_IMAGE:-...}` / `image: ${POSTGRES_IMAGE:-...}` を
+参照しているため、変数を設定して pull すれば配布イメージで起動します。
+未設定の場合はローカルビルド（方法①）になります。
+
+> **postgres イメージ（#26）**: pgroonga + pgvector の独自イメージです。
+> GitHub Actions で `ghcr.io/<org>/<repo>-postgres:latest` に push されます。
 
 **サーバー上でのデプロイ**
 
 ```bash
-# GHCR にログイン（初回のみ）
+# GHCR にログイン（プライベートイメージの場合のみ。公開イメージなら不要）
 echo <GITHUB_TOKEN> | docker login ghcr.io -u <github_username> --password-stdin
 
-# イメージを pull して再起動
-docker compose pull
-docker compose up -d
+# イメージを pull して起動
+# --no-build: pull 忘れ等でローカルビルドが暴発し OOM するのを防ぐ（低スペック環境で重要）
+docker compose pull app postgres
+docker compose up -d --no-build
 ```
 
 > **GHCR の容量**: GitHub Free プランでは Container Registry の容量は **500MB 無料**。
@@ -218,6 +234,9 @@ docker compose up -d
 
 RAM が 2GB 未満のサーバーで方法①（サーバービルド）を選ぶ場合は、ビルド前に Swap を作成してください。
 方法②（GHCR Pull）を使う場合でも、サービス稼働中の安定性のために作成を推奨します。
+
+> **最小構成の実績**: GCE e2-micro（vCPU 2 / RAM 1GB / 無料枠）+ Swap 2GB で、
+> 方法②（GHCR Pull）+ パターン A（Caddy）の構成で安定稼働を確認済みです。
 
 ```bash
 # 2GB の Swap ファイルを作成
@@ -362,6 +381,18 @@ BACKUP_HOST_PATH=./backups  # デフォルト
 ### データベース接続エラー
 
 `POSTGRES_PASSWORD` が `.env` と docker-compose の両方で一致しているか確認してください。
+
+### 初回起動に失敗した後、DB を初期状態からやり直す
+
+PostgreSQL 拡張（pgroonga / pgvector）は **DB ボリュームの初回作成時にのみ**セットアップ
+されます。初回起動が途中で失敗した場合（パスワード設定ミス等）、中途半端に初期化された
+ボリュームが残り、以降の起動も失敗し続けることがあります。データが入る前なら、
+ボリュームごと削除して最初からやり直すのが確実です：
+
+```bash
+docker compose down -v   # ⚠ DB データを全削除（運用開始後は絶対に実行しないこと）
+docker compose up -d
+```
 
 ### ログの確認
 

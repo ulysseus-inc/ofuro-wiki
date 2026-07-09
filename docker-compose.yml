@@ -1,5 +1,10 @@
 services:
   app:
+    # GHCR 配布イメージで運用する場合は .env で APP_IMAGE を指定して
+    # `docker compose pull app` する（compose の書き換え不要）。
+    # 例: APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
+    # 未指定ならローカルビルド（build:）の結果がこの名前でタグ付けされる。
+    image: ${APP_IMAGE:-ofuro-wiki-app:local}
     build:
       context: .
       dockerfile: Dockerfile
