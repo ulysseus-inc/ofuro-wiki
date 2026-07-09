@@ -22,7 +22,10 @@ RUN set -eux; \
     git clone --branch "${PGVECTOR_VERSION}" --depth 1 \
         https://github.com/pgvector/pgvector.git /tmp/pgvector; \
     cd /tmp/pgvector; \
-    make; \
+    # OPTFLAGS を空にしてポータブルビルドにする。既定の -march=native は
+    # ビルドマシン（CI ランナー等）の CPU 命令セットに最適化されるため、
+    # 配布イメージを古い CPU（GCE e2 等）で実行すると SIGILL でクラッシュする。
+    make OPTFLAGS=""; \
     make install; \
     cd /; \
     rm -rf /tmp/pgvector; \
