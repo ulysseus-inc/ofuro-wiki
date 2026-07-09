@@ -8,6 +8,7 @@ import { AuthService } from './auth.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../../prisma.service';
 import { UserType } from '../user/user.model';
+import { BCRYPT_ROUNDS } from '../../common/security.constants';
 
 @Resolver()
 @UseGuards(JwtAuthGuard)
@@ -212,10 +213,12 @@ export class AuthEmailResolver {
       if (userId && result.userId !== userId) {
         throw new BadRequestException('Invalid token');
       }
-      const hash = await bcrypt.hash(newPassword, 10);
+      this.authService.validatePasswordStrength(newPassword);
+      const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+      // L-1: リセット時も既存の全トークンを失効させる（tokenVersion +1）。
       await this.prisma.user.update({
         where: { id: result.userId },
-        data: { passwordHash: hash },
+        data: { passwordHash: hash, tokenVersion: { increment: 1 } },
       });
       await this.mailService.deleteToken(token);
       return true;

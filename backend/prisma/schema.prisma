@@ -15,7 +15,12 @@ model User {
   avatarUrl      String?   @map("avatar_url")
   passwordHash   String?   @map("password_hash")
   emailVerified  Boolean   @default(false) @map("email_verified")
+  // L-1: JWT 即時失効用。パスワード変更/全端末サインアウト/管理者失効で +1 し、
+  // 発行済みトークン(payload.tv)と不一致なら失効扱いにする。
+  tokenVersion   Int       @default(0) @map("token_version")
   isAdmin                Boolean   @default(false) @map("is_admin")
+  // #72: マニュアルWS所有などのシステム内部アカウント。ログイン不可・Admin一覧から除外。
+  isSystem               Boolean   @default(false) @map("is_system")
   receiveInvitationEmail Boolean   @default(false) @map("receive_invitation_email")
   receiveMentionEmail    Boolean   @default(false) @map("receive_mention_email")
   receiveCommentEmail    Boolean   @default(false) @map("receive_comment_email")

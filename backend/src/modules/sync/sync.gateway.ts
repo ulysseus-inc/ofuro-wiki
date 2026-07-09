@@ -14,6 +14,7 @@ import { SyncService } from './sync.service';
 import { AwarenessService } from './awareness.service';
 import { IndexerService } from '../search/indexer.service';
 import { PrismaService } from '../../prisma.service';
+import { parseAllowedOrigins } from '../../common/cors';
 
 // AFFiNE protocol: response wrapper
 type WsResponse<T> = { data: T } | { error: { name: string; message: string } };
@@ -51,7 +52,8 @@ interface ConnectionState {
 
 @WebSocketGateway({
   cors: {
-    origin: true,
+    // #2/M-3: HTTP と同じ ALLOWED_ORIGINS ポリシーに従う（従来は any-origin 固定だった）
+    origin: parseAllowedOrigins(),
     credentials: true,
   },
   // AFFiNE frontend uses root namespace '/'
@@ -67,6 +69,16 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(SyncGateway.name);
   private connections = new Map<string, ConnectionState>();
   private _restoreMode = false;
+
+  // space:push-doc-update 等は高頻度で呼ばれるため、アクセス判定結果を短時間
+  // キャッシュして DB 負荷を抑える。TTL は「メンバー剥奪が反映されるまでの
+  // 最大遅延」でもあるため短めに設定する。
+  private readonly accessCache = new Map<
+    string,
+    { authorized: boolean; expiresAt: number }
+  >();
+  private static readonly ACCESS_CACHE_TTL_MS = 5000;
+  private static readonly ACCESS_CACHE_MAX = 10000;
 
   /** Enter restore mode: disconnect all clients and reject new connections/pushes */
   async enterRestoreMode(): Promise<void> {
@@ -106,10 +118,14 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.parseCookie(client.handshake.headers.cookie, 'affine_token');
 
       let userId: string | undefined;
+      let revocationCheck: { sub: string; tv: number } | undefined;
       if (token) {
         try {
           const payload = this.jwtService.verify(token);
+          // userId は同期的に確定させる（await を挟むと connections 未登録のまま
+          // space:join が到達しうるため。tokenVersion 検証は登録後に非同期で行う）。
           userId = payload.sub;
+          revocationCheck = { sub: payload.sub, tv: payload.tv ?? 0 };
         } catch {
           // Anonymous connection allowed for public docs
         }
@@ -123,6 +139,36 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(
         `Client connected: ${client.id} (user: ${userId || 'anonymous'})`,
       );
+
+      // L-1: 接続登録後に tokenVersion を検証。検証が完了する（または失効が
+      // 確定する）まで、ソケット個別ミドルウェアで受信パケットの処理をブロックし、
+      // 失効済みトークンが接続直後の隙に read/write するレースを防ぐ。
+      if (revocationCheck) {
+        const check = revocationCheck;
+        const verificationPromise = this.prisma.user
+          .findUnique({
+            where: { id: check.sub },
+            select: { tokenVersion: true },
+          })
+          .then((user) => {
+            const isValid = !!user && user.tokenVersion === check.tv;
+            if (!isValid) {
+              this.logger.warn(`Disconnecting ${client.id}: token revoked`);
+              client.disconnect(true);
+            }
+            return isValid;
+          })
+          .catch(() => false);
+
+        client.use(async (_packet, next) => {
+          const isValid = await verificationPromise;
+          if (!isValid) {
+            next(new Error('Token has been revoked'));
+            return;
+          }
+          next();
+        });
+      }
     } catch (e) {
       this.logger.error(`Connection error: ${e}`);
       client.disconnect();
@@ -169,6 +215,14 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     }
 
+    // H-1: メンバーシップ検証（読み取りアクセス）
+    if (!(await this.hasSpaceAccess(spaceType, spaceId, conn.userId, false))) {
+      this.logger.warn(
+        `space:join rejected — user ${conn.userId ?? 'anonymous'} lacks access to ${key}`,
+      );
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
     // Join rooms
     client.join(syncRoom(spaceType, spaceId));
     client.join(syncRoom026(spaceType, spaceId));
@@ -212,6 +266,20 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(
       `space:load-doc from ${client.id}: spaceType=${data.spaceType} spaceId=${data.spaceId} docId=${data.docId} hasStateVector=${!!data.stateVector}`,
     );
+
+    // H-1: メンバーシップ検証（読み取りアクセス）
+    const conn = this.connections.get(client.id);
+    if (
+      !(await this.hasSpaceAccess(
+        data.spaceType,
+        data.spaceId,
+        conn?.userId,
+        false,
+      ))
+    ) {
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
     try {
       let stateVector: Uint8Array | undefined;
       if (data.stateVector) {
@@ -259,6 +327,21 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const conn = this.connections.get(client.id);
     if (!conn)
       return err('INTERNAL', 'Connection not found');
+
+    // H-1: メンバーシップ検証（書き込みアクセス）
+    if (
+      !(await this.hasSpaceAccess(
+        data.spaceType,
+        data.spaceId,
+        conn.userId,
+        true,
+      ))
+    ) {
+      this.logger.warn(
+        `space:push-doc-update rejected — user ${conn.userId ?? 'anonymous'} lacks write access to ${data.spaceType}:${data.spaceId}`,
+      );
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
 
     this.logger.log(
       `space:push-doc-update from ${client.id}: docId=${data.docId} updateSize=${data.update.length}chars`,
@@ -318,6 +401,20 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(
       `space:load-doc-timestamps from ${client.id}: spaceId=${data.spaceId} after=${data.timestamp ?? 'none'}`,
     );
+
+    // H-1: メンバーシップ検証（読み取りアクセス）
+    const conn = this.connections.get(client.id);
+    if (
+      !(await this.hasSpaceAccess(
+        data.spaceType,
+        data.spaceId,
+        conn?.userId,
+        false,
+      ))
+    ) {
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
     try {
       const timestamps = await this.syncService.getDocTimestamps(
         data.spaceId,
@@ -343,6 +440,21 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const conn = this.connections.get(client.id);
     if (!conn) return;
 
+    // H-1: メンバーシップ検証（書き込みアクセス）
+    if (
+      !(await this.hasSpaceAccess(
+        data.spaceType,
+        data.spaceId,
+        conn.userId,
+        true,
+      ))
+    ) {
+      this.logger.warn(
+        `space:delete-doc rejected — user ${conn.userId ?? 'anonymous'} lacks write access to ${data.spaceType}:${data.spaceId}`,
+      );
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
     await this.syncService.deleteDoc(data.spaceId, data.docId);
   }
 
@@ -362,6 +474,12 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!conn) return err('INTERNAL', 'Connection not found');
 
     const { spaceType, spaceId, docId } = data;
+
+    // H-1: メンバーシップ検証（読み取りアクセス）
+    if (!(await this.hasSpaceAccess(spaceType, spaceId, conn.userId, false))) {
+      return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
     const room = awarenessRoom(spaceType, spaceId, docId);
     const key = `${spaceType}:${spaceId}:${docId}`;
 
@@ -431,6 +549,85 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       spaceId,
       docId,
     });
+  }
+
+  /**
+   * H-1 対策: WebSocket 経由のワークスペース越境を防ぐ。
+   * spaceType/spaceId に対して呼び出しユーザーのアクセス可否を判定する。
+   * - userspace(個人スペース): 本人のみ。
+   * - workspace: accepted メンバーのみ。書き込みは reader 以外。
+   *   サーバ全体 Admin は常に許可。未認証/非メンバーは公開WSの読み取りのみ。
+   */
+  private async hasSpaceAccess(
+    spaceType: string,
+    spaceId: string,
+    userId: string | undefined,
+    write: boolean,
+  ): Promise<boolean> {
+    if (spaceType !== 'workspace') {
+      // 個人スペースは spaceId === userId のときのみ許可（DBアクセス不要）
+      return !!userId && spaceId === userId;
+    }
+
+    const now = Date.now();
+    const cacheKey = `${userId ?? 'anonymous'}:${spaceId}:${write ? 'w' : 'r'}`;
+    const cached = this.accessCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.authorized;
+    }
+
+    const authorized = await this.checkWorkspaceAccess(spaceId, userId, write);
+
+    // 肥大化時は期限切れを掃除し、それでも上限超過なら全クリア（メモリリーク防止）
+    if (this.accessCache.size >= SyncGateway.ACCESS_CACHE_MAX) {
+      for (const [k, v] of this.accessCache) {
+        if (v.expiresAt <= now) this.accessCache.delete(k);
+      }
+      if (this.accessCache.size >= SyncGateway.ACCESS_CACHE_MAX) {
+        this.accessCache.clear();
+      }
+    }
+    this.accessCache.set(cacheKey, {
+      authorized,
+      expiresAt: now + SyncGateway.ACCESS_CACHE_TTL_MS,
+    });
+
+    return authorized;
+  }
+
+  /** ワークスペースへのアクセス可否を DB から判定する（キャッシュ無し実体）。 */
+  private async checkWorkspaceAccess(
+    spaceId: string,
+    userId: string | undefined,
+    write: boolean,
+  ): Promise<boolean> {
+    if (userId) {
+      const dbUser = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { isAdmin: true },
+      });
+      if (dbUser?.isAdmin) return true;
+
+      const member = await this.prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: spaceId, userId } },
+        select: { role: true, status: true },
+      });
+      if (member && member.status === 'accepted') {
+        if (!write) return true;
+        // 書き込みは reader 以外（member/admin/owner）
+        return member.role !== 'reader';
+      }
+    }
+
+    // 未認証 or 非メンバー: 公開ワークスペースの読み取りのみ許可
+    if (!write) {
+      const ws = await this.prisma.workspace.findUnique({
+        where: { id: spaceId },
+        select: { public: true },
+      });
+      return !!ws?.public;
+    }
+    return false;
   }
 
   private parseCookie(

@@ -20,7 +20,10 @@ export class Doc extends Entity {
 
     const handleTransactionThrottled = throttle(
       (trx: Transaction) => {
-        if (trx.local) {
+        // 読み取り専用（Reader・保護モード・ゴミ箱・マニュアルWS 等）では、閲覧時の
+        // 内部ローカルトランザクションで updatedAt を更新しない。閲覧しただけで
+        // 更新時刻が変わり、updatedAt 順の一覧が並び替わるのを防ぐ（#72）。
+        if (trx.local && !this.blockSuiteDoc.readonly) {
           this.setUpdatedAt(Date.now());
         }
       },

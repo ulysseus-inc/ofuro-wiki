@@ -19,7 +19,9 @@ export function patchUserListExtensions(memberSearch: MemberSearchService) {
     users$: memberSearch.result$.map(users =>
       users.map(u => ({
         id: u.id,
-        name: u.name,
+        // 表示名が未設定（サインアップで名前を収集しないため name が空になり得る）の
+        // 場合は email をフォールバック表示し、メンバーを識別できるようにする。
+        name: u.name || u.email,
         avatar: u.avatarUrl,
       }))
     ).signal,

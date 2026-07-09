@@ -5,6 +5,7 @@ import {
   type PopupTarget,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import {
   DeleteIcon,
   DuplicateIcon,
@@ -87,7 +88,7 @@ export class DataViewHeaderViews extends WidgetBase {
       popupTargetFromElement(event.currentTarget as HTMLElement),
       this.dataSource.viewMetas.map(v => {
         return menu.action({
-          name: v.model.defaultName,
+          name: translateSlashItem(v.model.defaultName).name,
           prefix: html`<uni-lit .uni=${v.renderer.icon}></uni-lit>`,
           select: () => {
             this.addView(v.type);
@@ -119,8 +120,13 @@ export class DataViewHeaderViews extends WidgetBase {
               prefix: html`<uni-lit
                 .uni=${this.getRenderer(id)?.icon}
               ></uni-lit>`,
-              name: view.name$.value ?? '',
-              label: () => html`${view.name$.value}`,
+              name: view.name$.value
+                ? translateSlashItem(view.name$.value).name
+                : '',
+              label: () =>
+                html`${view.name$.value
+                  ? translateSlashItem(view.name$.value).name
+                  : ''}`,
               isSelected: this.viewManager.currentViewId$.value === id,
               select: () => {
                 this.viewManager.setCurrentView(id);
@@ -138,7 +144,7 @@ export class DataViewHeaderViews extends WidgetBase {
         menu.group({
           items: this.dataSource.viewMetas.map(v => {
             return menu.action({
-              name: `Create ${v.model.defaultName}`,
+              name: `${translateSlashItem('Create').name} ${translateSlashItem(v.model.defaultName).name}`,
               hide: () => this.readonly,
               prefix: PlusIcon(),
               select: () => {
@@ -169,8 +175,10 @@ export class DataViewHeaderViews extends WidgetBase {
       options: {
         items: [
           menu.input({
-            initialValue: view.name$.value,
-            placeholder: 'View name',
+            initialValue: view.name$.value
+              ? translateSlashItem(view.name$.value).name
+              : view.name$.value,
+            placeholder: translateSlashItem('View name').name,
             onChange: text => {
               view.nameSet(text);
             },
@@ -178,7 +186,7 @@ export class DataViewHeaderViews extends WidgetBase {
           menu.group({
             items: [
               menu.action({
-                name: 'Edit View',
+                name: translateSlashItem('Edit View').name,
                 prefix: InfoIcon(),
                 select: () => {
                   this.closest('affine-data-view-renderer')
@@ -187,7 +195,7 @@ export class DataViewHeaderViews extends WidgetBase {
                 },
               }),
               menu.action({
-                name: 'Move Left',
+                name: translateSlashItem('Move Left').name,
                 hide: () => index === 0,
                 prefix: MoveLeftIcon(),
                 select: () => {
@@ -199,7 +207,7 @@ export class DataViewHeaderViews extends WidgetBase {
                 },
               }),
               menu.action({
-                name: 'Move Right',
+                name: translateSlashItem('Move Right').name,
                 prefix: MoveRightIcon(),
                 hide: () => index === views.length - 1,
                 select: () => {
@@ -215,14 +223,14 @@ export class DataViewHeaderViews extends WidgetBase {
           menu.group({
             items: [
               menu.action({
-                name: 'Duplicate',
+                name: translateSlashItem('Duplicate').name,
                 prefix: DuplicateIcon(),
                 select: () => {
                   this.viewManager.viewDuplicate(id);
                 },
               }),
               menu.action({
-                name: 'Delete',
+                name: translateSlashItem('Delete').name,
                 prefix: DeleteIcon(),
                 select: () => {
                   view.delete();

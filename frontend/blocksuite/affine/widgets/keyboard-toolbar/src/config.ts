@@ -54,6 +54,7 @@ import {
   isInsideBlockByFlavour,
   openSingleFileWith,
   type Signal,
+  translateSlashItem,
 } from '@blocksuite/affine-shared/utils';
 import type { AffineLinkedDocWidget } from '@blocksuite/affine-widget-linked-doc';
 import { viewPresets } from '@blocksuite/data-view/view-presets';
@@ -1180,7 +1181,7 @@ export const defaultKeyboardToolbarConfig: KeyboardToolbarConfig = {
           .pipe(getSelectedModelsCommand)
           .with({
             onCopy: () => {
-              toast(std.host, 'Copied to clipboard');
+              toast(std.host, translateSlashItem('Copied to clipboard').name);
             },
           })
           .pipe(draftSelectedModelsCommand)

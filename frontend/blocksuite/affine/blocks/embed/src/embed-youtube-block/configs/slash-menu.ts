@@ -1,5 +1,9 @@
 import { DefaultTool } from '@blocksuite/affine-block-surface';
 import { toggleEmbedCardCreateModal } from '@blocksuite/affine-components/embed-card-modal';
+import {
+  translateGroupStr,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import type { SlashMenuConfig } from '@blocksuite/affine-widget-slash-menu';
 import { YoutubeDuotoneIcon } from '@blocksuite/icons/lit';
 import { GfxControllerIdentifier } from '@blocksuite/std/gfx';
@@ -7,16 +11,18 @@ import { GfxControllerIdentifier } from '@blocksuite/std/gfx';
 import { YoutubeVideoTooltip } from './tooltips';
 
 export const embedYoutubeSlashMenuConfig: SlashMenuConfig = {
-  items: [
+  items: () => {
+    const t = translateSlashItem('YouTube', 'Embed a YouTube video.');
+    return [
     {
-      name: 'YouTube',
-      description: 'Embed a YouTube video.',
+      name: t.name,
+      description: t.description,
       icon: YoutubeDuotoneIcon(),
       tooltip: {
         figure: YoutubeVideoTooltip,
         caption: 'YouTube Video',
       },
-      group: '4_Content & Media@6',
+      group: translateGroupStr('4_Content & Media@6'),
       when: ({ model }) =>
         model.store.schema.flavourSchemaMap.has('affine:embed-youtube'),
       action: ({ std, model }) => {
@@ -43,5 +49,6 @@ export const embedYoutubeSlashMenuConfig: SlashMenuConfig = {
         })().catch(console.error);
       },
     },
-  ],
+    ];
+  },
 };

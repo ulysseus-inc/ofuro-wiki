@@ -10,6 +10,7 @@ import {
   EdgelessIcon,
   FileIcon,
   HistoryIcon,
+  LockIcon,
   LongerIcon,
   MemberIcon,
   NumberIcon,
@@ -82,6 +83,7 @@ import {
   PageWidthGroupHeader,
   PageWidthValue,
 } from './page-width';
+import { ReadOnlyDocListProperty, ReadOnlyValue } from './read-only';
 import {
   TagsDocListProperty,
   TagsFilterValue,
@@ -367,6 +369,17 @@ export const WorkspacePropertyTypes = {
     },
     filterValue: TemplateFilterValue,
     defaultFilter: { method: 'is', value: 'true' },
+  },
+  // #66: 保護モード（ドキュメント単位の advisory lock）
+  readOnly: {
+    icon: LockIcon,
+    value: ReadOnlyValue,
+    name: 'com.affine.page-properties.property.readOnly',
+    uniqueId: 'readOnly',
+    renameable: false,
+    description: 'com.affine.page-properties.property.readOnly.tooltips',
+    showInDocList: 'stack',
+    docListProperty: ReadOnlyDocListProperty,
   },
   unknown: {
     icon: PropertyIcon,

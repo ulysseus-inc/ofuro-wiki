@@ -4,6 +4,7 @@ import {
   popMenu,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { ArrowDownSmallIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
@@ -113,12 +114,12 @@ export class DatabaseColumnStatsCell extends SignalWatcher(
     const menus: MenuConfig[] = Object.entries(this.groups$.value).map(
       ([group, funcs]) => {
         return menu.subMenu({
-          name: group,
+          name: translateSlashItem(group).name,
           options: {
             items: Object.values(funcs).map(func => {
               return menu.action({
                 isSelected: func.type === this.column.statCalcOp$.value,
-                name: func.menuName ?? func.type,
+                name: translateSlashItem(func.menuName ?? func.type).name,
                 select: () => {
                   this.column.updateStatCalcOp(func.type);
                 },
@@ -133,7 +134,7 @@ export class DatabaseColumnStatsCell extends SignalWatcher(
         items: [
           menu.action({
             isSelected: !this.column.statCalcOp$.value,
-            name: 'None',
+            name: translateSlashItem('None').name,
             select: () => {
               this.column.updateStatCalcOp();
             },
@@ -166,7 +167,7 @@ export class DatabaseColumnStatsCell extends SignalWatcher(
       return null;
     }
     return {
-      name: func.displayName,
+      name: translateSlashItem(func.displayName).name,
       value:
         func.impl?.(this.values$.value, {
           meta,

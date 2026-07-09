@@ -3,6 +3,7 @@ import {
   popFilterableSimpleMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { DeleteIcon, ExpandFullIcon } from '@blocksuite/icons/lit';
 
 import type { SingleView } from '../../../core/index.js';
@@ -18,7 +19,7 @@ export const popMobileRowMenu = (
     menu.group({
       items: [
         menu.action({
-          name: 'Expand Row',
+          name: translateSlashItem('Expand Row').name,
           prefix: ExpandFullIcon(),
           select: () => {
             tableViewLogic.root.openDetailPanel({
@@ -33,7 +34,7 @@ export const popMobileRowMenu = (
       name: '',
       items: [
         menu.action({
-          name: 'Delete Row',
+          name: translateSlashItem('Delete Row').name,
           class: { 'delete-item': true },
           prefix: DeleteIcon(),
           select: () => {

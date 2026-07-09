@@ -7,6 +7,13 @@ import type { DocCustomPropertyInfo } from '../db';
  */
 export const BUILT_IN_CUSTOM_PROPERTY_TYPE: DocCustomPropertyInfo[] = [
   {
+    // #66: 保護モード。プロパティを開いたときすぐ見える最上部に常時表示する。
+    id: 'readOnly',
+    type: 'readOnly',
+    index: 'a0000000',
+    show: 'always-show',
+  },
+  {
     id: 'tags',
     type: 'tags',
     index: 'a0000001',

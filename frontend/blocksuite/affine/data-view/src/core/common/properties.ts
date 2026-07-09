@@ -3,6 +3,7 @@ import {
   popMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { InvisibleIcon, ViewIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
@@ -243,7 +244,7 @@ export const popPropertiesSetting = (
     middleware,
     options: {
       title: {
-        text: 'Properties',
+        text: translateSlashItem('Properties').name,
         onBack: props.onBack,
         onClose: props.onClose,
         postfix: () => {

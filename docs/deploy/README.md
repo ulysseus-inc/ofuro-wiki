@@ -257,6 +257,15 @@ docker compose logs -f app
 > ② **テーブル・インデックス**は、`app` コンテナ起動時の `prisma migrate deploy`
 > で適用されます（冪等。未適用のマイグレーションのみ適用されるため、毎回の起動や
 > バージョンアップでも安全です）。手動でのマイグレーション操作は不要です。
+>
+> **最小権限化（#34）を行う場合**: `migrate deploy` は DDL を実行するため DDL 権限が
+> 必要です。Docker Compose 環境で runtime の接続を非superuser（`ofuro_app`）に絞る場合は、
+> `.env` に **`DOCKER_DATABASE_URL`**（非superuser・`@postgres:5432`）と
+> **`DOCKER_MIGRATE_DATABASE_URL`**（DDL 権限を持つ `ofuro`）を設定してください。
+> 起動時のマイグレーションのみ後者の接続で実行され、アプリ本体は前者（非superuser）で
+> 動作します。どちらも未設定なら既定の `postgres` サービス接続にフォールバックします
+> （従来どおりの動作）。ホスト側 `.env` の `DATABASE_URL`（`localhost`）は
+> コンテナには渡らないため、ホスト実行用とコンテナ用が混在しません。
 
 その後、パターン別のリバースプロキシ設定へ進んでください。
 

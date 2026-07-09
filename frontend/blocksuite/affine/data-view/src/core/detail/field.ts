@@ -3,6 +3,7 @@ import {
   popMenu,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   DeleteIcon,
@@ -124,7 +125,7 @@ export class RecordField extends SignalWatcher(
     popMenu(popupTargetFromElement(ele), {
       options: {
         title: {
-          text: 'Property settings',
+          text: translateSlashItem('Property settings').name,
         },
         items: [
           menu.group({
@@ -133,7 +134,7 @@ export class RecordField extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Move Up',
+                name: translateSlashItem('Move Up').name,
                 prefix: html` <div
                   style="transform: rotate(90deg);display:flex;align-items:center;"
                 >
@@ -155,7 +156,7 @@ export class RecordField extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Move Down',
+                name: translateSlashItem('Move Down').name,
                 prefix: html` <div
                   style="transform: rotate(90deg);display:flex;align-items:center;"
                 >
@@ -183,7 +184,7 @@ export class RecordField extends SignalWatcher(
             name: 'operation',
             items: [
               menu.action({
-                name: 'Duplicate',
+                name: translateSlashItem('Duplicate').name,
                 prefix: DuplicateIcon(),
                 hide: () => !this.column.canDuplicate,
                 select: () => {
@@ -191,7 +192,7 @@ export class RecordField extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Delete',
+                name: translateSlashItem('Delete').name,
                 prefix: DeleteIcon(),
                 hide: () => !this.column.canDelete,
                 select: () => {

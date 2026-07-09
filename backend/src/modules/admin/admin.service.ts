@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma.service';
+import { BCRYPT_ROUNDS } from '../../common/security.constants';
+import { deriveUserName } from '../../common/user-name.util';
 
 @Injectable()
 export class AdminService {
@@ -15,14 +17,14 @@ export class AdminService {
   constructor(private prisma: PrismaService) {}
 
   async listUsers(search?: string, skip = 0, take = 20) {
-    const where = search
-      ? {
-          OR: [
-            { email: { contains: search, mode: 'insensitive' as const } },
-            { name: { contains: search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    // #72: システム内部アカウント（マニュアルWS所有等）は外部に出さない。
+    const where: any = { isSystem: false };
+    if (search) {
+      where.OR = [
+        { email: { contains: search, mode: 'insensitive' as const } },
+        { name: { contains: search, mode: 'insensitive' as const } },
+      ];
+    }
 
     const [items, totalCount] = await Promise.all([
       this.prisma.user.findMany({
@@ -58,9 +60,14 @@ export class AdminService {
       );
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     return this.prisma.user.create({
-      data: { email, passwordHash, name, emailVerified: true },
+      data: {
+        email,
+        passwordHash,
+        name: deriveUserName(email, name),
+        emailVerified: true,
+      },
       select: {
         id: true,
         email: true,
@@ -85,6 +92,23 @@ export class AdminService {
     await this.prisma.workspace.deleteMany({ where: { ownerId: userId } });
     await this.prisma.user.delete({ where: { id: userId } });
     return true;
+  }
+
+  /** L-1: 対象ユーザーの全トークンを失効させる（tokenVersion +1）。 */
+  async revokeUserSessions(userId: string): Promise<boolean> {
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { tokenVersion: { increment: 1 } },
+      });
+      return true;
+    } catch (error: any) {
+      // 対象ユーザーが存在しない場合 Prisma は P2025 を投げる
+      if (error?.code === 'P2025') {
+        throw new NotFoundException('User not found');
+      }
+      throw error;
+    }
   }
 
   async setAdmin(userId: string, isAdmin: boolean) {

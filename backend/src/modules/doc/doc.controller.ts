@@ -4,6 +4,8 @@ import * as Y from 'yjs';
 import { DocService } from './doc.service';
 import { DocHistoryService } from './doc-history.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { PrismaService } from '../../prisma.service';
 
 @Controller('api/workspaces/:workspaceId/docs')
@@ -15,7 +17,8 @@ export class DocController {
   ) {}
 
   @Get(':docId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
+  @WorkspaceRole('reader')
   async getDoc(
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
@@ -30,7 +33,8 @@ export class DocController {
   }
 
   @Get(':docId/histories/:timestamp')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
+  @WorkspaceRole('reader')
   async getDocHistory(
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
@@ -51,7 +55,8 @@ export class DocController {
   }
 
   @Get(':docId/preview')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
+  @WorkspaceRole('reader')
   async getDocPreview(
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,

@@ -5,6 +5,7 @@ import {
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
 import { unsafeCSSVarV2 } from '@blocksuite/affine-shared/theme';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   ArrowDownSmallIcon,
@@ -221,7 +222,7 @@ export const popSortRoot = (
           ></sort-root-view>`;
         },
         menu.action({
-          name: 'Add sort',
+          name: translateSlashItem('Add sort').name,
           prefix: PlusIcon(),
           select: ele => {
             popCreateSort(popupTargetFromElement(ele), {
@@ -231,7 +232,7 @@ export const popSortRoot = (
           },
         }),
         menu.action({
-          name: 'Delete',
+          name: translateSlashItem('Delete').name,
           class: { 'delete-item': true },
           prefix: DeleteIcon(),
           select: () => {

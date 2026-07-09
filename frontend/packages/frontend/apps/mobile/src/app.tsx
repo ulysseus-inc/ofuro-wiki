@@ -31,7 +31,7 @@ if (
   localStorage.getItem('disableSharedWorker') !== 'true'
 ) {
   const worker = new SharedWorker(workerUrl, {
-    name: 'affine-shared-worker',
+    name: 'ofuro-shared-worker',
   });
   storeManagerClient = new StoreManagerClient(new OpClient(worker.port));
 } else {

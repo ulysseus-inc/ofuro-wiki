@@ -4,6 +4,7 @@ import {
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
 import type { UniComponent } from '@blocksuite/affine-shared/types';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   ArrowDownBigIcon,
@@ -113,18 +114,18 @@ export class RecordDetail extends SignalWatcher(
     popMenu(popupTargetFromElement(this.addPropertyButton), {
       options: {
         title: {
-          text: 'Add property',
+          text: translateSlashItem('Add property').name,
         },
         items: [
           menu.group({
             items: this.view.propertyMetas$.value.map(meta => {
               return menu.action({
-                name: meta.config.name,
+                name: translateSlashItem(meta.config.name).name,
                 prefix: renderUniLit(meta.renderer.icon),
                 select: () => {
                   this.view.propertyAdd('end', {
                     type: meta.type,
-                    name: meta.config.name,
+                    name: translateSlashItem(meta.config.name).name,
                   });
                 },
               });

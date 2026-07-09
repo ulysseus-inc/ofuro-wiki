@@ -1,3 +1,4 @@
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { nanoid } from '@blocksuite/store';
 
 import type { GroupBy } from '../../core/common/types.js';
@@ -8,7 +9,11 @@ import { getGroupByService } from '../../core/group-by/matcher.js';
 
 type KanbanGroupCapability = 'mutable' | 'immutable' | 'none';
 
-const KANBAN_DEFAULT_STATUS_OPTIONS = ['Todo', 'In Progress', 'Done'];
+const KANBAN_DEFAULT_STATUS_OPTIONS = [
+  translateSlashItem('Todo').name,
+  translateSlashItem('In Progress').name,
+  translateSlashItem('Done').name,
+];
 const SHOW_EMPTY_GROUPS_BY_DEFAULT = new Set(['select', 'multi-select']);
 
 export const getKanbanDefaultHideEmpty = (groupName?: string): boolean => {
@@ -98,7 +103,7 @@ export const ensureKanbanGroupColumn = (
 
   const statusId = dataSource.propertyAdd('end', {
     type: 'select',
-    name: 'Status',
+    name: translateSlashItem('Status').name,
   });
   if (!statusId) {
     return;

@@ -4,9 +4,10 @@ import { WorkspaceService } from './workspace.service';
 import { PrismaService } from '../../prisma.service';
 import { MailModule } from '../mail/mail.module';
 import { DocHistoryService } from '../doc/doc-history.service';
+import { ManualWorkspaceModule } from '../manual-workspace/manual-workspace.module';
 
 @Module({
-  imports: [MailModule],
+  imports: [MailModule, ManualWorkspaceModule],
   providers: [WorkspaceResolver, WorkspaceService, PrismaService, DocHistoryService],
   exports: [WorkspaceService],
 })

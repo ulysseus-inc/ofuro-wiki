@@ -70,6 +70,8 @@ COPY --from=backend-builder /backend/package.json ./
 COPY --from=backend-builder /backend/prisma ./prisma
 COPY --from=backend-builder /backend/prisma.config.ts ./
 COPY --from=backend-builder /backend/tsconfig.json ./
+# マニュアルWSシード（#72）— 起動時に seed/manual.zip があれば投入される
+COPY --from=backend-builder /backend/seed ./seed
 
 # Copy frontend dist as static files
 # The backend's ServeStaticModule serves from /app/public/
@@ -82,4 +84,9 @@ EXPOSE 3010
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3010/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+# #34: マイグレーション(DDL)は MIGRATE_DATABASE_URL があればそれで実行する。
+# 最小権限化で runtime(DATABASE_URL) を非superuserロールに切替えた際、
+# migrate deploy だけは DDL 権限を持つロール(superuser 等)で実行するため。
+# 未設定なら DATABASE_URL にフォールバック（後方互換）。
+# exec で node を PID1 に置換し、SIGTERM を受けて graceful shutdown できるようにする。
+CMD ["sh", "-c", "DATABASE_URL=\"${MIGRATE_DATABASE_URL:-$DATABASE_URL}\" npx prisma migrate deploy && exec node dist/src/main.js"]

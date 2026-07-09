@@ -28,6 +28,9 @@ export const AFFiNE_WORKSPACE_DB_SCHEMA = {
     journal: f.string().optional(),
     pageWidth: f.string().optional(),
     isTemplate: f.boolean().optional(),
+    // #66: ドキュメント単位の保護モード（誤操作防止の advisory lock）。
+    // true のとき、編集権限があっても読み取り専用で開く。Yjs 同期。
+    readOnly: f.boolean().optional(),
     integrationType: integrationType.optional(),
     createdBy: f.string().optional(),
     updatedBy: f.string().optional(),

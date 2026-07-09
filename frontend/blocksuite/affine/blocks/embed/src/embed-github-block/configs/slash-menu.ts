@@ -1,5 +1,9 @@
 import { DefaultTool } from '@blocksuite/affine-block-surface';
 import { toggleEmbedCardCreateModal } from '@blocksuite/affine-components/embed-card-modal';
+import {
+  translateGroupStr,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import type { SlashMenuConfig } from '@blocksuite/affine-widget-slash-menu';
 import { GithubDuotoneIcon } from '@blocksuite/icons/lit';
 import { GfxControllerIdentifier } from '@blocksuite/std/gfx';
@@ -7,16 +11,18 @@ import { GfxControllerIdentifier } from '@blocksuite/std/gfx';
 import { GithubRepoTooltip } from './tooltips';
 
 export const embedGithubSlashMenuConfig: SlashMenuConfig = {
-  items: [
+  items: () => {
+    const t = translateSlashItem('GitHub', 'Link to a GitHub repository.');
+    return [
     {
-      name: 'GitHub',
-      description: 'Link to a GitHub repository.',
+      name: t.name,
+      description: t.description,
       icon: GithubDuotoneIcon(),
       tooltip: {
         figure: GithubRepoTooltip,
         caption: 'GitHub Repo',
       },
-      group: '4_Content & Media@7',
+      group: translateGroupStr('4_Content & Media@7'),
       when: ({ model }) =>
         model.store.schema.flavourSchemaMap.has('affine:embed-github'),
       action: ({ std, model }) => {
@@ -43,5 +49,6 @@ export const embedGithubSlashMenuConfig: SlashMenuConfig = {
         })().catch(console.error);
       },
     },
-  ],
+    ];
+  },
 };

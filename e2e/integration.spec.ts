@@ -443,6 +443,157 @@ test.describe('BlockSuite エディタ', () => {
     });
     expect(hasProperties).toBe(true);
   });
+
+  test('保護モード: ON で読み取り専用になり、解除で再編集できる（#66）', async ({
+    sharedPage: page,
+  }) => {
+    // #66 ドキュメント単位の保護（advisory lock）。プロパティで保護 ON にすると
+    // 編集権限があっても本文が読み取り専用になり、バナーの「保護を解除」で戻せる。
+    // ハードコードした待機は避け、自動リトライするアサーションで安定化する。
+    await ensureSidebarOpen(page);
+    await createNewPage(page);
+
+    // 本文に初期テキストを入力
+    const paragraph = page.locator('[data-block-id] .inline-editor').first();
+    await paragraph.click();
+    await page.keyboard.type('ABC');
+    await expect(page.locator('text=ABC').first()).toBeVisible({ timeout: 5_000 });
+
+    // Info モーダルを開き、保護モードのチェックボックスを ON にする
+    await page.locator('[data-testid="header-info-button"]').click();
+    const protCheckbox = page.locator('[data-testid="toggle-read-only-checkbox"]');
+    await expect(protCheckbox).toBeVisible({ timeout: 5_000 });
+    await protCheckbox.click({ force: true });
+    // モーダルを閉じる
+    await page.keyboard.press('Escape');
+    await expect(protCheckbox).toBeHidden();
+
+    // 保護バナーが表示されること（＝保護 ON が反映されたことの確認。
+    // Checkbox はカスタム実装で root が div のため toBeChecked は使わず、
+    // 保護状態の可視結果であるバナー表示で判定する）
+    await expect(
+      page.locator('[data-testid="doc-protection-banner"]')
+    ).toBeVisible({ timeout: 5_000 });
+
+    // 読み取り専用: 本文末尾にカーソルを置いて入力しても増えないこと
+    await page
+      .locator('[data-block-id] .inline-editor')
+      .first()
+      .click()
+      .catch(() => {});
+    await page.keyboard.type('XYZ');
+    // 反映されないことを確認（一定時間ポーリングしても XYZ を含まない）
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () => document.querySelector('affine-page-root')?.textContent ?? ''
+          ),
+        { timeout: 2_000 }
+      )
+      .not.toContain('XYZ');
+
+    // 解除は情報パネルのプロパティトグルから（バナーにワンクリック解除は無い）。
+    // 再度 Info を開いて保護モードを OFF にする。
+    await page.locator('[data-testid="header-info-button"]').click();
+    await expect(protCheckbox).toBeVisible({ timeout: 5_000 });
+    await protCheckbox.click({ force: true });
+    await page.keyboard.press('Escape');
+    await expect(protCheckbox).toBeHidden();
+
+    // 保護バナーが消え、再び編集できること
+    await expect(
+      page.locator('[data-testid="doc-protection-banner"]')
+    ).toBeHidden({ timeout: 5_000 });
+    await page.locator('[data-block-id] .inline-editor').first().click();
+    await page.keyboard.type('XYZ');
+    await expect(page.locator('text=XYZ').first()).toBeVisible({ timeout: 5_000 });
+  });
+
+  test('埋め込み系ブロックが挿入・描画できる（bookmark/embed各種、#52）', async ({
+    sharedPage: page,
+  }) => {
+    // 「/」コマンド系の埋め込みブロック（bookmark, embed-youtube/github/figma/loom/
+    // html/iframe）のスキーマ登録＋コンポーネント描画の回帰を検知する。
+    // スラッシュメニューの i18n ラベル依存を避けるため、store.addBlock で各 flavour を
+    // 直接挿入し、対応する custom element が描画されることを検証する。
+    await ensureSidebarOpen(page);
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+
+    // 本文にフォーカスして note を確実に用意
+    const paragraph = page.locator('[data-block-id] .inline-editor').first();
+    await paragraph.click();
+
+    const uncaught: string[] = [];
+    page.on('pageerror', e => uncaught.push(e.message));
+
+    // 各埋め込み flavour を note 直下に挿入
+    const inserted = await page.evaluate(() => {
+      const anyBlock =
+        document.querySelector('affine-note [data-block-id]') ||
+        document.querySelector('[data-block-id]');
+      const store = (anyBlock as any).std.store;
+      const note = store.root.children.find(
+        (c: any) => c.flavour === 'affine:note'
+      );
+      const specs: Array<[string, Record<string, unknown>]> = [
+        ['affine:bookmark', { url: 'https://example.com/' }],
+        [
+          'affine:embed-youtube',
+          { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+        ],
+        [
+          'affine:embed-github',
+          { url: 'https://github.com/x/y', owner: 'x', repo: 'y' },
+        ],
+        ['affine:embed-figma', { url: 'https://www.figma.com/file/abc' }],
+        ['affine:embed-loom', { url: 'https://www.loom.com/share/abc' }],
+        ['affine:embed-html', { html: '<h1>hi</h1>', style: 'html' }],
+        [
+          'affine:embed-iframe',
+          { url: 'https://example.com/', iframeUrl: 'https://example.com/' },
+        ],
+      ];
+      const results: Record<string, boolean> = {};
+      for (const [flavour, props] of specs) {
+        try {
+          const id = store.addBlock(flavour, props, note);
+          results[flavour] = !!id;
+        } catch (e) {
+          results[flavour] = false;
+        }
+      }
+      return results;
+    });
+
+    // すべての flavour が例外なく挿入できたこと（スキーマ登録の回帰検知）
+    for (const [flavour, ok] of Object.entries(inserted)) {
+      expect(ok, `${flavour} の挿入に失敗`).toBe(true);
+    }
+
+    // 対応する custom element が描画されること（コンポーネント登録の回帰検知）
+    await expect(page.locator('affine-bookmark')).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator('affine-embed-youtube-block')).toBeVisible();
+    await expect(page.locator('affine-embed-github-block')).toBeVisible();
+    await expect(page.locator('affine-embed-figma-block')).toBeVisible();
+    await expect(page.locator('affine-embed-loom-block')).toBeVisible();
+    await expect(page.locator('affine-embed-html-block')).toBeVisible();
+    await expect(page.locator('affine-embed-iframe-block')).toBeVisible();
+
+    // XSS 回帰ガード: embed-html の iframe は sandbox に allow-same-origin を含まない
+    // （opaque origin で実行され、アプリの Cookie/DOM/Storage にアクセスできない）。
+    const htmlSandbox = await page
+      .locator('affine-embed-html-block iframe')
+      .first()
+      .getAttribute('sandbox');
+    expect(htmlSandbox).toBeTruthy();
+    expect(htmlSandbox).toContain('allow-scripts');
+    expect(htmlSandbox).not.toContain('allow-same-origin');
+
+    // 描画中に未捕捉エラー（クラッシュ）が出ていないこと
+    expect(uncaught).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -510,6 +661,25 @@ test.describe('バックエンド API', () => {
     expect(session.user.email).toBe(TEST_USER.email);
   });
 
+  test('リンクプレビュー API が 200/空応答を返す（#52 404回帰防止）', async ({
+    sharedPage: page,
+  }) => {
+    // 「外部送信ゼロ」方針の no-op スタブ。埋め込み(YouTube等)貼付時にフロントが
+    // POST する /api/worker/link-preview が 404 を出さず 200 で空応答を返すこと。
+    const res = await page.evaluate(async () => {
+      const r = await fetch('/api/worker/link-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://youtu.be/dQw4w9WgXcQ' }),
+        credentials: 'include',
+      });
+      return { status: r.status, body: await r.json() };
+    });
+    expect(res.status).toBe(200);
+    // OGP メタを外部取得しないため空オブジェクト。
+    expect(res.body).toEqual({});
+  });
+
   test('バージョン履歴 GraphQL クエリが正常に返る', async ({ sharedPage: page }) => {
     await enterOrCreateWorkspace(page);
 
@@ -536,6 +706,42 @@ test.describe('バックエンド API', () => {
 
     expect(result.errors).toBeUndefined();
     expect(Array.isArray(result.data?.workspace?.histories)).toBe(true);
+  });
+
+  test('マニュアルWSが Reader で自動参加し最下部・読み取り専用（#72）', async ({
+    sharedPage: page,
+  }) => {
+    // #72 マニュアル専用WS。workspaces 取得で各ユーザーが Reader として遅延参加し、
+    // 「📖 マニュアル」が固定 all-f UUID（一覧最下部）で現れ、編集不可であること。
+    // ※ backend/seed/manual.zip がある環境でのみマニュアルWSが作られる。
+    const list = await graphqlQuery(page, '{ workspaces { id name } }');
+    expect(list.errors).toBeUndefined();
+    const workspaces: Array<{ id: string; name: string }> =
+      list.data?.workspaces ?? [];
+    const manual = workspaces.find(w => w.id.startsWith('ffffffff-ffff-4fff'));
+
+    // seed 未投入の環境ではマニュアルWSが無いのでスキップ（機構は他テストで担保）。
+    test.skip(!manual, 'マニュアルWSが未シード（backend/seed/manual.zip 無し）');
+
+    // 表示名が「📖 マニュアル」であること。
+    expect(manual!.name).toContain('マニュアル');
+
+    // Reader は編集不可（Doc_Update=false）＝バックエンド強制の読み取り専用。
+    const perm = await graphqlQuery(
+      page,
+      `query {
+        workspace(id: "${manual!.id}") {
+          doc(docId: "${manual!.id}") {
+            permissions { Doc_Read Doc_Update Doc_Trash }
+          }
+        }
+      }`
+    );
+    expect(perm.errors).toBeUndefined();
+    const p = perm.data?.workspace?.doc?.permissions;
+    expect(p?.Doc_Read).toBe(true);
+    expect(p?.Doc_Update).toBe(false);
+    expect(p?.Doc_Trash).toBe(false);
   });
 
   test('招待リンクの生成・表示・失効ができる', async ({ sharedPage: page }) => {
@@ -704,6 +910,52 @@ test.describe('バックエンド API', () => {
       return res.status;
     });
     expect(upsertBadUuid).toBe(404);
+  });
+
+  test('検索: InputType が有効で、不正なフィールドは拒否される（H-6復旧 + H-2 SQLi対策）', async ({ sharedPage: page }) => {
+    await enterOrCreateWorkspace(page);
+    const urlMatch = page.url().match(/\/workspace\/([^/?#]+)/);
+    expect(urlMatch).not.toBeNull();
+    const workspaceId = urlMatch![1];
+
+    const aggregateQuery = `query Agg($id: String!, $input: AggregateInput!) {
+      workspace(id: $id) {
+        aggregate(input: $input) { pagination { count } }
+      }
+    }`;
+
+    // 1) 正当なフィールド（docId）は InputType が剥ぎ取られず実行できる（H-6 復旧の確認）
+    const ok = await graphqlQuery(page, aggregateQuery, {
+      id: workspaceId,
+      input: {
+        table: 'block',
+        query: { type: 'all' },
+        field: 'docId',
+        options: { hits: { fields: ['docId'] } },
+      },
+    });
+    expect(ok.errors).toBeUndefined();
+    expect(typeof ok.data?.workspace?.aggregate?.pagination?.count).toBe('number');
+
+    // 2) 許可リスト外のフィールド（SQL識別子インジェクションの入口）は拒否される
+    const evil = await graphqlQuery(page, aggregateQuery, {
+      id: workspaceId,
+      input: {
+        table: 'block',
+        query: { type: 'all' },
+        field: 'content); DROP TABLE users;--',
+        options: { hits: { fields: ['docId'] } },
+      },
+    });
+    expect(evil.errors?.[0]?.message ?? '').toMatch(/invalid search field/i);
+    expect(evil.data?.workspace?.aggregate ?? null).toBeNull();
+
+    // 3) users テーブルが健在であること（DROP が実行されていない）を別経路で確認
+    const session = await page.evaluate(async () => {
+      const res = await fetch('/api/auth/session', { credentials: 'include' });
+      return res.json();
+    });
+    expect(session.user?.email).toBe(TEST_USER.email);
   });
 });
 
@@ -1238,5 +1490,329 @@ test.describe('インポート × Undo の安全性', () => {
     await expect(page.locator(`text=${marker}`)).toBeVisible({ timeout: 10_000 });
     // 「ページが開けない」系のエラー表示が出ていないこと
     await expect(page.locator('text=Page root not found')).toHaveCount(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. アクセス制御（ワークスペース越境防止 / H-1）
+//   共有ページ（管理者セッション）を使わず、サーバーAPIへ直接 fetch する。
+//   越境の拒否は「非管理ユーザー」でしか検証できない（TEST_USER は
+//   サーバ全体 Admin でガードをバイパスするため）。
+// ---------------------------------------------------------------------------
+test.describe('アクセス制御（ワークスペース越境防止）', () => {
+  const API = 'http://localhost:3010';
+  // TEST_USER とは別の、Admin 権限を持たない部外者ユーザー
+  const OUTSIDER = {
+    email: 'e2e-outsider@ofuro-wiki.local',
+    password: 'E2eOutsider123!',
+  };
+
+  /** sign-in（無ければ sign-up）して認証クッキーヘッダを返す */
+  async function authCookie(email: string, password: string): Promise<string> {
+    let res = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.status === 401 || res.status === 404) {
+      res = await fetch(`${API}/api/auth/sign-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    }
+    if (!res.ok) {
+      throw new Error(`auth failed for ${email}: ${res.status} ${await res.text()}`);
+    }
+    const cookies = res.headers.getSetCookie?.() ?? [];
+    return cookies.map((c) => c.split(';')[0]).join('; ');
+  }
+
+  async function gql(
+    cookie: string,
+    query: string,
+    variables?: Record<string, any>,
+  ) {
+    const res = await fetch(`${API}/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ query, variables }),
+    });
+    return res.json();
+  }
+
+  test('非メンバーは他人のワークスペースを読み書きできない', async () => {
+    // 管理者がワークスペースを作成
+    const adminCookie = await authCookie(TEST_USER.email, TEST_USER.password);
+    const created = await gql(
+      adminCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'authz-owner-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      // 部外者（非Admin・非メンバー）
+      const outsiderCookie = await authCookie(OUTSIDER.email, OUTSIDER.password);
+
+      // 1) workspace(id): データは返らず、認可エラーになる
+      const q1 = await gql(
+        outsiderCookie,
+        `query ($id: String!) { workspace(id: $id) { id } }`,
+        { id: wsId },
+      );
+      expect(q1.data?.workspace ?? null).toBeNull();
+      expect(q1.errors?.[0]?.message ?? '').toMatch(/denied/i);
+
+      // 2) workspaceDocs: 認可エラーになる
+      const q2 = await gql(
+        outsiderCookie,
+        `query ($w: String!) { workspaceDocs(workspaceId: $w) { docId } }`,
+        { w: wsId },
+      );
+      expect(q2.errors?.[0]?.message ?? '').toMatch(/denied/i);
+
+      // 3) 内部API upsert: 403 Forbidden
+      const upsertStatus = await (async () => {
+        const res = await fetch(`${API}/api/internal/docs/upsert`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: outsiderCookie },
+          body: JSON.stringify({
+            workspaceId: wsId,
+            docId: 'authz-x',
+            title: 'x',
+            markdown: 'x',
+          }),
+        });
+        return res.status;
+      })();
+      expect(upsertStatus).toBe(403);
+    } finally {
+      // 後始末: 管理者がワークスペースを削除
+      await gql(adminCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  test('メンバーは自分のワークスペースにアクセスできる（ポジティブコントロール）', async () => {
+    const outsiderCookie = await authCookie(OUTSIDER.email, OUTSIDER.password);
+    const created = await gql(
+      outsiderCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'authz-own-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      const q = await gql(
+        outsiderCookie,
+        `query ($id: String!) { workspace(id: $id) { id } }`,
+        { id: wsId },
+      );
+      expect(q.errors).toBeUndefined();
+      expect(q.data?.workspace?.id).toBe(wsId);
+    } finally {
+      await gql(outsiderCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. 入力検証・セキュリティヘッダ（M-1 / M-4 / M-5）
+// ---------------------------------------------------------------------------
+test.describe('入力検証・セキュリティヘッダ', () => {
+  const API = 'http://localhost:3010';
+
+  async function adminCookie(): Promise<string> {
+    const res = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: TEST_USER.email,
+        password: TEST_USER.password,
+      }),
+    });
+    const cookies = res.headers.getSetCookie?.() ?? [];
+    return cookies.map((c) => c.split(';')[0]).join('; ');
+  }
+
+  test('L-1: sign-out-all で発行済みトークンが即時失効する', async () => {
+    // サインインしてトークン Cookie を取得
+    const si = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: TEST_USER.email,
+        password: TEST_USER.password,
+      }),
+    });
+    const setCookies = si.headers.getSetCookie?.() ?? [];
+    const tokenCookie = setCookies
+      .map((c) => c.split(';')[0])
+      .find((c) => c.startsWith('affine_token='));
+    expect(tokenCookie).toBeTruthy();
+
+    const session = (cookie: string) =>
+      fetch(`${API}/api/auth/session`, { headers: { Cookie: cookie } }).then(
+        (r) => r.json(),
+      );
+
+    // 失効前: user が取得できる
+    const before = await session(tokenCookie!);
+    expect(before.user?.email).toBe(TEST_USER.email);
+
+    // 全端末サインアウトで tokenVersion +1 → 発行済みトークンを失効
+    const out = await fetch(`${API}/api/auth/sign-out-all`, {
+      method: 'POST',
+      headers: { Cookie: tokenCookie! },
+    });
+    expect([200, 201]).toContain(out.status);
+
+    // 失効後: 同じ旧トークンでは user:null（即時失効）
+    const after = await session(tokenCookie!);
+    expect(after.user ?? null).toBeNull();
+
+    // 再サインインは成功する（新トークンは有効）
+    const re = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: TEST_USER.email,
+        password: TEST_USER.password,
+      }),
+    });
+    expect([200, 201]).toContain(re.status);
+  });
+
+  test('M-1: 弱いパスワード・不正メールのサインアップは拒否される', async () => {
+    // パスワードが短すぎる → 400
+    const weak = await fetch(`${API}/api/auth/sign-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: `m1-${Date.now()}@example.com`, password: 'short' }),
+    });
+    expect(weak.status).toBe(400);
+
+    // メール形式が不正 → 400
+    const badEmail = await fetch(`${API}/api/auth/sign-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'not-an-email', password: 'ValidPass123!' }),
+    });
+    expect(badEmail.status).toBe(400);
+
+    // 既存ユーザーの正当なサインインは引き続き成功する
+    const ok = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
+    });
+    expect([200, 201]).toContain(ok.status);
+  });
+
+  test('M-2: preflight はユーザー存在・氏名を漏らさない（列挙対策）', async () => {
+    const preflight = (email: string) =>
+      fetch(`${API}/api/auth/preflight`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      }).then((r) => r.json());
+
+    // 既存ユーザーと存在しないメールで応答が区別できないこと
+    const existing = await preflight(TEST_USER.email);
+    const missing = await preflight(`nobody-${Date.now()}@example.com`);
+
+    for (const r of [existing, missing]) {
+      expect(r.registered).toBe(true); // 常に true（存在を露出しない）
+      expect(r.hasPassword).toBe(true); // パスワード画面へ遷移（従来UI互換）
+      expect(r.name ?? null).toBeNull(); // 氏名を返さない
+    }
+    // 既存ユーザーの正当なサインインは引き続き成功する
+    const ok = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
+    });
+    expect([200, 201]).toContain(ok.status);
+  });
+
+  test('M-5: バックエンド応答に CSP と nosniff ヘッダが付与される', async () => {
+    const res = await fetch(`${API}/api/health`);
+    const csp = res.headers.get('content-security-policy') ?? '';
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  test('M-4: Blob配信は nosniff+CSP付与、HTML/SVGは添付・画像はインライン', async () => {
+    const cookie = await adminCookie();
+    // 検証用ワークスペースを作成
+    const created = await fetch(`${API}/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        query: `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+        variables: { name: 'blob-sec-ws' },
+      }),
+    }).then((r) => r.json());
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      const put = async (key: string, mime: string, body: string) =>
+        fetch(`${API}/api/workspaces/${wsId}/blobs/${key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': mime, Cookie: cookie },
+          body,
+        });
+      const get = (key: string) =>
+        fetch(`${API}/api/workspaces/${wsId}/blobs/${key}`, {
+          headers: { Cookie: cookie },
+        });
+
+      // SVG（スクリプト混入の危険型）→ インライン表示は維持しつつ、
+      // nosniff + CSP(default-src 'none'; sandbox) で直接ナビゲーション時の
+      // スクリプト実行を無効化する（<img>経由ではそもそも実行されない）。
+      await put('evil-svg', 'image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+      const svg = await get('evil-svg');
+      expect(svg.headers.get('x-content-type-options')).toBe('nosniff');
+      const svgCsp = svg.headers.get('content-security-policy') ?? '';
+      expect(svgCsp).toContain("default-src 'none'");
+      expect(svgCsp).toContain('sandbox');
+
+      // HTML → 添付ダウンロード + octet-stream
+      await put('evil-html', 'text/html', '<html><body><script>alert(1)</script></body></html>');
+      const html = await get('evil-html');
+      expect(html.headers.get('content-type') ?? '').toContain('application/octet-stream');
+      expect(html.headers.get('content-disposition') ?? '').toContain('attachment');
+
+      // 先頭空白付き " text/html" も trim 判定で添付DLに倒す（空白バイパス対策）
+      await put('evil-html-ws', ' text/html', '<html><script>alert(1)</script></html>');
+      const htmlWs = await get('evil-html-ws');
+      expect(htmlWs.headers.get('content-type') ?? '').toContain('application/octet-stream');
+      expect(htmlWs.headers.get('content-disposition') ?? '').toContain('attachment');
+
+      // PNG（安全な画像型）→ インライン表示のまま、ただし nosniff は付与
+      const pngBytes = Buffer.from('89504e470d0a1a0a', 'hex').toString('binary');
+      await put('safe-png', 'image/png', pngBytes);
+      const png = await get('safe-png');
+      expect(png.headers.get('content-type') ?? '').toContain('image/png');
+      expect(png.headers.get('content-disposition') ?? '').not.toContain('attachment');
+      expect(png.headers.get('x-content-type-options')).toBe('nosniff');
+    } finally {
+      await fetch(`${API}/graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({
+          query: `mutation ($id: String!) { deleteWorkspace(id: $id) }`,
+          variables: { id: wsId },
+        }),
+      });
+    }
   });
 });

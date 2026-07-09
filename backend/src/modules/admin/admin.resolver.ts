@@ -60,6 +60,15 @@ export class AdminResolver {
     return this.adminService.setAdmin(userId, isAdmin);
   }
 
+  // L-1: 管理者が対象ユーザーの全セッションを強制失効させる。
+  @AdminOnly()
+  @Mutation(() => Boolean)
+  async adminRevokeUserSessions(
+    @Args('userId', { type: () => String }) userId: string,
+  ) {
+    return this.adminService.revokeUserSessions(userId);
+  }
+
   @AdminOnly()
   @Query(() => [ServerSettingType])
   async adminServerSettings() {

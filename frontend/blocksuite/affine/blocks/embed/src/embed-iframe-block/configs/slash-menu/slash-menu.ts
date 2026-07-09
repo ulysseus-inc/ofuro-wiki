@@ -1,4 +1,8 @@
 import { getSelectedModelsCommand } from '@blocksuite/affine-shared/commands';
+import {
+  translateGroupStr,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import type { SlashMenuConfig } from '@blocksuite/affine-widget-slash-menu';
 import { EmbedIcon } from '@blocksuite/icons/lit';
 
@@ -6,16 +10,20 @@ import { insertEmptyEmbedIframeCommand } from '../../commands/insert-empty-embed
 import { EmbedIframeTooltip } from './tooltip';
 
 export const embedIframeSlashMenuConfig: SlashMenuConfig = {
-  items: [
+  items: () => {
+    const t = translateSlashItem('Embed', 'For Google Drive, and more.');
+    return [
     {
-      name: 'Embed',
-      description: 'For Google Drive, and more.',
+      name: t.name,
+      description: t.description,
+      // 名前を日本語化するため、英語 "embed" や "google" でも検索できるようにする。
+      searchAlias: ['Embed', 'Google Drive'],
       icon: EmbedIcon(),
       tooltip: {
         figure: EmbedIframeTooltip,
         caption: 'Embed',
       },
-      group: '4_Content & Media@5',
+      group: translateGroupStr('4_Content & Media@5'),
       when: ({ model }) => {
         return model.store.schema.flavourSchemaMap.has('affine:embed-iframe');
       },
@@ -33,5 +41,6 @@ export const embedIframeSlashMenuConfig: SlashMenuConfig = {
           .run();
       },
     },
-  ],
+    ];
+  },
 };

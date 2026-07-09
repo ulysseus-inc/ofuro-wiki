@@ -4,6 +4,7 @@ import {
   popMenu,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   DeleteIcon,
@@ -212,7 +213,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
           typeConfig(this.column),
           // Number format begin
           menu.subMenu({
-            name: 'Number Format',
+            name: translateSlashItem('Number Format').name,
             hide: () =>
               !this.column.dataUpdate || this.column.type$.value !== 'number',
             options: {
@@ -242,7 +243,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Hide In View',
+                name: translateSlashItem('Hide In View').name,
                 prefix: ViewIcon(),
                 hide: () => !this.column.hideCanSet,
                 select: () => {
@@ -254,17 +255,17 @@ export class DatabaseHeaderColumn extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Filter',
+                name: translateSlashItem('Filter').name,
                 prefix: FilterIcon(),
                 select: () => this._addFilter(),
               }),
               menu.action({
-                name: 'Sort Ascending',
+                name: translateSlashItem('Sort Ascending').name,
                 prefix: SortIcon(),
                 select: () => this._addSort(false),
               }),
               menu.action({
-                name: 'Sort Descending',
+                name: translateSlashItem('Sort Descending').name,
                 prefix: SortIcon(),
                 select: () => this._addSort(true),
               }),
@@ -273,7 +274,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Insert Left Column',
+                name: translateSlashItem('Insert Left Column').name,
                 prefix: InsertLeftIcon(),
                 select: () => {
                   this.tableViewManager.propertyAdd({
@@ -296,7 +297,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Insert Right Column',
+                name: translateSlashItem('Insert Right Column').name,
                 prefix: InsertRightIcon(),
                 select: () => {
                   this.tableViewManager.propertyAdd({
@@ -318,7 +319,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Move Left',
+                name: translateSlashItem('Move Left').name,
                 prefix: MoveLeftIcon(),
                 hide: () => this.column.isFirst$.value,
                 select: () => {
@@ -333,7 +334,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Move Right',
+                name: translateSlashItem('Move Right').name,
                 prefix: MoveRightIcon(),
                 hide: () => this.column.isLast$.value,
                 select: () => {
@@ -352,7 +353,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Duplicate',
+                name: translateSlashItem('Duplicate').name,
                 prefix: DuplicateIcon(),
                 hide: () => !this.column.canDuplicate,
                 select: () => {
@@ -360,7 +361,7 @@ export class DatabaseHeaderColumn extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Delete',
+                name: translateSlashItem('Delete').name,
                 prefix: DeleteIcon(),
                 hide: () => !this.column.canDelete,
                 select: () => {

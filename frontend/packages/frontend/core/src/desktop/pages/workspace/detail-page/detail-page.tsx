@@ -61,6 +61,7 @@ import { PageNotFound } from '../../404';
 import * as styles from './detail-page.css';
 import { DetailPageHeader } from './detail-page-header';
 import { DetailPageWrapper } from './detail-page-wrapper';
+import { DocProtectionBanner } from './doc-protection-banner';
 import { EditorAdapterPanel } from './tabs/adapter';
 import { EditorFramePanel } from './tabs/frame';
 import { EditorJournalPanel } from './tabs/journal';
@@ -299,7 +300,13 @@ const DetailPageImpl = memo(function DetailPageImpl() {
 
   const canEdit = useGuard('Doc_Update', doc.id);
 
-  const readonly = !canEdit || isInTrash;
+  // #66: 保護モード（ドキュメント単位の advisory lock）。ON のとき編集権限が
+  // あっても読み取り専用で開く。誤操作による本文破壊を防ぐ。
+  const isProtected = useLiveData(
+    doc.record.properties$.selector(p => p.readOnly)
+  );
+
+  const readonly = !canEdit || isInTrash || !!isProtected;
 
   // ルートページブロックが欠落した壊れたドキュメント（インポート直後の Ctrl-Z 等）を
   // 開けるよう自己修復する。編集可能な場合のみ実行（読み取り専用では何もしない）。
@@ -328,6 +335,7 @@ const DetailPageImpl = memo(function DetailPageImpl() {
           {/* Add a key to force rerender when page changed, to avoid error boundary persisting. */}
           <AffineErrorBoundary key={doc.id}>
             <TopTip />
+            <DocProtectionBanner />
             <Scrollable.Root>
               <Scrollable.Viewport
                 onScroll={handleScroll}

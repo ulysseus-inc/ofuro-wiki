@@ -21,7 +21,10 @@ import {
   type ToolbarModuleConfig,
   ToolbarModuleExtension,
 } from '@blocksuite/affine-shared/services';
-import { getBlockProps } from '@blocksuite/affine-shared/utils';
+import {
+  getBlockProps,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import { Bound } from '@blocksuite/global/gfx';
 import {
   CaptionIcon,
@@ -265,7 +268,17 @@ function createBuiltinToolbarConfigForExternal(
           const viewType =
             ctx.std.get(EmbedOptionProvider).getEmbedBlockOptions(url)
               ?.viewType ?? 'card';
-          const actions = this.actions.map(action => ({ ...action }));
+          // 各アクションの `when` を尊重してフィルタする。これをしないと
+          // 「Embed view」(when: viewType==='embed') が github 等の card 型
+          // プロバイダでも表示され、iframe 化できず壊れる（GitHub は
+          // X-Frame-Options: deny で埋め込み拒否）。
+          const actions = this.actions
+            .filter(action => {
+              const when = (action as { when?: (c: typeof ctx) => boolean })
+                .when;
+              return typeof when !== 'function' || when(ctx);
+            })
+            .map(action => ({ ...action }));
           const viewType$ = signal(
             `${viewType === 'card' ? 'Card' : 'Embed'} view`
           );
@@ -363,7 +376,9 @@ function createBuiltinToolbarConfigForExternal(
               const slice = Slice.fromModels(ctx.store, [model]);
               ctx.clipboard
                 .copySlice(slice)
-                .then(() => toast(ctx.host, 'Copied to clipboard'))
+                .then(() =>
+                  toast(ctx.host, translateSlashItem('Copied to clipboard').name)
+                )
                 .catch(console.error);
             },
           },
@@ -498,7 +513,17 @@ const createBuiltinSurfaceToolbarConfigForExternal = (
           const viewType =
             ctx.std.get(EmbedOptionProvider).getEmbedBlockOptions(url)
               ?.viewType ?? 'card';
-          const actions = this.actions.map(action => ({ ...action }));
+          // 各アクションの `when` を尊重してフィルタする。これをしないと
+          // 「Embed view」(when: viewType==='embed') が github 等の card 型
+          // プロバイダでも表示され、iframe 化できず壊れる（GitHub は
+          // X-Frame-Options: deny で埋め込み拒否）。
+          const actions = this.actions
+            .filter(action => {
+              const when = (action as { when?: (c: typeof ctx) => boolean })
+                .when;
+              return typeof when !== 'function' || when(ctx);
+            })
+            .map(action => ({ ...action }));
           const viewType$ = signal(
             `${viewType === 'card' ? 'Card' : 'Embed'} view`
           );

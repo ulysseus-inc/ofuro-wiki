@@ -9,9 +9,10 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { JwtService } from '@nestjs/jwt';
-import { AuthService } from './auth.service';
+import { AuthService, JwtPayload } from './auth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
+import { SignInDto, SignUpDto, PreflightDto } from './dto/auth.dto';
 import * as crypto from 'crypto';
 
 // COOKIE_SECURE=false で HTTP 環境でも動作可能（デフォルト: 本番は true）
@@ -38,7 +39,7 @@ export class AuthController {
   @Public()
   @Post('sign-in')
   async signIn(
-    @Body() body: { email: string; password: string },
+    @Body() body: SignInDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token, user } = await this.authService.signInOrSignUp(
@@ -52,7 +53,7 @@ export class AuthController {
   @Public()
   @Post('sign-up')
   async signUp(
-    @Body() body: { email: string; password: string; name?: string },
+    @Body() body: SignUpDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token, user } = await this.authService.signUp(
@@ -72,9 +73,25 @@ export class AuthController {
     return { success: true };
   }
 
+  // L-1: 全端末サインアウト。tokenVersion を +1 して発行済みトークンを一括失効させる。
+  @Post('sign-out-all')
+  @UseGuards(JwtAuthGuard)
+  async signOutAll(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const userId = (req as any).user?.id;
+    if (userId) {
+      await this.authService.revokeAllSessions(userId);
+    }
+    res.clearCookie('affine_token');
+    res.clearCookie('affine_csrf_token');
+    return { success: true };
+  }
+
   @Public()
   @Post('preflight')
-  async preflight(@Body() body: { email: string }) {
+  async preflight(@Body() body: PreflightDto) {
     const result = await this.authService.preflight(body.email);
     return result;
   }
@@ -89,8 +106,9 @@ export class AuthController {
       return { user: null };
     }
     try {
-      const payload = this.jwtService.verify<{ sub: string }>(token);
-      const fullUser = await this.authService.validateUser(payload.sub);
+      const payload = this.jwtService.verify<JwtPayload>(token);
+      // L-1: tokenVersion を検証し、失効済みトークンは未認証扱いにする。
+      const fullUser = await this.authService.validateTokenPayload(payload);
       if (!fullUser) {
         return { user: null };
       }

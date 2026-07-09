@@ -6,6 +6,7 @@ import {
   popMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { DeleteIcon, InvisibleIcon, ViewIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
@@ -271,7 +272,11 @@ export const selectGroupByProperty = (
   const view = group.view;
   return {
     onClose: ops?.onClose,
-    title: { text: 'Group by', onBack: ops?.onBack, onClose: ops?.onClose },
+    title: {
+      text: translateSlashItem('Group by').name,
+      onBack: ops?.onBack,
+      onClose: ops?.onClose,
+    },
     items: [
       menu.group({
         items: view.propertiesRaw$.value
@@ -308,7 +313,7 @@ export const selectGroupByProperty = (
             hide: () =>
               view instanceof KanbanSingleView || !group.property$.value,
             class: { 'delete-item': true },
-            name: 'Remove Grouping',
+            name: translateSlashItem('Remove Grouping').name,
             select: () => {
               group.changeGroup(undefined);
               ops?.onSelect?.();
@@ -350,7 +355,7 @@ export const popGroupSetting = (
   const menuHandler = popMenu(target, {
     options: {
       title: {
-        text: 'Group',
+        text: translateSlashItem('Group').name,
         onBack,
         onClose,
       },
@@ -358,7 +363,7 @@ export const popGroupSetting = (
         menu.group({
           items: [
             menu.action({
-              name: 'Group By',
+              name: translateSlashItem('Group By').name,
               postfix: html`
                 <div
                   style="display:flex;align-items:center;gap:4px;font-size:14px;line-height:20px;color:var(--affine-text-secondary-color);margin-left:8px;"
@@ -412,7 +417,7 @@ export const popGroupSetting = (
                 items: [
                   menu.dynamic(() => [
                     menu.subMenu({
-                      name: 'Date by',
+                      name: translateSlashItem('Date by').name,
                       openOnHover: false,
                       middleware: dropdownSubMenuMiddleware,
                       autoHeight: true,
@@ -477,7 +482,7 @@ export const popGroupSetting = (
                       items: [
                         menu.dynamic(() => [
                           menu.subMenu({
-                            name: 'Start week on',
+                            name: translateSlashItem('Start week on').name,
                             postfix: html`
                               <div
                                 style="display:flex;align-items:center;gap:4px;font-size:14px;line-height:20px;color:var(--affine-text-secondary-color);margin-left:8px;"
@@ -532,7 +537,7 @@ export const popGroupSetting = (
                 items: [
                   menu.dynamic(() => [
                     menu.subMenu({
-                      name: 'Sort',
+                      name: translateSlashItem('Sort').name,
                       openOnHover: false,
                       middleware: dropdownSubMenuMiddleware,
                       autoHeight: true,
@@ -541,22 +546,22 @@ export const popGroupSetting = (
                           style="display:flex;align-items:center;gap:4px;font-size:14px;line-height:20px;color:var(--affine-text-secondary-color);margin-left:8px;"
                         >
                           ${group.sortAsc$.value
-                            ? 'Oldest first'
-                            : 'Newest first'}
+                            ? translateSlashItem('Oldest first').name
+                            : translateSlashItem('Newest first').name}
                         </div>
                       `,
                       options: {
                         items: [
                           menu.dynamic(() => [
                             menu.action({
-                              name: 'Oldest first',
+                              name: translateSlashItem('Oldest first').name,
                               label: () => {
                                 const isSelected = group.sortAsc$.value;
                                 return html`<span
                                   style="font-size:14px;color:${isSelected
                                     ? 'var(--affine-text-emphasis-color)'
                                     : 'var(--affine-text-secondary-color)'}"
-                                  >Oldest first</span
+                                  >${translateSlashItem('Oldest first').name}</span
                                 >`;
                               },
                               isSelected: group.sortAsc$.value,
@@ -566,14 +571,14 @@ export const popGroupSetting = (
                               },
                             }),
                             menu.action({
-                              name: 'Newest first',
+                              name: translateSlashItem('Newest first').name,
                               label: () => {
                                 const isSelected = !group.sortAsc$.value;
                                 return html`<span
                                   style="font-size:14px;color:${isSelected
                                     ? 'var(--affine-text-emphasis-color)'
                                     : 'var(--affine-text-secondary-color)'}"
-                                  >Newest first</span
+                                  >${translateSlashItem('Newest first').name}</span
                                 >`;
                               },
                               isSelected: !group.sortAsc$.value,
@@ -596,7 +601,7 @@ export const popGroupSetting = (
           items: [
             menu.dynamic(() => [
               menu.action({
-                name: 'Hide empty groups',
+                name: translateSlashItem('Hide empty groups').name,
                 isSelected: group.hideEmpty$.value,
                 select: () => {
                   group.setHideEmpty(!group.hideEmpty$.value);
@@ -621,7 +626,7 @@ export const popGroupSetting = (
         menu.group({
           items: [
             menu.action({
-              name: 'Remove grouping',
+              name: translateSlashItem('Remove grouping').name,
               prefix: DeleteIcon(),
               class: { 'delete-item': true },
               hide: () => !(view instanceof TableSingleView),

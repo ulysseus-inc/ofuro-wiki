@@ -3,6 +3,7 @@ import {
   type ToolbarAction,
   ToolbarContext,
 } from '@blocksuite/affine-shared/services';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher } from '@blocksuite/global/lit';
 import { PaletteIcon } from '@blocksuite/icons/lit';
 import { PropTypes, requiredProperties } from '@blocksuite/std';
@@ -78,7 +79,7 @@ export class CardStyleDropdownMenu extends SignalWatcher(LitElement) {
         .button=${html`
           <editor-icon-button
             aria-label="Card style"
-            .tooltip="${'Card style'}"
+            .tooltip="${translateSlashItem('Card style').name}"
           >
             ${PaletteIcon()}
           </editor-icon-button>
@@ -90,9 +91,9 @@ export class CardStyleDropdownMenu extends SignalWatcher(LitElement) {
             action => action.id,
             ({ id, label, icon, disabled, run }) => html`
               <editor-icon-button
-                aria-label="${ifDefined(label)}"
+                aria-label="${ifDefined(label ? translateSlashItem(label).name : label)}"
                 data-testid="${id}"
-                .tooltip="${label}"
+                .tooltip="${label ? translateSlashItem(label).name : label}"
                 .activeMode="${'border'}"
                 .iconContainerWidth="${'76px'}"
                 .iconContainerHeight="${'76px'}"

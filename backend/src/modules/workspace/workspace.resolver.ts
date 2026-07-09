@@ -7,7 +7,7 @@ import {
   Parent,
   Int,
 } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UseGuards, NotFoundException } from '@nestjs/common';
 import {
   WorkspaceType,
   InviteUserType,
@@ -21,9 +21,12 @@ import {
   buildDocPermissions,
 } from './workspace.model';
 import { DocHistoryService } from '../doc/doc-history.service';
+import { ManualWorkspaceService } from '../manual-workspace/manual-workspace.service';
 import { ListedBlob } from '../blob/blob.resolver';
 import { WorkspaceService } from './workspace.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PrismaService } from '../../prisma.service';
@@ -122,29 +125,39 @@ function buildWorkspaceResponse(workspace: any, role: string, userId: string) {
 }
 
 @Resolver(() => WorkspaceType)
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class WorkspaceResolver {
   constructor(
     private workspaceService: WorkspaceService,
     private prisma: PrismaService,
     private docHistoryService: DocHistoryService,
+    private manualWorkspaceService: ManualWorkspaceService,
   ) {}
 
   @Query(() => [WorkspaceType])
   async workspaces(@CurrentUser() user: { id: string }) {
+    // #72: マニュアルWSへ Reader として遅延参加（冪等）。新規/既存ユーザー問わず
+    // 一覧取得時に自己修復的に参加させる（per-signup フック/バックフィル不要）。
+    await this.manualWorkspaceService.ensureMembership(user.id).catch(() => {
+      /* マニュアル未整備時などは黙って無視（一覧表示は継続） */
+    });
     const items = await this.workspaceService.getUserWorkspaces(user.id);
+    // 注: フロントはクラウドWSを workspace.id で localeCompare ソートするため、
+    // ここでの順序は UI 表示順に影響しない。マニュアルWSを最下部にするには
+    // 「最後にソートされる固定UUID」を与えている（ManualSeedService 参照）。
     return items.map(({ workspace, role }) =>
       buildWorkspaceResponse(workspace, role, user.id),
     );
   }
 
   @Query(() => WorkspaceType)
+  @WorkspaceRole('reader', 'id')
   async workspace(
     @Args('id', { type: () => String }) id: string,
     @CurrentUser() user: { id: string },
   ) {
     const ws = await this.workspaceService.getWorkspace(id);
-    if (!ws) throw new Error('Workspace not found');
+    if (!ws) throw new NotFoundException('Workspace not found');
     const role = await this.workspaceService.getMemberRole(id, user.id);
     return buildWorkspaceResponse(ws, role || 'reader', user.id);
   }
@@ -287,6 +300,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner', 'id')
   async deleteWorkspace(
     @Args('id', { type: () => String }) id: string,
     @CurrentUser() user: { id: string },
@@ -295,6 +309,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => [InviteUserType])
+  @WorkspaceRole('owner')
   async inviteMembers(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('emails', { type: () => [String] }) emails: string[],
@@ -327,6 +342,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async revokeMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
@@ -344,6 +360,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('reader')
   async leaveWorkspace(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('sendLeaveMail', { type: () => Boolean, nullable: true })
@@ -354,6 +371,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async grantMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
@@ -369,6 +387,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async approveMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
@@ -382,6 +401,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => InviteLinkType)
+  @WorkspaceRole('owner')
   async createInviteLink(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('expireTime', { type: () => WorkspaceInviteLinkExpireTime })
@@ -396,6 +416,7 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async revokeInviteLink(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
   ) {

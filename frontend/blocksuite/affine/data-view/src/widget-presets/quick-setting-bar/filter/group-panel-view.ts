@@ -5,6 +5,7 @@ import {
   type PopupTarget,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher } from '@blocksuite/global/lit';
 import {
   ArrowDownSmallIcon,
@@ -36,7 +37,7 @@ export const popAddNewFilter = (
 ) => {
   popFilterableSimpleMenu(target, [
     menu.action({
-      name: 'Add filter',
+      name: translateSlashItem('Add filter').name,
       select: () => {
         props.onChange({
           ...props.value,
@@ -45,7 +46,7 @@ export const popAddNewFilter = (
       },
     }),
     menu.action({
-      name: 'Add filter group',
+      name: translateSlashItem('Add filter group').name,
       select: () => {
         props.onChange({
           ...props.value,
@@ -208,7 +209,7 @@ export class FilterGroupView extends SignalWatcher(ShadowlessElement) {
       popupTargetFromElement(event.currentTarget as HTMLElement),
       [
         menu.action({
-          name: 'And',
+          name: translateSlashItem('And').name,
           select: () => {
             this.onChange({
               ...this.filterGroup.value,
@@ -217,7 +218,7 @@ export class FilterGroupView extends SignalWatcher(ShadowlessElement) {
           },
         }),
         menu.action({
-          name: 'Or',
+          name: translateSlashItem('Or').name,
           select: () => {
             this.onChange({
               ...this.filterGroup.value,
@@ -288,7 +289,7 @@ export class FilterGroupView extends SignalWatcher(ShadowlessElement) {
             },
           }),
           menu.action({
-            name: 'Duplicate',
+            name: translateSlashItem('Duplicate').name,
             prefix: DuplicateIcon(),
             onHover: hover => {
               this.containerClass = hover
@@ -314,7 +315,7 @@ export class FilterGroupView extends SignalWatcher(ShadowlessElement) {
         name: '',
         items: [
           menu.action({
-            name: 'Delete',
+            name: translateSlashItem('Delete').name,
             prefix: DeleteIcon(),
             class: { 'delete-item': true },
             onHover: hover => {
@@ -355,7 +356,7 @@ export class FilterGroupView extends SignalWatcher(ShadowlessElement) {
                 class="filter-group-op filter-group-op-clickable"
                 @click="${this._selectOp}"
               >
-                ${this.opMap[data.op]}
+                ${translateSlashItem(this.opMap[data.op]).name}
               </div>
             `;
           }
@@ -447,7 +448,7 @@ export const popFilterGroup = (
   popMenu(target, {
     options: {
       title: {
-        text: 'Filter group',
+        text: translateSlashItem('Filter group').name,
         onBack: props.onBack,
       },
       items: [
@@ -465,7 +466,7 @@ export const popFilterGroup = (
         menu.group({
           items: [
             menu.action({
-              name: 'Delete',
+              name: translateSlashItem('Delete').name,
               class: { 'delete-item': true },
               prefix: DeleteIcon(),
               select: () => {

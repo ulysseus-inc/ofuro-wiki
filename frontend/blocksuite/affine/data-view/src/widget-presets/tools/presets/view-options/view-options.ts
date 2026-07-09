@@ -7,6 +7,7 @@ import {
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
 import { unsafeCSSVarV2 } from '@blocksuite/affine-shared/theme';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import {
   ArrowRightSmallIcon,
   DeleteIcon,
@@ -105,11 +106,11 @@ const createSettingMenus = (
   const settingItems: MenuConfig[] = [];
   settingItems.push(
     menu.action({
-      name: 'Properties',
+      name: translateSlashItem('Properties').name,
       prefix: InfoIcon(),
       closeOnSelect: false,
       postfix: html` <div style="font-size: 14px;">
-          ${view.properties$.value.length} shown
+          ${view.properties$.value.length}${translateSlashItem(' shown').name}
         </div>
         ${ArrowRightSmallIcon()}`,
       select: () => {
@@ -134,15 +135,11 @@ const createSettingMenus = (
     const filterCount = filterTrait.filter$.value.conditions.length;
     settingItems.push(
       menu.action({
-        name: 'Filter',
+        name: translateSlashItem('Filter').name,
         prefix: FilterIcon(),
         closeOnSelect: false,
         postfix: html` <div style="font-size: 14px;">
-            ${filterCount === 0
-              ? ''
-              : filterCount === 1
-                ? '1 filter'
-                : `${filterCount} filters`}
+            ${filterCount === 0 ? '' : `${filterCount}${translateSlashItem(' filters').name}`}
           </div>
           ${ArrowRightSmallIcon()}`,
         select: () => {
@@ -217,15 +214,11 @@ const createSettingMenus = (
     const sortCount = sortTrait.sortList$.value.length;
     settingItems.push(
       menu.action({
-        name: 'Sort',
+        name: translateSlashItem('Sort').name,
         prefix: SortIcon(),
         closeOnSelect: false,
         postfix: html` <div style="font-size: 14px;">
-            ${sortCount === 0
-              ? ''
-              : sortCount === 1
-                ? '1 sort'
-                : `${sortCount} sorts`}
+            ${sortCount === 0 ? '' : `${sortCount}${translateSlashItem(' sorts').name}`}
           </div>
           ${ArrowRightSmallIcon()}`,
         select: () => {
@@ -258,7 +251,7 @@ const createSettingMenus = (
               {
                 sortUtils: sortUtils,
                 title: {
-                  text: 'Sort',
+                  text: translateSlashItem('Sort').name,
                   onBack: reopen,
                   onClose: closeMenu,
                 },
@@ -280,7 +273,7 @@ const createSettingMenus = (
   if (groupTrait) {
     settingItems.push(
       menu.action({
-        name: 'Group',
+        name: translateSlashItem('Group').name,
         prefix: GroupingIcon(),
         closeOnSelect: false,
         postfix: html` <div style="font-size: 14px;">
@@ -381,7 +374,7 @@ export const popViewOptions = (
                       <div style="${iconStyle}">
                         ${renderUniLit(meta.renderer.icon)}
                       </div>
-                      <div style="${textStyle}">${meta.model.defaultName}</div>
+                      <div style="${textStyle}">${translateSlashItem(meta.model.defaultName).name}</div>
                     </div>
                   `,
                   select: () => {
@@ -441,7 +434,7 @@ export const popViewOptions = (
     menu.group({
       items: [
         menu.action({
-          name: 'Duplicate',
+          name: translateSlashItem('Duplicate').name,
           prefix: DuplicateIcon(),
           closeOnSelect: false,
           select: () => {
@@ -449,7 +442,7 @@ export const popViewOptions = (
           },
         }),
         menu.action({
-          name: 'Delete',
+          name: translateSlashItem('Delete').name,
           prefix: DeleteIcon(),
           closeOnSelect: false,
           select: () => {
@@ -463,7 +456,7 @@ export const popViewOptions = (
   handler = popMenu(target, {
     options: {
       title: {
-        text: 'View settings',
+        text: translateSlashItem('View settings').name,
         onClose: () => handler.close(),
       },
       items,

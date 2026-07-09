@@ -129,7 +129,7 @@ const surfaceRefSlashMenuConfig: SlashMenuConfig = {
     };
 
     const frameItems = frameMgr.frames.map<SlashMenuActionItem>(frameModel => ({
-      name: 'Frame: ' + frameModel.props.title,
+      name: translateSlashItem('Frame').name + ': ' + frameModel.props.title,
       icon: FrameIcon(),
       group: translateGroupStr(`5_Edgeless Element@${index++}`),
       tooltip: {
@@ -143,7 +143,7 @@ const surfaceRefSlashMenuConfig: SlashMenuConfig = {
 
     const groupElements = crud.getElementsByType('group');
     const groupItems = groupElements.map<SlashMenuActionItem>(group => ({
-      name: 'Group: ' + group.title.toString(),
+      name: translateSlashItem('Group').name + ': ' + group.title.toString(),
       icon: GroupingIcon(),
       group: translateGroupStr(`5_Edgeless Element@${index++}`),
       tooltip: {

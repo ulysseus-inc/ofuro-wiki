@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 
 // ─── Types matching the resolver's input/output ─────────────
@@ -84,8 +84,15 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   updatedAt: 'updated_at',
 };
 
+// H-2 対策: 列名・GROUP BY 対象は $queryRawUnsafe に識別子として直接埋め込まれるため、
+// 必ず許可リスト（FIELD_TO_COLUMN）を経由させる。未知のフィールドはフォールバックで
+// 素通しせず拒否し、SQL インジェクションを防ぐ。
 function col(field: string): string {
-  return FIELD_TO_COLUMN[field] || field;
+  const column = FIELD_TO_COLUMN[field];
+  if (!column) {
+    throw new BadRequestException(`Invalid search field: ${field}`);
+  }
+  return column;
 }
 
 @Injectable()
@@ -175,13 +182,21 @@ export class SearchService {
       if (!key) continue;
 
       const hitsSelectFields = this.buildSelectFields(hitsFields, hitsHighlights);
+      // group_key（例: ドキュメントタイトル）は利用者由来になり得るため、
+      // 文字列リテラル埋め込みではなくバインドパラメータで渡す。列側は ::text に
+      // キャストして uuid/text 等の型不一致を避ける。
+      const keyParamIndex = params.length + 1;
       const hitsSql = `SELECT ${hitsSelectFields}
         FROM search_index
-        WHERE ${fullWhere} AND ${groupField} = '${key.replace(/'/g, "''")}'
+        WHERE ${fullWhere} AND ${groupField}::text = $${keyParamIndex}
         ORDER BY pgroonga_score(tableoid, ctid) DESC
         LIMIT ${hitsLimit}`;
 
-      const hitsRows = await this.prisma.$queryRawUnsafe<any[]>(hitsSql, ...params);
+      const hitsRows = await this.prisma.$queryRawUnsafe<any[]>(
+        hitsSql,
+        ...params,
+        String(key),
+      );
       const hitsNodes = hitsRows.map((row) =>
         this.rowToNode(row, hitsFields, hitsHighlights),
       );

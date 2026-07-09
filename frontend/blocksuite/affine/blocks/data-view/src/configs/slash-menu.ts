@@ -1,5 +1,9 @@
 import { FeatureFlagService } from '@blocksuite/affine-shared/services';
-import { isInsideBlockByFlavour } from '@blocksuite/affine-shared/utils';
+import {
+  isInsideBlockByFlavour,
+  translateGroupStr,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import { type SlashMenuConfig } from '@blocksuite/affine-widget-slash-menu';
 import { DatabaseTableViewIcon } from '@blocksuite/icons/lit';
 
@@ -10,16 +14,19 @@ export const dataViewSlashMenuConfig: SlashMenuConfig = {
   disableWhen: ({ model }) => {
     return model.flavour === 'affine:data-view';
   },
-  items: [
+  items: () => {
+    const t = translateSlashItem('Todo', 'Display a to-do list.');
+    return [
     {
-      name: 'Todo',
+      name: t.name,
+      description: t.description,
       searchAlias: ['todo view'],
       icon: DatabaseTableViewIcon(),
       tooltip: {
         figure: ToDoListTooltip,
         caption: 'To-do List',
       },
-      group: '7_Database@1',
+      group: translateGroupStr('7_Database@1'),
       when: ({ model, std }) =>
         !isInsideBlockByFlavour(model.store, model, 'affine:edgeless-text') &&
         !!std.get(FeatureFlagService).getFlag('enable_block_query'),
@@ -47,5 +54,6 @@ export const dataViewSlashMenuConfig: SlashMenuConfig = {
         }
       },
     },
-  ],
+    ];
+  },
 };

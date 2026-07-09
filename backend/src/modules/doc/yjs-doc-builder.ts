@@ -4,7 +4,13 @@
 import * as Y from 'yjs';
 import { randomUUID } from 'crypto';
 
-type BlockFlavour = 'affine:page' | 'affine:note' | 'affine:paragraph' | 'affine:divider';
+type BlockFlavour =
+  | 'affine:page'
+  | 'affine:note'
+  | 'affine:paragraph'
+  | 'affine:divider'
+  | 'affine:image'
+  | 'affine:list';
 type ParagraphType = 'text' | 'h1' | 'h2' | 'h3';
 
 interface BlockSpec {
@@ -18,12 +24,96 @@ function makeId(): string {
   return randomUUID().replace(/-/g, '').slice(0, 16);
 }
 
-function parseMarkdownLine(line: string): { flavour: BlockFlavour; type?: ParagraphType; text: string } {
-  if (line.startsWith('### ')) return { flavour: 'affine:paragraph', type: 'h3', text: line.slice(4) };
-  if (line.startsWith('## '))  return { flavour: 'affine:paragraph', type: 'h2', text: line.slice(3) };
-  if (line.startsWith('# '))   return { flavour: 'affine:paragraph', type: 'h1', text: line.slice(2) };
+type TextAlign = 'left' | 'center' | 'right';
+
+type ListType = 'bulleted' | 'numbered';
+
+function parseMarkdownLine(line: string): {
+  flavour: BlockFlavour;
+  type?: ParagraphType;
+  listType?: ListType;
+  text: string;
+  textAlign?: TextAlign;
+} {
+  // 文字揃えマークアップ `:::left ` / `:::center ` / `:::right `（行頭）。
+  // markdown 標準に無いため独自拡張。段落の prop:textAlign に反映する。
+  let textAlign: TextAlign | undefined;
+  const am = line.match(/^:::(left|center|right)\s(.*)$/);
+  if (am) {
+    textAlign = am[1] as TextAlign;
+    line = am[2];
+  }
+  if (line.startsWith('### ')) return { flavour: 'affine:paragraph', type: 'h3', text: line.slice(4), textAlign };
+  if (line.startsWith('## '))  return { flavour: 'affine:paragraph', type: 'h2', text: line.slice(3), textAlign };
+  if (line.startsWith('# '))   return { flavour: 'affine:paragraph', type: 'h1', text: line.slice(2), textAlign };
   if (line === '---')           return { flavour: 'affine:divider', text: '' };
-  return { flavour: 'affine:paragraph', type: 'text', text: line };
+  if (line.startsWith('- '))    return { flavour: 'affine:list', listType: 'bulleted', text: line.slice(2), textAlign };
+  const nm = line.match(/^\d+\.\s(.*)$/);
+  if (nm)                       return { flavour: 'affine:list', listType: 'numbered', text: nm[1], textAlign };
+  return { flavour: 'affine:paragraph', type: 'text', text: line, textAlign };
+}
+
+/**
+ * 段落テキストの Y.Text を生成する。`[[docId]]` 記法を AFFiNE の内部ドキュメント参照
+ * （inline reference）に変換する。参照は 1 文字（半角スペース = REFERENCE_NODE）に
+ * `reference: { type: 'LinkedPage', pageId }` 属性を付与した delta として表現され、
+ * 表示時は参照先ドキュメントのタイトルがクリック可能なリンクとしてレンダリングされる。
+ * `[[...]]` を含まない通常テキストは従来どおりプレーンな Y.Text になる（後方互換）。
+ */
+const REFERENCE_NODE = ' ';
+/**
+ * 既に doc に**紐付け済み**の Y.Text に段落内容を書き込む。
+ * 注意: Y.Text は doc へ attach する前に書式付き insert（参照）を行うと、
+ * pending 操作の順序が入れ替わり参照と平文の前後が逆になる（Yjs の既知の挙動）。
+ * そのため必ず blocksMap へ set して attach してから本関数で埋める。
+ */
+function fillParagraphText(ytext: Y.Text, text: string): void {
+  const delta: Array<{ insert: string; attributes?: Record<string, unknown> }> =
+    [];
+
+  // `[[docId]]` 参照を delta run に分解する。bold 等の追加属性があれば併用する。
+  const pushWithReferences = (
+    segment: string,
+    extraAttrs?: Record<string, unknown>,
+  ): void => {
+    const re = /\[\[([A-Za-z0-9_-]+)\]\]/g;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(segment)) !== null) {
+      if (m.index > last) {
+        delta.push({ insert: segment.slice(last, m.index), attributes: extraAttrs });
+      }
+      delta.push({
+        insert: REFERENCE_NODE,
+        attributes: { ...extraAttrs, reference: { type: 'LinkedPage', pageId: m[1] } },
+      });
+      last = m.index + m[0].length;
+    }
+    if (last < segment.length) {
+      delta.push({ insert: segment.slice(last), attributes: extraAttrs });
+    }
+  };
+
+  // 太字 `**text**` を先に分解し、太字区間には { bold: true } を付与する。
+  const boldRe = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = boldRe.exec(text)) !== null) {
+    if (m.index > last) {
+      pushWithReferences(text.slice(last, m.index));
+    }
+    pushWithReferences(m[1], { bold: true });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) {
+    pushWithReferences(text.slice(last));
+  }
+
+  // attributes が undefined の run は素の insert に正規化（applyDelta の安全のため）
+  const normalized = delta.map(d => (d.attributes ? d : { insert: d.insert }));
+  if (normalized.length > 0) {
+    ytext.applyDelta(normalized);
+  }
 }
 
 function buildBlock(spec: BlockSpec): Y.Map<unknown> {
@@ -49,14 +139,50 @@ export function markdownToYjsUpdate(title: string, markdown: string): Uint8Array
   // 各行をブロックに変換
   const lines = markdown.split('\n');
   const contentBlocks: BlockSpec[] = [];
+  // 段落テキストは attach 後に埋めるため、blockId → 元テキスト を控えておく。
+  const paragraphTexts = new Map<string, string>();
 
   for (const line of lines) {
-    const { flavour, type, text } = parseMarkdownLine(line);
+    // 画像ブロック `:::image <blobキー> <幅> <高さ>`。blobキーは既にアップロード済みの
+    // blob（sourceId）。幅/高さはピクセル。エディタ側で領域幅に合わせて表示される。
+    const imgMatch = line.match(/^:::image\s+(\S+)\s+(\d+)\s+(\d+)\s*$/);
+    if (imgMatch) {
+      const w = Number(imgMatch[2]);
+      const h = Number(imgMatch[3]);
+      contentBlocks.push({
+        id: makeId(),
+        flavour: 'affine:image',
+        children: [],
+        props: {
+          'prop:sourceId': imgMatch[1],
+          'prop:width': w,
+          'prop:height': h,
+          'prop:caption': '',
+          'prop:rotate': 0,
+          'prop:size': -1,
+          'prop:index': 'a0',
+          'prop:xywh': `[0,0,${w},${h}]`,
+          'prop:lockedBySelf': false,
+        },
+      });
+      continue;
+    }
+    const { flavour, type, listType, text, textAlign } = parseMarkdownLine(line);
     const blockId = makeId();
     const props: Record<string, unknown> = {};
     if (flavour === 'affine:paragraph') {
-      props['prop:text'] = new Y.Text(text);
+      // 空の Y.Text を入れておき、blocksMap へ set（attach）した後に埋める。
+      props['prop:text'] = new Y.Text();
       props['prop:type'] = type ?? 'text';
+      if (textAlign) props['prop:textAlign'] = textAlign;
+      paragraphTexts.set(blockId, text);
+    } else if (flavour === 'affine:list') {
+      props['prop:text'] = new Y.Text();
+      props['prop:type'] = listType ?? 'bulleted';
+      props['prop:checked'] = false;
+      props['prop:collapsed'] = false;
+      props['prop:order'] = null;
+      paragraphTexts.set(blockId, text);
     }
     contentBlocks.push({ id: blockId, flavour, children: [], props });
   }
@@ -76,9 +202,18 @@ export function markdownToYjsUpdate(title: string, markdown: string): Uint8Array
   });
   blocksMap.set(noteId, noteBlock);
 
-  // コンテンツブロックを登録
+  // コンテンツブロックを登録（この時点で prop:text の Y.Text が doc へ attach される）
   for (const spec of contentBlocks) {
     blocksMap.set(spec.id, buildBlock(spec));
+  }
+
+  // attach 済みの Y.Text に本文を書き込む（参照と平文の順序を正しく保つ）。
+  for (const [blockId, text] of paragraphTexts) {
+    const block = blocksMap.get(blockId);
+    const ytext = block?.get('prop:text');
+    if (ytext instanceof Y.Text) {
+      fillParagraphText(ytext, text);
+    }
   }
 
   // Page ブロック（ルート）

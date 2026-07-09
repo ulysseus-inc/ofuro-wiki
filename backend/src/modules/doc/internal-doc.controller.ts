@@ -9,6 +9,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { PrismaService } from '../../prisma.service';
 import {
   markdownToYjsUpdate,
@@ -35,7 +37,7 @@ interface GetMarkdownBody {
  * ドキュメント本体と同時にワークスペース root doc の meta.pages も更新する。
  */
 @Controller('api/internal/docs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class InternalDocController {
   constructor(private prisma: PrismaService) {}
 
@@ -68,6 +70,7 @@ export class InternalDocController {
 
   @Post('upsert')
   @HttpCode(HttpStatus.OK)
+  @WorkspaceRole('member')
   async upsertDoc(@Body() body: UpsertDocBody) {
     const { workspaceId, docId, title, markdown } = body;
     if (!workspaceId || !docId || !title) {
@@ -176,6 +179,7 @@ export class InternalDocController {
    */
   @Post('get-markdown')
   @HttpCode(HttpStatus.OK)
+  @WorkspaceRole('reader')
   async getMarkdown(@Body() body: GetMarkdownBody) {
     const { workspaceId, docId } = body;
     if (!workspaceId || !docId) {

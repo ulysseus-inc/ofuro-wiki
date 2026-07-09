@@ -5,6 +5,7 @@ import {
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
 import { unsafeCSSVarV2 } from '@blocksuite/affine-shared/theme';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   DeleteIcon,
@@ -67,19 +68,19 @@ export class MobileTableColumnHeader extends SignalWatcher(
     popMenu(popupTargetFromElement(ele ?? this), {
       options: {
         title: {
-          text: 'Property settings',
+          text: translateSlashItem('Property settings').name,
         },
         items: [
           inputConfig(this.column),
           typeConfig(this.column),
           // Number format begin
           menu.subMenu({
-            name: 'Number Format',
+            name: translateSlashItem('Number Format').name,
             hide: () =>
               !this.column.dataUpdate || this.column.type$.value !== 'number',
             options: {
               title: {
-                text: 'Number Format',
+                text: translateSlashItem('Number Format').name,
               },
               items: [
                 numberFormatConfig(this.column),
@@ -107,7 +108,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Hide In View',
+                name: translateSlashItem('Hide In View').name,
                 prefix: ViewIcon(),
                 hide: () => !this.column.hideCanSet,
                 select: () => {
@@ -119,7 +120,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Insert Left Column',
+                name: translateSlashItem('Insert Left Column').name,
                 prefix: InsertLeftIcon(),
                 select: () => {
                   this.tableViewManager.propertyAdd({
@@ -142,7 +143,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Insert Right Column',
+                name: translateSlashItem('Insert Right Column').name,
                 prefix: InsertRightIcon(),
                 select: () => {
                   this.tableViewManager.propertyAdd({
@@ -164,7 +165,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Move Left',
+                name: translateSlashItem('Move Left').name,
                 prefix: MoveLeftIcon(),
                 hide: () => this.column.isFirst$.value,
                 select: () => {
@@ -179,7 +180,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Move Right',
+                name: translateSlashItem('Move Right').name,
                 prefix: MoveRightIcon(),
                 hide: () => this.column.isLast$.value,
                 select: () => {
@@ -198,7 +199,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
           menu.group({
             items: [
               menu.action({
-                name: 'Duplicate',
+                name: translateSlashItem('Duplicate').name,
                 prefix: DuplicateIcon(),
                 hide: () => !this.column.canDuplicate,
                 select: () => {
@@ -206,7 +207,7 @@ export class MobileTableColumnHeader extends SignalWatcher(
                 },
               }),
               menu.action({
-                name: 'Delete',
+                name: translateSlashItem('Delete').name,
                 prefix: DeleteIcon(),
                 hide: () => !this.column.canDelete,
                 select: () => {

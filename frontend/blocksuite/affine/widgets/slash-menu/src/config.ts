@@ -135,7 +135,7 @@ export const defaultSlashMenuConfig: SlashMenuConfig = {
           std.clipboard
             .copy(slice)
             .then(() => {
-              toast(std.host, 'Copied to clipboard');
+              toast(std.host, translateSlashItem('Copied to clipboard').name);
             })
             .catch(e => {
               console.error(e);

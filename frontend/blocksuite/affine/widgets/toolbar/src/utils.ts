@@ -10,6 +10,7 @@ import {
   type ToolbarContext,
   type ToolbarPlacement,
 } from '@blocksuite/affine-shared/services';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { nextTick } from '@blocksuite/global/utils';
 import { MoreVerticalIcon } from '@blocksuite/icons/lit';
 import type {
@@ -369,6 +370,14 @@ function renderActionItem(action: ToolbarAction, context: ToolbarContext) {
   const ids = action.id.split('.');
   const id = ids[ids.length - 1];
   const label = action.label ?? action.tooltip ?? id;
+  // ツールバーの label/tooltip は英語のハードコードが多いため、共通の
+  // スラッシュメニュー辞書(translateSlashItem)で日本語化する。辞書に無い
+  // キーは原文をそのまま返す安全なフォールバックのため、影響範囲を広げても
+  // 未翻訳の表示が壊れることはない。
+  const translatedLabel = label ? translateSlashItem(label).name : label;
+  const translatedTooltip = action.tooltip
+    ? translateSlashItem(action.tooltip).name
+    : action.tooltip;
   const actived =
     typeof action.active === 'function'
       ? action.active(context)
@@ -381,17 +390,17 @@ function renderActionItem(action: ToolbarAction, context: ToolbarContext) {
   return html`
     <editor-icon-button
       data-testid=${ifDefined(id)}
-      aria-label=${ifDefined(label)}
+      aria-label=${ifDefined(translatedLabel)}
       ?active=${actived}
       ?disabled=${disabled}
-      .tooltip=${action.tooltip}
+      .tooltip=${translatedTooltip}
       .iconContainerPadding=${innerToolbar ? 4 : 2}
       .iconSize=${innerToolbar ? '16px' : undefined}
       @click=${() => action.run?.(context)}
     >
       ${action.icon}
       ${action.showLabel && action.label
-        ? html`<span class="label">${action.label}</span>`
+        ? html`<span class="label">${translateSlashItem(action.label).name}</span>`
         : null}
     </editor-icon-button>
   `;
@@ -402,6 +411,10 @@ function renderMenuActionItem(action: ToolbarAction, context: ToolbarContext) {
   const ids = action.id.split('.');
   const id = ids[ids.length - 1];
   const label = action.label ?? action.tooltip ?? id;
+  const translatedLabel = label ? translateSlashItem(label).name : label;
+  const translatedTooltip = action.tooltip
+    ? translateSlashItem(action.tooltip).name
+    : action.tooltip;
   const actived =
     typeof action.active === 'function'
       ? action.active(context)
@@ -415,17 +428,19 @@ function renderMenuActionItem(action: ToolbarAction, context: ToolbarContext) {
   return html`
     <editor-menu-action
       data-testid=${ifDefined(id)}
-      aria-label=${ifDefined(label)}
+      aria-label=${ifDefined(translatedLabel)}
       class="${ifDefined(destructive)}"
       ?active=${actived}
       ?disabled=${disabled}
-      .tooltip=${ifDefined(action.tooltip)}
+      .tooltip=${ifDefined(translatedTooltip)}
       .iconContainerPadding=${innerToolbar ? 4 : 2}
       .iconSize=${innerToolbar ? '16px' : undefined}
       @click=${() => action.run?.(context)}
     >
       ${action.icon}
-      ${action.label ? html`<span class="label">${action.label}</span>` : null}
+      ${action.label
+        ? html`<span class="label">${translateSlashItem(action.label).name}</span>`
+        : null}
     </editor-menu-action>
   `;
 }

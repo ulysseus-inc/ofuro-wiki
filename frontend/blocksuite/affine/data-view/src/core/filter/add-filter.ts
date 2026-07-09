@@ -3,6 +3,7 @@ import {
   popMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { AddCursorIcon } from '@blocksuite/icons/lit';
 import type { Middleware } from '@floating-ui/dom';
 import type { ReadonlySignal } from '@preact/signals-core';
@@ -30,7 +31,7 @@ export const popCreateFilter = (
       onClose: props.onClose,
       title: {
         onBack: props.onBack,
-        text: 'New filter',
+        text: translateSlashItem('New filter').name,
       },
       items: [
         menu.group({
@@ -53,7 +54,7 @@ export const popCreateFilter = (
           name: '',
           items: [
             menu.action({
-              name: 'Add filter group',
+              name: translateSlashItem('Add filter group').name,
               prefix: AddCursorIcon(),
               select: () => {
                 props.onSelect(firstFilterInGroup(props.vars.value));

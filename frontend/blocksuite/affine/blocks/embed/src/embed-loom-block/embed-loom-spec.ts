@@ -1,11 +1,9 @@
 import { EmbedLoomBlockSchema } from '@blocksuite/affine-model';
-import { SlashMenuConfigExtension } from '@blocksuite/affine-widget-slash-menu';
 import { BlockViewExtension, FlavourExtension } from '@blocksuite/std';
 import type { ExtensionType } from '@blocksuite/store';
 import { literal } from 'lit/static-html.js';
 
 import { createBuiltinToolbarConfigExtension } from '../configs/toolbar';
-import { embedLoomSlashMenuConfig } from './configs/slash-menu';
 import { EmbedLoomBlockInteraction } from './embed-edgeless-loom-bock';
 import { EmbedLoomBlockComponent } from './embed-loom-block';
 import {
@@ -25,6 +23,7 @@ export const EmbedLoomViewExtensions: ExtensionType[] = [
   }),
   EmbedLoomBlockOptionConfig,
   createBuiltinToolbarConfigExtension(flavour, EmbedLoomBlockComponent),
-  SlashMenuConfigExtension(flavour, embedLoomSlashMenuConfig),
+  // Loom は日本の社内利用ではニッチなため「/」スラッシュメニューから除外する。
+  // ブロック定義・既存埋め込みの描画は維持（互換のため flavour は残す）。
   EmbedLoomBlockInteraction,
 ].flat();

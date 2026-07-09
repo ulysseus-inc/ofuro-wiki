@@ -3,6 +3,7 @@ import {
   popFilterableSimpleMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import {
   ArrowRightBigIcon,
   DeleteIcon,
@@ -42,14 +43,14 @@ export const popCardMenu = (
   );
   popFilterableSimpleMenu(ele, [
     menu.action({
-      name: 'Expand Card',
+      name: translateSlashItem('Expand Card').name,
       prefix: ExpandFullIcon(),
       select: () => {
         openDetail(kanbanViewLogic, rowId, selection);
       },
     }),
     menu.subMenu({
-      name: 'Move To',
+      name: translateSlashItem('Move To').name,
       prefix: ArrowRightBigIcon(),
       options: {
         items:
@@ -64,7 +65,10 @@ export const popCardMenu = (
             })
             .map(group =>
               menu.action({
-                name: group.value != null ? group.name$.value : 'Ungroup',
+                name:
+                  group.value != null
+                    ? group.name$.value
+                    : translateSlashItem('Ungroup').name,
                 select: () => {
                   selection.moveCard(rowId, group.key);
                 },
@@ -76,7 +80,7 @@ export const popCardMenu = (
       name: '',
       items: [
         menu.action({
-          name: 'Insert Before',
+          name: translateSlashItem('Insert Before').name,
           prefix: html` <div
             style="transform: rotate(90deg);display:flex;align-items:center;"
           >
@@ -87,7 +91,7 @@ export const popCardMenu = (
           },
         }),
         menu.action({
-          name: 'Insert After',
+          name: translateSlashItem('Insert After').name,
           prefix: html` <div
             style="transform: rotate(90deg);display:flex;align-items:center;"
           >
@@ -103,7 +107,7 @@ export const popCardMenu = (
       name: '',
       items: [
         menu.action({
-          name: 'Delete Card',
+          name: translateSlashItem('Delete Card').name,
           class: {
             'delete-item': true,
           },

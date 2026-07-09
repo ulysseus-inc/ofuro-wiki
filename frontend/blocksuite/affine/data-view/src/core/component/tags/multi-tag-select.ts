@@ -6,7 +6,7 @@ import {
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
 import { unsafeCSSVarV2 } from '@blocksuite/affine-shared/theme';
-import { rangeWrap } from '@blocksuite/affine-shared/utils';
+import { rangeWrap, translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { IS_MOBILE } from '@blocksuite/global/env';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
@@ -213,7 +213,7 @@ export class MultiTagSelect extends SignalWatcher(
             },
           }),
           menu.action({
-            name: 'Delete',
+            name: translateSlashItem('Delete').name,
             prefix: DeleteIcon(),
             class: {
               'delete-item': true,
@@ -232,7 +232,7 @@ export class MultiTagSelect extends SignalWatcher(
                 height: '20px',
               });
               return menu.action({
-                name: item.name,
+                name: translateSlashItem(item.name).name,
                 prefix: html` <div style=${styles}></div>`,
                 isSelected: option.color === item.color,
                 select: () => {

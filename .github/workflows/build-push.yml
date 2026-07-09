@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - main  # OSS リポジトリ（ulysseus-inc）のデフォルトブランチ
   workflow_dispatch:
 
 env:

@@ -11,6 +11,8 @@ import { UseGuards } from '@nestjs/common';
 import { DocService } from './doc.service';
 import { DocHistoryService } from './doc-history.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ObjectType('WorkspaceDocListItem')
@@ -65,7 +67,7 @@ class WorkspacePage {
 }
 
 @Resolver()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class DocResolver {
   constructor(
     private docService: DocService,
@@ -73,6 +75,7 @@ export class DocResolver {
   ) {}
 
   @Query(() => [WorkspaceDocListItem])
+  @WorkspaceRole('reader')
   async workspaceDocs(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
   ) {
@@ -80,6 +83,7 @@ export class DocResolver {
   }
 
   @Mutation(() => WorkspacePage)
+  @WorkspaceRole('member')
   async publishPage(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('pageId', { type: () => String }) pageId: string,
@@ -95,6 +99,7 @@ export class DocResolver {
   }
 
   @Mutation(() => WorkspacePage)
+  @WorkspaceRole('member')
   async revokePublicPage(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('pageId', { type: () => String }) pageId: string,
@@ -109,6 +114,7 @@ export class DocResolver {
   }
 
   @Query(() => [DocHistoryType])
+  @WorkspaceRole('reader')
   async listHistory(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('docId', { type: () => String }) docId: string,
@@ -125,6 +131,7 @@ export class DocResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('member')
   async recoverDoc(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('guid', { type: () => String }) guid: string,
@@ -139,6 +146,7 @@ export class DocResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async grantDocUserRoles(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('docId', { type: () => String }) docId: string,

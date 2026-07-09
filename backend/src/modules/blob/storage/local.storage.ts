@@ -39,6 +39,17 @@ export class LocalStorage implements BlobStorageProvider {
   private getFilePath(key: string): string {
     // Use first 2 chars of key as subdirectory to avoid too many files in one dir
     const subdir = key.substring(0, 2);
-    return path.join(this.basePath, subdir, key);
+    const filePath = path.join(this.basePath, subdir, key);
+
+    // 多層防御(L-4): 万一 key に traversal が含まれても basePath 外へ出さない。
+    const baseResolved = path.resolve(this.basePath);
+    const resolved = path.resolve(filePath);
+    const safePrefix = baseResolved.endsWith(path.sep)
+      ? baseResolved
+      : baseResolved + path.sep;
+    if (resolved !== baseResolved && !resolved.startsWith(safePrefix)) {
+      throw new Error(`Blob key escapes storage base path: ${key}`);
+    }
+    return filePath;
   }
 }

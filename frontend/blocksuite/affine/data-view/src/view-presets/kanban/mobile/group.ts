@@ -3,6 +3,7 @@ import {
   popFilterableSimpleMenu,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { AddCursorIcon } from '@blocksuite/icons/lit';
 import { ShadowlessElement } from '@blocksuite/std';
@@ -75,7 +76,7 @@ export class MobileKanbanGroup extends SignalWatcher(
       menu.group({
         items: [
           menu.action({
-            name: 'Ungroup',
+            name: translateSlashItem('Ungroup').name,
             hide: () => this.group.value == null,
             select: () => {
               this.group.rows.forEach(row => {
@@ -85,7 +86,7 @@ export class MobileKanbanGroup extends SignalWatcher(
             },
           }),
           menu.action({
-            name: 'Delete Cards',
+            name: translateSlashItem('Delete Cards').name,
             select: () => {
               this.view.rowsDelete(this.group.rows.map(row => row.rowId));
               this.requestUpdate();
@@ -129,7 +130,7 @@ export class MobileKanbanGroup extends SignalWatcher(
               >
                 ${AddCursorIcon()}
               </div>
-              Add
+              ${translateSlashItem('Add').name}
             </div>`}
       </div>
     `;

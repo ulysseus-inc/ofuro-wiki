@@ -32,9 +32,33 @@ export class BlobController {
     if (!blob) {
       return res.status(404).json({ message: 'Blob not found' });
     }
-    if (blob.mime) {
-      res.set('Content-Type', blob.mime);
+
+    // M-4: 格納された Content-Type をそのまま返すと SVG/HTML 等で Stored XSS に
+    // なり得る。MIMEスニッフィング防止 + CSP sandbox で万一のスクリプト実行を無効化し、
+    // スクリプト実行が主目的になり得る HTML/XML 系は添付ダウンロードに倒す。
+    // （SVG は <img> 経由ではスクリプトが動かず、直接ナビゲーション時も CSP sandbox が
+    //  無効化するためインラインのまま表示可能。）
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+
+    // ブラウザは Content-Type の前後空白をトリムして解釈するため、こちらも
+    // trim() してから判定する（" text/html" 等で FORCE_DOWNLOAD をすり抜けて
+    // XSS になるのを防ぐ）。判定後の Content-Type にもトリム済み値を用いる。
+    const mime = (blob.mime || '').trim().toLowerCase();
+    const FORCE_DOWNLOAD = [
+      'text/html',
+      'application/xhtml+xml',
+      'application/xml',
+      'text/xml',
+    ];
+    if (!mime || FORCE_DOWNLOAD.some((d) => mime.startsWith(d))) {
+      res.set('Content-Type', 'application/octet-stream');
+      res.set('Content-Disposition', 'attachment');
+    } else {
+      // mime が truthy であることは上の分岐で確認済み
+      res.set('Content-Type', mime);
     }
+
     res.set('Cache-Control', 'public, max-age=31536000, immutable');
     res.send(blob.data);
   }

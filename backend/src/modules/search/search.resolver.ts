@@ -16,8 +16,20 @@ import { UseGuards } from '@nestjs/common';
 import { SearchService } from './search.service';
 import { IndexerService } from './indexer.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { WorkspaceType } from '../workspace/workspace.model';
 import GraphQLJSON from 'graphql-type-json';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 // ─── Enums ──────────────────────────────────────────────────
 
@@ -45,129 +57,200 @@ registerEnumType(SearchQueryOccur, { name: 'SearchQueryOccur', description: 'Sea
 
 // ─── Input Types ────────────────────────────────────────────
 
+// NOTE: グローバル ValidationPipe({ whitelist: true }) は class-validator
+// デコレータの無いプロパティを除去する。以下の InputType は @Field()（GraphQL）
+// に加えて class-validator デコレータを必ず併記し、剥ぎ取られないようにする。
+// ネストしたオブジェクト/配列は @ValidateNested + @Type で子まで復元・検証する。
+
 @InputType()
 class SearchQuery {
   @Field(() => SearchQueryType)
+  @IsEnum(SearchQueryType)
   type: SearchQueryType;
 
   @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
   field?: string;
 
   @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
   match?: string;
 
   @Field(() => SearchQueryOccur, { nullable: true })
+  @IsOptional()
+  @IsEnum(SearchQueryOccur)
   occur?: SearchQueryOccur;
 
   @Field(() => [SearchQuery], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SearchQuery)
   queries?: SearchQuery[];
 
   @Field(() => SearchQuery, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SearchQuery)
   query?: SearchQuery;
 
   @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
   boost?: number;
 }
 
 @InputType()
 class SearchHighlight {
   @Field()
+  @IsString()
   field: string;
 
   @Field()
+  @IsString()
   before: string;
 
   @Field()
+  @IsString()
   end: string;
 }
 
 @InputType()
 class SearchPagination {
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
   limit?: number;
 
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
   skip?: number;
 
   @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
   cursor?: string;
 }
 
 @InputType()
 class SearchOptions {
   @Field(() => [String])
+  @IsArray()
+  @IsString({ each: true })
   fields: string[];
 
   @Field(() => [SearchHighlight], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SearchHighlight)
   highlights?: SearchHighlight[];
 
   @Field(() => SearchPagination, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SearchPagination)
   pagination?: SearchPagination;
 }
 
 @InputType()
 class SearchInput {
   @Field(() => SearchTable)
+  @IsEnum(SearchTable)
   table: SearchTable;
 
   @Field(() => SearchQuery)
+  @ValidateNested()
+  @Type(() => SearchQuery)
   query: SearchQuery;
 
   @Field(() => SearchOptions)
+  @ValidateNested()
+  @Type(() => SearchOptions)
   options: SearchOptions;
 }
 
 @InputType()
 class AggregateHitsPagination {
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
   limit?: number;
 
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
   skip?: number;
 }
 
 @InputType()
 class AggregateHitsOptions {
   @Field(() => [String])
+  @IsArray()
+  @IsString({ each: true })
   fields: string[];
 
   @Field(() => [SearchHighlight], { nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SearchHighlight)
   highlights?: SearchHighlight[];
 
   @Field(() => AggregateHitsPagination, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AggregateHitsPagination)
   pagination?: AggregateHitsPagination;
 }
 
 @InputType()
 class AggregateOptions {
   @Field(() => AggregateHitsOptions)
+  @ValidateNested()
+  @Type(() => AggregateHitsOptions)
   hits: AggregateHitsOptions;
 
   @Field(() => SearchPagination, { nullable: true })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SearchPagination)
   pagination?: SearchPagination;
 }
 
 @InputType()
 class AggregateInput {
   @Field(() => SearchTable)
+  @IsEnum(SearchTable)
   table: SearchTable;
 
   @Field(() => SearchQuery)
+  @ValidateNested()
+  @Type(() => SearchQuery)
   query: SearchQuery;
 
   @Field()
+  @IsString()
   field: string;
 
   @Field(() => AggregateOptions)
+  @ValidateNested()
+  @Type(() => AggregateOptions)
   options: AggregateOptions;
 }
 
 @InputType()
 class SearchDocsInput {
   @Field()
+  @IsString()
   keyword: string;
 
   @Field(() => Int, { nullable: true })
+  @IsOptional()
+  @IsInt()
   limit?: number;
 }
 
@@ -275,7 +358,7 @@ class SearchDocObjectType {
 // ─── Resolver ───────────────────────────────────────────────
 
 @Resolver(() => WorkspaceType)
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class SearchResolver {
   constructor(
     private searchService: SearchService,
@@ -307,6 +390,7 @@ export class SearchResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('owner')
   async reindexWorkspace(
     @Args('workspaceId') workspaceId: string,
   ): Promise<boolean> {

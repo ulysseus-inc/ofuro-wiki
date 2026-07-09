@@ -10,7 +10,10 @@ import {
   DocModeProvider,
   NotificationProvider,
 } from '@blocksuite/affine-shared/services';
-import { getViewportElement } from '@blocksuite/affine-shared/utils';
+import {
+  getViewportElement,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import { IS_MAC, IS_MOBILE } from '@blocksuite/global/env';
 import { noop } from '@blocksuite/global/utils';
 import type { BlockComponent } from '@blocksuite/std';
@@ -383,7 +386,9 @@ export class CodeBlockComponent extends CaptionedBlockComponent<CodeBlockModel> 
     this.std.clipboard
       .copySlice(slice)
       .then(() => {
-        this.notificationService?.toast('Copied to clipboard');
+        this.notificationService?.toast(
+          translateSlashItem('Copied to clipboard').name
+        );
       })
       .catch(e => {
         this.notificationService?.toast('Copied failed, something went wrong');

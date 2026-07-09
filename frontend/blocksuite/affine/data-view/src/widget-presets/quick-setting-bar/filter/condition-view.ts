@@ -5,6 +5,7 @@ import {
   type PopupTarget,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher } from '@blocksuite/global/lit';
 import {
   ArrowDownSmallIcon,
@@ -109,7 +110,7 @@ export class FilterConditionView extends SignalWatcher(ShadowlessElement) {
           menu.group({
             items: [
               menu.action({
-                name: fn.label,
+                name: translateSlashItem(fn.label).name,
                 postfix: ArrowRightSmallIcon(),
                 select: ele => {
                   const subHandler = popMenu(popupTargetFromElement(ele), {
@@ -143,7 +144,7 @@ export class FilterConditionView extends SignalWatcher(ShadowlessElement) {
           menu.group({
             items: [
               menu.action({
-                name: 'Delete',
+                name: translateSlashItem('Delete').name,
                 class: { 'delete-item': true },
                 prefix: DeleteIcon(),
                 select: () => {
@@ -220,7 +221,7 @@ export class FilterConditionView extends SignalWatcher(ShadowlessElement) {
     return filterMatcher.filterListBySelfType(type).map(v => {
       const selected = v.name === filter.function;
       return menu.action({
-        name: v.label,
+        name: translateSlashItem(v.label).name,
         isSelected: selected,
         select: () => {
           this.setFilter({

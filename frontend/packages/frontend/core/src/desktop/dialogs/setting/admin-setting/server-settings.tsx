@@ -60,6 +60,8 @@ export const ServerSettings = () => {
   );
 
   const registrationOpen = getSettingValue('registration_open') !== 'false';
+  // 既定 OFF: 明示的に 'true' のときのみ有効（外部送信ゼロを既定で維持）。
+  const linkPreviewEnabled = getSettingValue('link_preview_enabled') === 'true';
 
   return (
     <>
@@ -92,6 +94,29 @@ export const ServerSettings = () => {
             currentValue={getSettingValue('site_name') || ''}
             onSave={value => updateSetting('site_name', value)}
           />
+        </div>
+      </SettingWrapper>
+      <SettingWrapper title={t['com.affine.admin.server.integration']()}>
+        <div className={styles.userTable}>
+          <div className={styles.settingItem}>
+            <div className={styles.settingLabel}>
+              <div className={styles.settingName}>
+                {t['com.affine.admin.server.linkPreview.name']()}
+              </div>
+              <div className={styles.settingDesc}>
+                {t['com.affine.admin.server.linkPreview.desc']()}
+              </div>
+            </div>
+            <Switch
+              checked={linkPreviewEnabled}
+              onChange={(checked: boolean) =>
+                updateSetting(
+                  'link_preview_enabled',
+                  checked ? 'true' : 'false'
+                )
+              }
+            />
+          </div>
         </div>
       </SettingWrapper>
     </>

@@ -4,6 +4,7 @@ import * as unzipper from 'unzipper';
 import { PrismaService } from '../../prisma.service';
 import { BlobService } from '../blob/blob.service';
 import { mergeUpdates } from '../sync/yjs.utils';
+import { isSafeArchiveEntry, isValidBlobKey } from './backup-path.util';
 
 interface ManifestJson {
   version: 1;
@@ -171,6 +172,13 @@ export class BackupService {
   async importWorkspace(
     userId: string,
     zipBuffer: Buffer,
+    // 名前上書き（#72 マニュアルWS 等）。指定時は DB と Yjs ルートドキュメント両方に
+    // この名前を使う（フロントは Yjs 側の名前を表示するため、両方揃える必要がある）。
+    nameOverride?: string,
+    // ワークスペースID上書き（#72 マニュアルWS）。フロントは workspace.id で
+    // ソートするため、固定UUIDを与えて表示位置を安定させる用途。ルートドキュメントは
+    // この ID に remap される。
+    workspaceIdOverride?: string,
   ): Promise<{
     workspaceId: string;
     name: string | null;
@@ -217,9 +225,12 @@ export class BackupService {
     // 5. Create new workspace
     const workspace = await this.prisma.workspace.create({
       data: {
-        name: manifest.workspaceName
-          ? `${manifest.workspaceName} (imported)`
-          : 'Imported Workspace',
+        ...(workspaceIdOverride ? { id: workspaceIdOverride } : {}),
+        name:
+          nameOverride ??
+          (manifest.workspaceName
+            ? `${manifest.workspaceName} (imported)`
+            : 'Imported Workspace'),
         ownerId: userId,
       },
     });
@@ -248,8 +259,9 @@ export class BackupService {
     let blobCount = 0;
 
     // 6. Import docs
+    // L-4: エントリ名は信頼できない入力。`docs/<id>.yjs` 形式かつ traversal 無しに限定。
     const docFiles = directory.files.filter(
-      (f) => f.path.startsWith('docs/') && f.path.endsWith('.yjs'),
+      (f) => /^docs\/[^/]+\.yjs$/.test(f.path) && isSafeArchiveEntry(f.path),
     );
 
     for (const docFile of docFiles) {
@@ -294,12 +306,16 @@ export class BackupService {
     }
 
     // 7. Import blobs
-    const blobFiles = directory.files.filter((f) =>
-      f.path.startsWith('blobs/'),
-    );
+    // L-4: blob キーは base64url SHA256。厳格な許可リストで検証し、`../` 等による
+    // 書き込み先パスの traversal（zip-slip）を根絶する。不正キーはスキップする。
+    const blobFiles = directory.files.filter((f) => f.path.startsWith('blobs/'));
 
     for (const blobFile of blobFiles) {
       const key = blobFile.path.replace('blobs/', '');
+      if (!isValidBlobKey(key)) {
+        this.logger.warn(`Skipping blob with unsafe key: ${blobFile.path}`);
+        continue;
+      }
       const data = await blobFile.buffer();
       const meta = blobsMeta.find((m) => m.key === key);
 

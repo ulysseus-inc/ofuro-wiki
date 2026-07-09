@@ -2,7 +2,11 @@ import {
   EmbedOptionProvider,
   VirtualKeyboardProvider,
 } from '@blocksuite/affine-shared/services';
-import { isValidUrl, stopPropagation } from '@blocksuite/affine-shared/utils';
+import {
+  isValidUrl,
+  stopPropagation,
+  translateSlashItem,
+} from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import type { EditorHost } from '@blocksuite/std';
 import { ShadowlessElement } from '@blocksuite/std';
@@ -110,12 +114,14 @@ export class EmbedCardCreateModal extends SignalWatcher(
       <div class="embed-card-modal-mask" @click=${this._onCancel}></div>
       <div class="embed-card-modal-wrapper">
         <div class="embed-card-modal-row">
-          <div class="embed-card-modal-title">${this.titleText}</div>
+          <div class="embed-card-modal-title">
+            ${translateSlashItem(this.titleText).name}
+          </div>
         </div>
 
         <div class="embed-card-modal-row">
           <div class="embed-card-modal-description">
-            ${this.descriptionText}
+            ${translateSlashItem(this.descriptionText).name}
           </div>
         </div>
 
@@ -124,7 +130,7 @@ export class EmbedCardCreateModal extends SignalWatcher(
             class="embed-card-modal-input link"
             id="card-description"
             type="text"
-            placeholder="Input in https://..."
+            placeholder=${translateSlashItem('Input in https://...').name}
             value=${this._linkInputValue}
             @input=${this._handleInput}
           />
@@ -139,7 +145,7 @@ export class EmbedCardCreateModal extends SignalWatcher(
             ?disabled=${!isValidUrl(this._linkInputValue)}
             @click=${this._onConfirm}
           >
-            Confirm
+            ${translateSlashItem('Confirm').name}
           </button>
         </div>
       </div>

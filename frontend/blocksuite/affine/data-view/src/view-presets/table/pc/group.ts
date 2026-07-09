@@ -3,6 +3,7 @@ import {
   popFilterableSimpleMenu,
   popupTargetFromElement,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import {
   PlusIcon,
@@ -175,7 +176,7 @@ export class TableGroup extends SignalWatcher(
     const ele = e.currentTarget as HTMLElement;
     popFilterableSimpleMenu(popupTargetFromElement(ele), [
       menu.action({
-        name: 'Ungroup',
+        name: translateSlashItem('Ungroup').name,
         hide: () => group.value == null,
         select: () => {
           group.rows.forEach(row => {
@@ -184,7 +185,7 @@ export class TableGroup extends SignalWatcher(
         },
       }),
       menu.action({
-        name: 'Delete Cards',
+        name: translateSlashItem('Delete Cards').name,
         select: () => {
           this.view.rowsDelete(group.rows.map(row => row.rowId));
           this.requestUpdate();
@@ -355,7 +356,7 @@ export class TableGroup extends SignalWatcher(
               data-test-id="affine-database-add-row-button"
               role="button"
             >
-              ${PlusIcon()}<span style="font-size: 12px">New Record</span>
+              ${PlusIcon()}<span style="font-size: 12px">${translateSlashItem('New Record').name}</span>
             </div>
           </div>`}
       <affine-database-column-stats

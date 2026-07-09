@@ -53,6 +53,12 @@ export const Component = ({
 
   const createOnceRef = useRef(false);
 
+  // #72 マニュアル専用WS（読み取り専用・全ユーザー自動参加）は「自分のワークスペース」
+  // として数えない。これが list に居ても、自分のWSが無ければ自動作成し、
+  // 既定の遷移先にもマニュアルWSを選ばない（Reader のため編集不可で詰むのを防ぐ）。
+  const isManualWorkspace = (id: string) =>
+    id.startsWith('ffffffff-ffff-4fff');
+
   const createCloudWorkspace = useCallback(() => {
     if (createOnceRef.current) return;
     createOnceRef.current = true;
@@ -83,26 +89,27 @@ export const Component = ({
     }
 
     // check is user logged in && has cloud workspace
+    const ownList = list.filter(w => !isManualWorkspace(w.id));
     if (searchParams.get('initCloud') === 'true') {
-      if (list.every(w => w.flavour !== 'ofuro-cloud')) {
+      if (ownList.every(w => w.flavour !== 'ofuro-cloud')) {
         createCloudWorkspace();
         return;
       }
 
       // open first cloud workspace
       const openWorkspace =
-        list.find(w => w.flavour === 'ofuro-cloud') ?? list[0];
+        ownList.find(w => w.flavour === 'ofuro-cloud') ?? ownList[0];
       openPage(openWorkspace.id, defaultIndexRoute);
     } else {
-      if (list.length === 0) {
+      if (ownList.length === 0) {
         // Auto-create cloud workspace for logged-in users with no workspaces
         createCloudWorkspace();
         return;
       }
-      // open last workspace
+      // open last workspace（マニュアルWSを明示的に開いていた場合はそのまま尊重）
       const lastId = localStorage.getItem('last_workspace_id');
 
-      const openWorkspace = list.find(w => w.id === lastId) ?? list[0];
+      const openWorkspace = list.find(w => w.id === lastId) ?? ownList[0];
       openPage(openWorkspace.id, defaultIndexRoute, RouteLogic.REPLACE);
     }
     navigatedRef.current = true;

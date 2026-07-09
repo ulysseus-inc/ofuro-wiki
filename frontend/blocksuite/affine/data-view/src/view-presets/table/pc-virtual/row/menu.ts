@@ -3,6 +3,7 @@ import {
   popFilterableSimpleMenu,
   type PopupTarget,
 } from '@blocksuite/affine-components/context-menu';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import {
   CopyIcon,
   DeleteIcon,
@@ -48,7 +49,7 @@ export const popRowMenu = (
         name: '',
         items: [
           menu.action({
-            name: 'Copy',
+            name: translateSlashItem('Copy').name,
             prefix: html` <div
               style="transform: rotate(90deg);display:flex;align-items:center;"
             >
@@ -64,7 +65,7 @@ export const popRowMenu = (
         name: '',
         items: [
           menu.action({
-            name: 'Delete Rows',
+            name: translateSlashItem('Delete Rows').name,
             class: {
               'delete-item': true,
             },
@@ -83,7 +84,7 @@ export const popRowMenu = (
   if (!row) return;
   popFilterableSimpleMenu(ele, [
     menu.action({
-      name: 'Expand Row',
+      name: translateSlashItem('Expand Row').name,
       prefix: ExpandFullIcon(),
       select: () => {
         openDetail(tableViewLogic, row.id, selectionController);
@@ -93,7 +94,7 @@ export const popRowMenu = (
       name: '',
       items: [
         menu.action({
-          name: 'Insert Before',
+          name: translateSlashItem('Insert Before').name,
           prefix: html` <div
             style="transform: rotate(90deg);display:flex;align-items:center;"
           >
@@ -104,7 +105,7 @@ export const popRowMenu = (
           },
         }),
         menu.action({
-          name: 'Insert After',
+          name: translateSlashItem('Insert After').name,
           prefix: html` <div
             style="transform: rotate(90deg);display:flex;align-items:center;"
           >
@@ -119,7 +120,7 @@ export const popRowMenu = (
     menu.group({
       items: [
         menu.action({
-          name: 'Delete Row',
+          name: translateSlashItem('Delete Row').name,
           class: { 'delete-item': true },
           prefix: DeleteIcon(),
           select: () => {

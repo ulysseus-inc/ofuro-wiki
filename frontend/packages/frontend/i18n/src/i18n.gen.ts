@@ -748,6 +748,10 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.server.general"](): string;
     /**
+      * `External Integration`
+      */
+    ["com.affine.admin.server.integration"](): string;
+    /**
       * `Allow New Registration`
       */
     ["com.affine.admin.server.registration.name"](): string;
@@ -755,6 +759,14 @@ export function useAFFiNEI18N(): {
       * `When disabled, only admins can create new user accounts`
       */
     ["com.affine.admin.server.registration.desc"](): string;
+    /**
+      * `Link Previews & Rich Embeds`
+      */
+    ["com.affine.admin.server.linkPreview.name"](): string;
+    /**
+      * `When enabled, the server fetches metadata (title, thumbnail) for URLs you paste so bookmarks and embeds (YouTube, GitHub, Figma, Loom) show rich previews. This makes the server connect to those external sites. Disabled by default to keep zero external transmission.`
+      */
+    ["com.affine.admin.server.linkPreview.desc"](): string;
     /**
       * `Site Name`
       */
@@ -3543,6 +3555,18 @@ export function useAFFiNEI18N(): {
       * `Page width`
       */
     ["com.affine.page-properties.property.pageWidth"](): string;
+    /**
+      * `Protected`
+      */
+    ["com.affine.page-properties.property.readOnly"](): string;
+    /**
+      * `Protect this doc from accidental edits. When on, the doc opens read-only for everyone (even editors). Anyone with edit permission can turn it off.`
+      */
+    ["com.affine.page-properties.property.readOnly.tooltips"](): string;
+    /**
+      * `This doc is in protected mode. To edit, turn off Protected in the workspace properties.`
+      */
+    ["com.affine.doc-protection.banner.title"](): string;
     /**
       * `Template`
       */

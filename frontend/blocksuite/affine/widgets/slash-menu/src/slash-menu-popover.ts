@@ -16,6 +16,7 @@ import {
   isControlledKeyboardEvent,
   isFuzzyMatch,
   substringMatchScore,
+  translateSlashItem,
 } from '@blocksuite/affine-shared/utils';
 import { WithDisposable } from '@blocksuite/global/lit';
 import { ArrowDownSmallIcon } from '@blocksuite/icons/lit';
@@ -452,7 +453,9 @@ export class InnerSlashMenu extends WithDisposable(LitElement) {
         }}
       >
         <div class="tooltip-figure">${tooltip.figure}</div>
-        <div class="tooltip-caption">${tooltip.caption}</div>
+        <div class="tooltip-caption">
+          ${tooltip.caption ? translateSlashItem(tooltip.caption).name : ''}
+        </div>
       </affine-tooltip>`}
     </icon-button>`;
   };

@@ -18,6 +18,7 @@ import {
   type TelemetryEventMap,
   TelemetryProvider,
 } from '@blocksuite/affine-shared/services';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { getDropResult } from '@blocksuite/affine-widget-drag-handle';
 import {
   createRecordDetail,
@@ -109,7 +110,7 @@ export class DatabaseBlockComponent extends CaptionedBlockComponent<DatabaseBloc
             this.std.clipboard
               .copySlice(slice)
               .then(() => {
-                toast(this.host, 'Copied to clipboard');
+                toast(this.host, translateSlashItem('Copied to clipboard').name);
               })
               .catch(console.error);
           },

@@ -1,4 +1,5 @@
 import { unsafeCSSVarV2 } from '@blocksuite/affine-shared/theme';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { IS_MOBILE } from '@blocksuite/global/env';
 import { CloseIcon, SearchIcon } from '@blocksuite/icons/lit';
 import { baseTheme } from '@toeverything/theme';
@@ -146,7 +147,7 @@ export class DataViewHeaderToolsSearch extends WidgetBase<
       <label class="${searchToolClassMap}" @click="${this._clickSearch}">
         <div class="affine-database-search-input-icon">${SearchIcon()}</div>
         <input
-          placeholder="Search..."
+          placeholder="${translateSlashItem('Search...').name}"
           class="affine-database-search-input"
           @input="${this._onSearch}"
           @click="${(event: MouseEvent) => event.stopPropagation()}"

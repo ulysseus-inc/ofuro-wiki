@@ -2,6 +2,7 @@ import {
   type ToolbarAction,
   ToolbarContext,
 } from '@blocksuite/affine-shared/services';
+import { translateSlashItem } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher } from '@blocksuite/global/lit';
 import { PropTypes, requiredProperties } from '@blocksuite/std';
 import type { ReadonlySignal, Signal } from '@preact/signals-core';
@@ -41,12 +42,12 @@ export class ViewDropdownMenu extends SignalWatcher(LitElement) {
         .button=${html`
           <editor-icon-button
             aria-label="Switch view"
-            .tooltip="${'Switch view'}"
+            .tooltip="${translateSlashItem('Switch view').name}"
             .justify="${'space-between'}"
             .labelHeight="${'20px'}"
             .iconContainerWidth="${'110px'}"
           >
-            <span class="label">${viewType}</span>
+            <span class="label">${translateSlashItem(viewType).name}</span>
             ${EditorChevronDown}
           </editor-icon-button>
         `}
@@ -69,7 +70,7 @@ export class ViewDropdownMenu extends SignalWatcher(LitElement) {
                 )}"
                 @click=${() => run?.(context)}
               >
-                ${label}
+                ${label ? translateSlashItem(label).name : label}
               </editor-menu-action>
             `
           )}

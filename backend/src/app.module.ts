@@ -18,13 +18,16 @@ import { BlobModule } from './modules/blob/blob.module';
 import { SearchModule } from './modules/search/search.module';
 import { PermissionModule } from './modules/permission/permission.module';
 import { TelemetryModule } from './modules/telemetry/telemetry.module';
+import { WorkerModule } from './modules/worker/worker.module';
 import { HealthModule } from './modules/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { ManualSeedModule } from './modules/manual-workspace/manual-seed.module';
 import { CommentModule } from './modules/comment/comment.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MailModule } from './modules/mail/mail.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { AuthzModule } from './common/authz.module';
 import { PrismaService } from './prisma.service';
 import { MobileRedirectMiddleware } from './common/middleware/mobile-redirect.middleware';
 
@@ -66,6 +69,7 @@ const staticImports = [
 @Module({
   imports: [
     ...staticImports,
+    AuthzModule,
     ScheduleModule.forRoot(),
     // Rate limiting — 300 requests per minute per IP (self-hosted: generous limit)
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
@@ -76,11 +80,53 @@ const staticImports = [
       playground: process.env.NODE_ENV !== 'production',
       csrfPrevention: false,
       context: ({ req, res }: { req: any; res: any }) => ({ req, res }),
-      formatError: (error) => {
+      // L-2: 本番では内部エラーの詳細/スタックトレースをクライアントに返さない。
+      // 意図した HttpException（4xx: NotFound/Forbidden/BadRequest 等）は
+      // メッセージを保持し、想定外/5xx は汎用メッセージに丸める。開発時は従来どおり。
+      formatError: (formattedError) => {
         gqlLogger.warn(
-          `Error: ${error.message} (path: ${error.path?.join('.')}, code: ${error.extensions?.code})`,
+          `Error: ${formattedError.message} (path: ${formattedError.path?.join('.')}, code: ${formattedError.extensions?.code})`,
         );
-        return error;
+
+        if (process.env.NODE_ENV !== 'production') {
+          return formattedError;
+        }
+
+        const ext = (formattedError.extensions ?? {}) as Record<string, any>;
+        const statusCode: unknown =
+          ext.originalError?.statusCode ?? ext.status;
+        // 4xx の HttpException に加え、GraphQL 標準のクエリ検証/パースエラーや
+        // 入力エラーも「利用者側原因」として扱い、詳細を保持する（デバッグ可能に）。
+        const isClientError =
+          (typeof statusCode === 'number' &&
+            statusCode >= 400 &&
+            statusCode < 500) ||
+          ext.code === 'GRAPHQL_VALIDATION_FAILED' ||
+          ext.code === 'GRAPHQL_PARSE_FAILED' ||
+          ext.code === 'BAD_USER_INPUT';
+
+        if (isClientError) {
+          // client error はメッセージ・検証詳細(originalError)を保持する。
+          // ※ 本番では Apollo が stacktrace を付与しないため内部漏洩はない。
+          return {
+            message: formattedError.message,
+            path: formattedError.path,
+            locations: formattedError.locations,
+            extensions: {
+              code: ext.code,
+              ...(typeof statusCode === 'number' ? { status: statusCode } : {}),
+              ...(ext.originalError ? { originalError: ext.originalError } : {}),
+            },
+          };
+        }
+
+        // 想定外/サーバエラー: 詳細（スタック・Prisma/DBメッセージ等）を隠す。
+        return {
+          message: 'Internal server error',
+          path: formattedError.path,
+          locations: formattedError.locations,
+          extensions: { code: 'INTERNAL_SERVER_ERROR' },
+        };
       },
     }),
     AuthModule,
@@ -93,9 +139,11 @@ const staticImports = [
     SearchModule,
     PermissionModule,
     TelemetryModule,
+    WorkerModule,
     HealthModule,
     AdminModule,
     BackupModule,
+    ManualSeedModule,
     CommentModule,
     NotificationModule,
     MailModule,

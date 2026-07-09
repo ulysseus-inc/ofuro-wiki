@@ -9,6 +9,7 @@ import { promisify } from 'util';
 import * as unzipper from 'unzipper';
 import { PrismaService } from '../../prisma.service';
 import { AdminService } from '../admin/admin.service';
+import { resolveWithinDir } from './backup-path.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -16,6 +17,38 @@ const BACKUP_DIR =
   process.env.BACKUP_STORAGE_PATH || path.join(process.cwd(), 'data', 'backups');
 
 const BLOB_DIR = process.env.BLOB_STORAGE_PATH || './data/blobs';
+
+/**
+ * #34: バックアップ/リストアは DB 全体（public + 同居する他スキーマ）を
+ * pg_dump で読み、pg_restore で DDL（drop/create）する。最小権限化で
+ * runtime の DATABASE_URL を非superuser（ofuro_app）に絞ると、他スキーマへの
+ * アクセス権が無く `permission denied for schema ...` で失敗するため、
+ * DDL/全読み取り権限を持つ接続を使う。
+ * 優先順: BACKUP_DATABASE_URL > MIGRATE_DATABASE_URL(=ofuro) > DATABASE_URL(後方互換)。
+ *
+ * セキュリティ(CWE-532): パスワード付き URI をコマンドライン引数に渡すと、
+ * pg_dump/pg_restore 失敗時に execFile のエラー（err.message/cmd）へ生パスワードが
+ * 載り、logger.error でログに漏洩する。そのため URL からパスワードを分離し、
+ * 引数にはパスワードを除いた URL、認証は環境変数 PGPASSWORD で渡す。
+ */
+function getAdminDbUrl(): { url: string; password?: string } {
+  const rawUrl =
+    process.env.BACKUP_DATABASE_URL ||
+    process.env.MIGRATE_DATABASE_URL ||
+    process.env.DATABASE_URL;
+  if (!rawUrl) {
+    throw new Error('DATABASE_URL is not set');
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    const password = parsed.password || undefined;
+    parsed.password = '';
+    return { url: parsed.toString(), password };
+  } catch {
+    // URL としてパースできない形式はそのまま返す（後方互換）。
+    return { url: rawUrl };
+  }
+}
 
 @Injectable()
 export class ScheduledBackupService {
@@ -88,17 +121,17 @@ export class ScheduledBackupService {
     try {
       // 1. pg_dump
       const dumpPath = path.join(tmpDir, 'db.dump');
-      const dbUrl = process.env.DATABASE_URL;
-      if (!dbUrl) {
-        throw new Error('DATABASE_URL is not set');
-      }
+      // #34: 全スキーマを読むため DDL/全読み取り権限を持つ接続を使う（ofuro_app 不可）。
+      // CWE-532: パスワードは引数ではなく PGPASSWORD で渡す（失敗時のログ漏洩防止）。
+      const { url: dbUrl, password: dbPassword } = getAdminDbUrl();
 
-      await execFileAsync('pg_dump', [
-        '--format=custom',
-        '--file',
-        dumpPath,
-        dbUrl,
-      ]);
+      await execFileAsync(
+        'pg_dump',
+        ['--format=custom', '--file', dumpPath, dbUrl],
+        dbPassword
+          ? { env: { ...process.env, PGPASSWORD: dbPassword } }
+          : undefined,
+      );
       this.logger.log('pg_dump completed');
 
       // 2. Copy blobs directory
@@ -218,11 +251,9 @@ export class ScheduledBackupService {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     try {
-      // 1. Extract ZIP
-      await fs
-        .createReadStream(filePath)
-        .pipe(unzipper.Extract({ path: tmpDir }))
-        .promise();
+      // 1. Extract ZIP（L-4: unzipper.Extract はエントリ名を検証せず zip-slip に
+      //    脆弱なため、各エントリの展開先が tmpDir 配下に収まることを検証して展開する）
+      await this.safeExtractZip(filePath, tmpDir);
       this.logger.log('ZIP extracted');
 
       // 2. Validate manifest
@@ -246,18 +277,17 @@ export class ScheduledBackupService {
         throw new Error('Invalid backup: db.dump not found');
       }
 
-      const dbUrl = process.env.DATABASE_URL;
-      if (!dbUrl) {
-        throw new Error('DATABASE_URL is not set');
-      }
+      // #34: リストアは DDL(drop/create)するため DDL 権限を持つ接続を使う（ofuro_app 不可）。
+      // CWE-532: パスワードは引数ではなく PGPASSWORD で渡す（失敗時のログ漏洩防止）。
+      const { url: dbUrl, password: dbPassword } = getAdminDbUrl();
 
-      await execFileAsync('pg_restore', [
-        '--format=custom',
-        '--clean',
-        '--if-exists',
-        `--dbname=${dbUrl}`,
-        dumpPath,
-      ]);
+      await execFileAsync(
+        'pg_restore',
+        ['--format=custom', '--clean', '--if-exists', `--dbname=${dbUrl}`, dumpPath],
+        dbPassword
+          ? { env: { ...process.env, PGPASSWORD: dbPassword } }
+          : undefined,
+      );
       this.logger.log('Database restored via pg_restore');
 
       // 4. Restore blobs
@@ -286,6 +316,33 @@ export class ScheduledBackupService {
       if (fs.existsSync(filePath)) {
         fs.rmSync(filePath, { force: true });
       }
+    }
+  }
+
+  /**
+   * ZIP を安全に展開する（L-4 zip-slip 対策）。各エントリの展開先が destDir
+   * 配下に収まることを検証し、外へ出るエントリがあれば例外で中断する。
+   */
+  private async safeExtractZip(zipPath: string, destDir: string): Promise<void> {
+    const directory = await unzipper.Open.file(zipPath);
+    for (const entry of directory.files) {
+      // resolveWithinDir が destDir を抜けるパスを例外にする
+      const target = resolveWithinDir(destDir, entry.path);
+      if (entry.type === 'Directory') {
+        await fs.promises.mkdir(target, { recursive: true });
+        continue;
+      }
+      await fs.promises.mkdir(path.dirname(target), { recursive: true });
+      // OOM 回避: buffer() で全読み込みせず stream でディスクへ流す。
+      await new Promise<void>((resolve, reject) => {
+        const writeStream = fs.createWriteStream(target);
+        entry
+          .stream()
+          .on('error', reject)
+          .pipe(writeStream)
+          .on('finish', resolve)
+          .on('error', reject);
+      });
     }
   }
 

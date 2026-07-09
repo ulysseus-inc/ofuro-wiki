@@ -1,5 +1,6 @@
 import { DefaultTool } from '@blocksuite/affine-block-surface';
 import { toggleEmbedCardCreateModal } from '@blocksuite/affine-components/embed-card-modal';
+import { translateGroupStr } from '@blocksuite/affine-shared/utils';
 import type { SlashMenuConfig } from '@blocksuite/affine-widget-slash-menu';
 import { LoomLogoDuotoneIcon } from '@blocksuite/icons/lit';
 import { GfxControllerIdentifier } from '@blocksuite/std/gfx';
@@ -16,7 +17,7 @@ export const embedLoomSlashMenuConfig: SlashMenuConfig = {
         figure: LoomTooltip,
         caption: 'loom',
       },
-      group: '4_Content & Media@9',
+      group: translateGroupStr('4_Content & Media@9'),
       when: ({ model }) =>
         model.store.schema.flavourSchemaMap.has('affine:embed-loom'),
       action: ({ std, model }) => {

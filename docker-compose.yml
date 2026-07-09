@@ -14,7 +14,14 @@ services:
         condition: service_healthy
     environment:
       # #3: PostgreSQL 接続 — パスワードは .env で管理
-      DATABASE_URL: postgresql://${POSTGRES_USER:-ofuro}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ofuro_wiki}
+      # runtime 接続。既定は compose の postgres サービス(@postgres:5432)に接続する。
+      # ⚠ ホスト側 .env の DATABASE_URL(=localhost) がコンテナに漏れると起動失敗するため、
+      #    ここでは runtime の値を参照せず、上書きは専用の DOCKER_DATABASE_URL で行う。
+      #    最小権限化(#34 フェーズ2)で非superuser ofuro_app に切替える場合のみ設定する。
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://${POSTGRES_USER:-ofuro}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ofuro_wiki}}
+      # #34: migrate deploy(DDL) 専用の接続。未設定なら DATABASE_URL を使う（後方互換）。
+      # 最小権限化時は DDL 権限を持つロール(ofuro/superuser)を DOCKER_MIGRATE_DATABASE_URL で指定。
+      MIGRATE_DATABASE_URL: ${DOCKER_MIGRATE_DATABASE_URL:-}
       # #1: 本番では必ず強いランダム値を設定すること
       JWT_SECRET: ${JWT_SECRET}
       BLOB_STORAGE_PATH: /data/blobs
@@ -23,6 +30,8 @@ services:
       # #10: メール内リンク等に使用するベースURL
       BASE_URL: ${BASE_URL}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      # sign-in での未登録メール自動作成を無効化する場合は false（既定: true）
+      AUTH_SIGNIN_AUTOCREATE: ${AUTH_SIGNIN_AUTOCREATE:-true}
       # #2: CORS — * で全許可、ドメイン指定で絞り込み
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
       # #8: バージョン（build-arg から ENV に渡される）
