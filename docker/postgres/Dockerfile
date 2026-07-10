@@ -30,3 +30,8 @@ RUN set -eux; \
     cd /; \
     rm -rf /tmp/pgvector; \
     apk del .pgvector-build-deps
+
+# 初期化SQL（pgroonga / pgvector 拡張の有効化）をイメージに同梱する。
+# ホスト側ファイルのバインドマウント前提だと、リポジトリを clone しない
+# クイックスタート（compose + .env のみ取得）で初期化に失敗するため。
+COPY pgroonga-init.sql /docker-entrypoint-initdb.d/01-pgroonga.sql

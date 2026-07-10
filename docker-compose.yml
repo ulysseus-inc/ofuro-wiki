@@ -69,8 +69,9 @@ services:
       context: ./docker/postgres
       dockerfile: Dockerfile
     volumes:
+      # 初期化SQL（pgroonga/pgvector 有効化）はイメージに同梱（docker/postgres/Dockerfile）。
+      # バインドマウント前提だと clone なしのクイックスタートで初期化に失敗するため。
       - pgdata:/var/lib/postgresql/data
-      - ./backend/prisma/migrations/pgroonga-init.sql:/docker-entrypoint-initdb.d/01-pgroonga.sql:ro
     environment:
       # #3: PostgreSQL 認証情報 — .env で管理
       POSTGRES_DB: ${POSTGRES_DB:-ofuro_wiki}

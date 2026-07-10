@@ -39,7 +39,19 @@
 
 ## Quick start
 
-### 1. Configure environment variables
+All you need is **Docker**. Prebuilt public images are used, so there is no
+need to clone the repository or build anything (**proven on a free-tier GCE
+e2-micro with 1GB RAM + 2GB swap**).
+
+### 1. Fetch the files
+
+```bash
+mkdir ofuro-wiki && cd ofuro-wiki
+curl -O https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/docker-compose.yml
+curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/backend/.env.example
+```
+
+### 2. Configure environment variables
 
 ```bash
 cp backend/.env.example .env
@@ -54,32 +66,18 @@ BASE_URL=https://wiki.example.com
 ADMIN_EMAIL=admin@example.com
 ```
 
-### 2. Start
-
-**Option A: Use prebuilt images (recommended — no build required)**
-
-Add the following to `.env`, then pull the public images and start:
+Then append the prebuilt image references:
 
 ```bash
-# append to .env
 APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
 POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
 ```
 
+### 3. Start
+
 ```bash
 docker compose pull app postgres
 docker compose up -d --no-build
-```
-
-Since no build is needed, this runs on low-spec servers (**proven on a
-free-tier GCE e2-micro with 1GB RAM + 2GB swap**; see the
-[deploy guide](docs/deploy/README.md) for swap setup).
-
-**Option B: Build it yourself**
-
-```bash
-docker compose build   # 4GB+ RAM recommended (webpack build is heavy)
-docker compose up -d
 ```
 
 > The database schema is set up automatically on first start. PostgreSQL
@@ -87,7 +85,11 @@ docker compose up -d
 > and tables/indexes are applied by `prisma migrate deploy` when the `app`
 > container starts (idempotent — **no manual migration needed**).
 
-### 3. Verify
+> **Want to build from source?** Clone the repository and run
+> `docker compose build` (4GB+ RAM recommended). See the
+> [deploy guide](docs/deploy/README.md) for details.
+
+### 4. Verify
 
 ```bash
 curl http://localhost:3010/api/health

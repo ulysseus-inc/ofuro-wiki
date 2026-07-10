@@ -38,7 +38,19 @@
 
 ## クイックスタート
 
-### 1. 環境変数の設定
+必要なのは **Docker だけ**です。ビルド済みの公開イメージを使うため、
+リポジトリの clone もビルドも不要です（**RAM 1GB + Swap 2GB の GCE e2-micro
+（無料枠）で稼働実績あり**）。
+
+### 1. ファイルの取得
+
+```bash
+mkdir ofuro-wiki && cd ofuro-wiki
+curl -O https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/docker-compose.yml
+curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/backend/.env.example
+```
+
+### 2. 環境変数の設定
 
 ```bash
 cp backend/.env.example .env
@@ -53,39 +65,28 @@ BASE_URL=https://wiki.example.com
 ADMIN_EMAIL=admin@example.com
 ```
 
-### 2. 起動
-
-**方法 A：ビルド済みイメージを使う（推奨・ビルド不要）**
-
-`.env` に以下を追記し、公開イメージを pull して起動します：
+さらに、使用するビルド済みイメージを追記します：
 
 ```bash
-# .env に追記
 APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
 POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
 ```
+
+### 3. 起動
 
 ```bash
 docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-ビルドが不要なため低スペックサーバーでも動きます（**RAM 1GB + Swap 2GB の
-GCE e2-micro（無料枠）で稼働実績あり**。Swap の作成手順は
-[デプロイガイド](docs/deploy/README.md#3-a-swap-領域の作成低スペックサーバー向け)を参照）。
-
-**方法 B：自分でビルドする**
-
-```bash
-docker compose build   # RAM 4GB 以上推奨（webpack ビルドが重いため）
-docker compose up -d
-```
-
 > 初回起動時に DB スキーマは自動で構築されます。PostgreSQL 拡張（pgroonga /
 > pgvector）は DB 作成時に、テーブル・インデックスは `app` 起動時の
 > `prisma migrate deploy` で適用されます（冪等・**手動マイグレーション不要**）。
 
-### 3. 確認
+> **ソースからビルドしたい場合**: リポジトリを clone して `docker compose build`
+> （RAM 4GB 以上推奨）。詳細は [デプロイガイド](docs/deploy/README.md) を参照。
+
+### 4. 確認
 
 ```bash
 curl http://localhost:3010/api/health

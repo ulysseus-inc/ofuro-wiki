@@ -272,7 +272,7 @@ docker compose logs -f app
 
 > **DB の初期化について**: スキーマ構築は 2 段階で行われます。
 > ① **PostgreSQL 拡張**（pgroonga / pgvector）は、DB ボリュームの初回作成時に
-> `docker-entrypoint-initdb.d`（`pgroonga-init.sql`）で一度だけ作成されます。
+> `docker-entrypoint-initdb.d`（`pgroonga-init.sql`、postgres イメージに同梱）で一度だけ作成されます。
 > ② **テーブル・インデックス**は、`app` コンテナ起動時の `prisma migrate deploy`
 > で適用されます（冪等。未適用のマイグレーションのみ適用されるため、毎回の起動や
 > バージョンアップでも安全です）。手動でのマイグレーション操作は不要です。
