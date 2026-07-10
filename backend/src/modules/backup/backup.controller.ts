@@ -92,9 +92,28 @@ export class BackupController {
       throw new BadRequestException('File must be a .zip archive');
     }
 
+    // 任意の name フィールド（multipart）でワークスペース名を指定できる。
+    // 未指定なら従来どおり「<元の名前> (imported)」になる。
+    const rawName = (req.body as Record<string, unknown> | undefined)?.name;
+    let nameOverride: string | undefined;
+    if (rawName !== undefined) {
+      if (typeof rawName !== 'string') {
+        throw new BadRequestException('name は空でない文字列で指定してください');
+      }
+      const trimmed = rawName.trim();
+      if (!trimmed) {
+        throw new BadRequestException('name は空でない文字列で指定してください');
+      }
+      if (trimmed.length > 255) {
+        throw new BadRequestException('name は255文字以内で指定してください');
+      }
+      nameOverride = trimmed;
+    }
+
     const result = await this.backupService.importWorkspace(
       userId,
       file.buffer,
+      nameOverride,
     );
 
     res.json(result);

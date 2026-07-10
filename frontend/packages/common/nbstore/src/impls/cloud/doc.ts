@@ -139,6 +139,16 @@ export class CloudDocStorage extends DocStorageBase<CloudDocStorageOptions> {
     ]);
 
     if ('error' in response) {
+      // 読み取り専用スペース（Reader 参加のマニュアルWS等）への書き込み拒否は
+      // 接続障害ではなく恒久的な拒否。throw するとエンジンが無限リトライし
+      // 「Connection lost」バナーが出続けるため、更新を破棄して成功扱いにする
+      // （サーバーが正。docProperties 等のローカル自動書き込みは反映されない）。
+      if (response.error.name === 'ACCESS_DENIED') {
+        return {
+          docId: update.docId,
+          timestamp: new Date(),
+        };
+      }
       // TODO(@forehalo): use [UserFriendlyError]
       throw new Error(response.error.message);
     }

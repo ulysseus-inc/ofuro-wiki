@@ -117,6 +117,7 @@ ID 上書き）。これで既存のフロントソートのまま**常に最下
    curl -X POST http://localhost:3010/api/workspaces/import \
      -b cookies.txt -F "file=@backend/seed/manual.zip;type=application/zip"
    ```
+   任意の `-F "name=<ワークスペース名>"` で名前を指定できる（未指定なら「〜 (imported)」）。
    ※ E2E テスト実行はワークスペースを削除することがあるため、執筆用WSは使い捨てと考える。
 2. **本文を投入**: 章ごとの md を `POST /api/internal/docs/upsert` で投入
    （body: `workspaceId` / `docId` / `title` / `markdown`）。既存 docId を指定すれば上書き。
@@ -159,6 +160,17 @@ AFFiNE 公式 docs（Get Started / Core Concepts / Self-host）を参考に、of
 4. **便利機能** — 全文検索 / テンプレート / 保護モード（#66）/ リアルタイム共同編集
 5. **共有と権限** — メンバー・ロール（Admin/Owner/Member/Reader）
 6. **管理者編** — ユーザー管理 / サーバー設定 / 外部連携（リンクプレビュー）/ バックアップ
+
+## 5.5 読み取り専用WSと同期エンジンの挙動
+
+クライアントはドキュメントを**開くだけ**でローカルメタデータ（`db$<wsId>$docProperties` 等）に
+書き込みを発生させ、それを同期エンジンが `space:push-doc-update` で push する。Reader 参加の
+マニュアルWSではサーバーが `ACCESS_DENIED` で拒否するが、これを接続障害として扱うと
+無限リトライ＋「Connection lost」バナーが常時表示になる（2026-07-10 デモ環境で発見）。
+
+対策: `nbstore/src/impls/cloud/doc.ts` の `pushDocUpdate` で `ACCESS_DENIED` 応答は
+**更新を破棄して成功扱い**にする（サーバーが正。読み取り専用WSへのローカル自動書き込みは
+反映されない仕様）。接続障害・タイムアウト等は従来どおり throw → リトライ。
 
 ## 6. セキュリティ上の注意
 
