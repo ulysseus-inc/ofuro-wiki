@@ -56,8 +56,29 @@ ADMIN_EMAIL=admin@example.com
 
 ### 2. Start
 
+**Option A: Use prebuilt images (recommended — no build required)**
+
+Add the following to `.env`, then pull the public images and start:
+
 ```bash
-docker compose build
+# append to .env
+APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
+POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
+```
+
+```bash
+docker compose pull app postgres
+docker compose up -d --no-build
+```
+
+Since no build is needed, this runs on low-spec servers (**proven on a
+free-tier GCE e2-micro with 1GB RAM + 2GB swap**; see the
+[deploy guide](docs/deploy/README.md) for swap setup).
+
+**Option B: Build it yourself**
+
+```bash
+docker compose build   # 4GB+ RAM recommended (webpack build is heavy)
 docker compose up -d
 ```
 

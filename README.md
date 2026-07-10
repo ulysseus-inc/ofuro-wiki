@@ -55,8 +55,29 @@ ADMIN_EMAIL=admin@example.com
 
 ### 2. 起動
 
+**方法 A：ビルド済みイメージを使う（推奨・ビルド不要）**
+
+`.env` に以下を追記し、公開イメージを pull して起動します：
+
 ```bash
-docker compose build
+# .env に追記
+APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
+POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
+```
+
+```bash
+docker compose pull app postgres
+docker compose up -d --no-build
+```
+
+ビルドが不要なため低スペックサーバーでも動きます（**RAM 1GB + Swap 2GB の
+GCE e2-micro（無料枠）で稼働実績あり**。Swap の作成手順は
+[デプロイガイド](docs/deploy/README.md#3-a-swap-領域の作成低スペックサーバー向け)を参照）。
+
+**方法 B：自分でビルドする**
+
+```bash
+docker compose build   # RAM 4GB 以上推奨（webpack ビルドが重いため）
 docker compose up -d
 ```
 
