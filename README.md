@@ -108,7 +108,7 @@ Admin は環境変数 `ADMIN_EMAIL` で指定したアドレスで初回サイ�
 
 ## デプロイ
 
-本番デプロイの詳細手順（Nginx / Caddy の設定、バージョン管理、バックアップ等）は
+本番デプロイの詳細手順（Nginx / Caddy の設定、Swap、バックアップ等）は
 [docs/deploy/README.md](docs/deploy/README.md) を参照してください。
 
 ### HTTP と HTTPS でのクリップボード動作の違い

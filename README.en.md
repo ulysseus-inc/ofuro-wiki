@@ -112,7 +112,7 @@ when it signs up for the first time.
 
 ## Deployment
 
-For production deployment details (Nginx / Caddy configuration, version management,
+For production deployment details (Nginx / Caddy configuration, swap setup,
 backups, etc.), see [docs/deploy/README.md](docs/deploy/README.md).
 
 ### Clipboard behavior: HTTP vs HTTPS

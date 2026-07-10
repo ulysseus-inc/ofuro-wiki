@@ -1,5 +1,9 @@
 # ofuro-wiki デプロイガイド
 
+> **対象読者**: ofuro-wiki を自分のサーバーにデプロイして**利用する**方。
+> リポジトリを clone せず最小手順で試したい場合は、トップの
+> [README クイックスタート](../../README.md#クイックスタート) を参照してください。
+
 ## デプロイパターンの選択
 
 まず、サーバーの環境に合ったパターンを選んでください。
@@ -120,89 +124,12 @@ MAILER_PASSWORD=your_smtp_password
 MAILER_SENDER="ofuro-wiki <noreply@example.com>"
 ```
 
-### 3. ビルドと起動
+### 3. 起動
 
-> **PostgreSQL イメージについて（#26）**: `postgres` サービスは `groonga/pgroonga`
-> に pgvector をビルド追加した独自イメージ（`docker/postgres/Dockerfile`）を使用します。
-> `docker compose build` / `up --build` 時に**初回のみ** pgvector をソースからビルドします
-> （約1分・pgvector の git clone にインターネット接続が必要）。アプリを GHCR pull で
-> 運用する場合（方法②）でも、`postgres` は各サーバーでローカルビルドされます。
-> pgroonga（全文検索）と pgvector（意味検索）が同一DBに共存します。
+#### 方法①：ビルド済み Docker イメージを利用（推奨）
 
-#### 方法①：サーバー上でビルドする（標準）
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-> **注意（低スペックサーバー）**: webpack ビルドは RAM 2GB 以上を消費します。
-> RAM が 1GB 程度の VPS では OOM でビルドが強制終了します。
-> Swap 領域を事前に作成するか、方法②（GHCR Pull）を使用してください。
-
-#### 方法②：GitHub Actions でビルド → サーバーは Pull のみ（推奨）
-
-RAM が少ないサーバーや、CI/CD を整備したい場合は、ビルドを GitHub Actions に任せ、
-サーバーでは完成済みイメージを pull するだけにします。
-
-**GitHub Actions ワークフロー（`.github/workflows/build-push.yml`）**
-
-```yaml
-name: Build and Push Docker Image
-
-on:
-  push:
-    branches:
-      - master
-  workflow_dispatch:
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=sha-
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            SKIP_MOBILE=true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-```
-
-**イメージの指定（`.env` に追記するだけ。compose の書き換えは不要）**
+公式のビルド済みイメージ（GHCR で公開）を pull して起動します。ビルド不要のため
+低スペックサーバーでも動きます。
 
 ```bash
 # .env に追記
@@ -212,33 +139,43 @@ POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
 
 `docker-compose.yml` は `image: ${APP_IMAGE:-...}` / `image: ${POSTGRES_IMAGE:-...}` を
 参照しているため、変数を設定して pull すれば配布イメージで起動します。
-未設定の場合はローカルビルド（方法①）になります。
-
-> **postgres イメージ（#26）**: pgroonga + pgvector の独自イメージです。
-> GitHub Actions で `ghcr.io/<org>/<repo>-postgres:latest` に push されます。
-
-**サーバー上でのデプロイ**
 
 ```bash
-# GHCR にログイン（プライベートイメージの場合のみ。公開イメージなら不要）
-echo <GITHUB_TOKEN> | docker login ghcr.io -u <github_username> --password-stdin
-
 # イメージを pull して起動
 # --no-build: pull 忘れ等でローカルビルドが暴発し OOM するのを防ぐ（低スペック環境で重要）
 docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-> **GHCR の容量**: GitHub Free プランでは Container Registry の容量は **500MB 無料**。
-> 超過分は有料（$0.008/GB/月）。プライベートリポジトリの場合は可視性に注意。
+> **postgres イメージ（#26）**: pgroonga（全文検索）+ pgvector（意味検索）を同梱した
+> 独自イメージです。初期化SQLもイメージに含まれます。
+
+#### 方法②：サーバー上でビルドする
+
+ソースからビルドしたい場合はこちら。
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+> **注意（低スペックサーバー）**: webpack ビルドは RAM 2GB 以上を消費します。
+> RAM が 1GB 程度の VPS では OOM でビルドが強制終了します。
+> Swap 領域を事前に作成するか、方法①（ビルド済みイメージ）を使用してください。
+> postgres イメージのビルドには pgvector のソース取得（git clone）のため
+> インターネット接続が必要です。
+
+> **フォークして独自イメージを配布したい場合**: 同梱の CI 設定
+> （`.github/workflows/build-push.yml`）がフォークでもそのまま動作し、
+> 自リポジトリ名義の GHCR イメージが自動ビルドされます。
 
 ### 3-a. Swap 領域の作成（低スペックサーバー向け）
 
-RAM が 2GB 未満のサーバーで方法①（サーバービルド）を選ぶ場合は、ビルド前に Swap を作成してください。
-方法②（GHCR Pull）を使う場合でも、サービス稼働中の安定性のために作成を推奨します。
+RAM が 2GB 未満のサーバーで方法②（サーバービルド）を選ぶ場合は、ビルド前に Swap を作成してください。
+方法①（ビルド済みイメージ）を使う場合でも、サービス稼働中の安定性のために作成を推奨します。
 
 > **最小構成の実績**: GCE e2-micro（vCPU 2 / RAM 1GB / 無料枠）+ Swap 2GB で、
-> 方法②（GHCR Pull）+ パターン A（Caddy）の構成で安定稼働を確認済みです。
+> 方法①（ビルド済みイメージ）+ パターン A（Caddy）の構成で安定稼働を確認済みです。
 
 ```bash
 # 2GB の Swap ファイルを作成
@@ -289,76 +226,6 @@ docker compose logs -f app
 > コンテナには渡らないため、ホスト実行用とコンテナ用が混在しません。
 
 その後、パターン別のリバースプロキシ設定へ進んでください。
-
----
-
-## バージョン管理・リリース手順
-
-| 変数 | 場所 | 説明 |
-|------|------|------|
-| `APP_VERSION` | プロジェクトルートの `.env` | **ofuro-wiki のリリースバージョン。リリース時に更新する** |
-| `AFFINE_API_VERSION` | `backend/src/modules/config/config.service.ts` | AFFiNE フロントエンドとの API 互換バージョン。**絶対に変更しないこと** |
-
-```bash
-# 1. .env の APP_VERSION を更新
-#    APP_VERSION=1.1.0
-
-# 2. コミット → PR → main にマージ
-
-# 3. タグを打つ
-git tag v1.1.0
-git push origin v1.1.0
-
-# 4. サーバーに反映
-# 方法①（サーバービルド）の場合:
-git pull
-docker compose build
-docker compose up -d
-
-# 方法②（GHCR Pull）の場合:
-# GitHub Actions が自動でビルド・push → サーバーでは pull するだけ
-docker compose pull
-docker compose up -d
-```
-
----
-
-## DBマイグレーション：pgvector の有効化（#26・既存本番向け）
-
-pgvector を追加した版を**既存の本番環境**に適用する場合の一回限りの手順です。
-`pgdata` ボリュームは保持されるため**データは消えません**が、`initdb` の初期化SQL
-（`CREATE EXTENSION vector`）は初回構築済みのボリュームでは**再実行されない**ため、
-拡張の有効化を手動で1回行う必要があります。
-
-```bash
-# 0. 念のためバックアップ（管理パネル or pg_dump）
-docker compose exec postgres pg_dump -U ofuro -d ofuro_wiki -Fc -f /tmp/pre-pgvector.dump
-docker compose cp postgres:/tmp/pre-pgvector.dump ./pre-pgvector.dump
-
-# 1. docker-compose.yml の postgres を新イメージに差し替え（方法②の場合）
-#    image: ghcr.io/<org>/<repo>-postgres:latest  / build: は削除
-
-# 2. 新しい postgres イメージを取得して再作成（pgdata は保持される）
-docker compose pull postgres
-docker compose up -d postgres
-
-# 3. 拡張が利用可能か確認（vector が1行返ればOK）
-docker compose exec postgres psql -U ofuro -d ofuro_wiki -c \
-  "SELECT name, default_version FROM pg_available_extensions WHERE name='vector';"
-
-# 4. 拡張を有効化（既存DBは initdb 非実行のため手動）
-docker compose exec postgres psql -U ofuro -d ofuro_wiki -c \
-  "CREATE EXTENSION IF NOT EXISTS vector;"
-
-# 5. 既存の pgroonga と共存していることを確認
-docker compose exec postgres psql -U ofuro -d ofuro_wiki -c \
-  "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
-```
-
-> **ロールバック**: 旧イメージ（`groonga/pgroonga:latest-alpine-17`）に戻して
-> `docker compose up -d postgres` で再作成すれば元に戻ります（`vector` 拡張を作成済みでも、
-> 旧イメージには拡張バイナリが無いため、戻す前に `DROP EXTENSION vector;` が必要な場合あり）。
-> データ自体は `pgdata` に保持されます。
 
 ---
 
