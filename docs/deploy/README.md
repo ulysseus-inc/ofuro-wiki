@@ -110,6 +110,8 @@ ALLOWED_ORIGINS=https://wiki.example.com
 
 **メール設定（オプション）:**
 未設定の場合、招待メール・パスワードリセットメールは送信されません。
+SMTP なしでも運用できます（既登録ユーザーの招待は即時メンバー登録、未登録ユーザーは
+招待リンクの共有で代替、パスワードリセットは Admin が再設定用 URL を発行して共有）。
 ```bash
 MAILER_HOST=smtp.example.com
 MAILER_PORT=587
