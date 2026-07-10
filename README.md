@@ -79,9 +79,7 @@ docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-> 初回起動時に DB スキーマは自動で構築されます。PostgreSQL 拡張（pgroonga /
-> pgvector）は DB 作成時に、テーブル・インデックスは `app` 起動時の
-> `prisma migrate deploy` で適用されます（冪等・**手動マイグレーション不要**）。
+> DB スキーマは初回起動時に自動構築されます（手動マイグレーション不要）。
 
 > **ソースからビルドしたい場合**: リポジトリを clone して `docker compose build`
 > （RAM 4GB 以上推奨）。詳細は [デプロイガイド](docs/deploy/README.md) を参照。

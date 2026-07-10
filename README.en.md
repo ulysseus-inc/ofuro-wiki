@@ -80,10 +80,8 @@ docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-> The database schema is set up automatically on first start. PostgreSQL
-> extensions (pgroonga / pgvector) are created when the DB volume is initialized,
-> and tables/indexes are applied by `prisma migrate deploy` when the `app`
-> container starts (idempotent — **no manual migration needed**).
+> The database schema is set up automatically on first start (no manual
+> migration needed).
 
 > **Want to build from source?** Clone the repository and run
 > `docker compose build` (4GB+ RAM recommended). See the
