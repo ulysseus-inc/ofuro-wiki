@@ -1,17 +1,45 @@
 # ofuro-wiki
 
 <p align="center">
-  <img src="images/ofuro-wiki_800x800.png" width="160" alt="ofuro-wiki logo" />
+  <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
 </p>
 
 <p align="center">
+  <b>セルフホスト型の Notion オルタナティブ。外部送信ゼロ設計、MIT ライセンス。</b><br>
   アイデアが湧き出てくる、セキュアな社内 Wiki プラットフォーム。<br>
   お風呂（ofuro）のように、自然とアイデアが出てくる場所をイメージして。
 </p>
 
 <p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="https://github.com/ulysseus-inc/ofuro-wiki/releases"><img alt="Release" src="https://img.shields.io/github/v/release/ulysseus-inc/ofuro-wiki"></a>
+  <a href="https://github.com/ulysseus-inc/ofuro-wiki/pkgs/container/ofuro-wiki"><img alt="Docker: GHCR" src="https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white"></a>
+</p>
+
+<p align="center">
   <b>日本語</b> | <a href="README.en.md">English</a>
 </p>
+
+<p align="center">
+  <img src="images/screenshot-editor.png" width="49%" alt="ofuro-wiki のエディタ画面">
+  <img src="images/screenshot-slash-menu.png" width="49%" alt="スラッシュコマンドによるブロック挿入">
+</p>
+
+---
+
+## ライブデモ
+
+インストール不要で、すぐに触れます。
+
+**▶ [https://ofuro-wiki-demo.ulysseus.co.jp](https://ofuro-wiki-demo.ulysseus.co.jp)**
+
+| ログイン | |
+|---|---|
+| メールアドレス | `demo@demo.com` |
+| パスワード | `demodemo` |
+
+> 共用のデモ環境です。毎晩 3:00（JST）に初期状態へリセットされます。
+> 機密情報は入力しないでください。
 
 ---
 

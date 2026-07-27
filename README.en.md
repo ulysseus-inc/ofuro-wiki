@@ -1,17 +1,46 @@
 # ofuro-wiki
 
 <p align="center">
-  <img src="images/ofuro-wiki_800x800.png" width="160" alt="ofuro-wiki logo" />
+  <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
 </p>
 
 <p align="center">
-  A secure, self-hosted, Notion-like wiki platform where ideas flow naturally.<br>
-  Named after the Japanese bath (<i>ofuro</i>) — a place where ideas come to you.
+  <b>A self-hosted, privacy-first Notion alternative.</b><br>
+  <b>Zero external data transmission by design — MIT licensed.</b><br>
+  A secure wiki platform where ideas flow naturally, named after the Japanese bath
+  (<i>ofuro</i>) — a place where ideas come to you.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-blue.svg"></a>
+  <a href="https://github.com/ulysseus-inc/ofuro-wiki/releases"><img alt="Release" src="https://img.shields.io/github/v/release/ulysseus-inc/ofuro-wiki"></a>
+  <a href="https://github.com/ulysseus-inc/ofuro-wiki/pkgs/container/ofuro-wiki"><img alt="Docker: GHCR" src="https://img.shields.io/badge/Docker-GHCR-2496ED?logo=docker&logoColor=white"></a>
 </p>
 
 <p align="center">
   <a href="README.md">日本語</a> | <b>English</b>
 </p>
+
+<p align="center">
+  <img src="images/screenshot-editor.png" width="49%" alt="The ofuro-wiki editor">
+  <img src="images/screenshot-slash-menu.png" width="49%" alt="Inserting blocks with slash commands">
+</p>
+
+---
+
+## Live demo
+
+Try it right now — no installation required.
+
+**▶ [https://ofuro-wiki-demo.ulysseus.co.jp](https://ofuro-wiki-demo.ulysseus.co.jp)**
+
+| Sign in | |
+|---|---|
+| Email | `demo@demo.com` |
+| Password | `demodemo` |
+
+> This is a shared demo environment. It resets to its initial state every night at
+> 3:00 AM (JST). Please do not enter confidential information.
 
 ---
 
