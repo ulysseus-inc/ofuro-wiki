@@ -5,6 +5,7 @@ import {
   PropertyCollapsibleSection,
   PropertyName,
   PropertyRoot,
+  Tooltip,
   useDraggable,
   useDropTarget,
 } from '@ofuro/component';
@@ -19,7 +20,7 @@ import type {
 import { ViewService, WorkbenchService } from '@ofuro/core/modules/workbench';
 import { WorkspacePropertyService } from '@ofuro/core/modules/workspace-property';
 import type { AffineDNDData } from '@ofuro/core/types/dnd';
-import { useI18n } from '@ofuro/i18n';
+import { i18nTime, useI18n } from '@ofuro/i18n';
 import { track } from '@ofuro/track';
 import { PlusIcon, PropertyIcon, ToggleDownIcon } from '@blocksuite/icons/rc';
 import * as Collapsible from '@radix-ui/react-collapsible';
@@ -78,6 +79,39 @@ interface WorkspacePropertiesTableHeaderProps {
   onOpenChange: (open: boolean) => void;
 }
 
+/**
+ * #107: 最終更新日（相対表記）。
+ *
+ * ドキュメントの鮮度は、読み手が情報を鵜呑みにしないための重要な手がかりだが、
+ * これまでは「情報」欄を開かないと見えなかった（既定は折りたたみ）。
+ * タイトル直下に常時表示する。
+ *
+ * **警告色は付けない。** 社内 Wiki には更新の必要がない文書（過去の議事録・完了した
+ * プロジェクトの記録）が大量にあり、全ページに警告が出ると警告自体が無視される。
+ * 事実を示すだけにとどめ、判断は読み手に委ねる。
+ */
+const DocUpdatedAtLabel = () => {
+  const t = useI18n();
+  const docService = useService(DocService);
+  const docMeta = useLiveData(docService.doc.meta$);
+  const updatedDate = docMeta?.updatedDate;
+
+  if (!updatedDate) return null;
+
+  return (
+    <Tooltip content={i18nTime(updatedDate)} side="top">
+      <div className={styles.updatedAtLabel} data-testid="doc-updated-at-label">
+        {t['com.affine.page-properties.updated-at']({
+          time: i18nTime(updatedDate, {
+            relative: { max: [1, 'day'], accuracy: 'day' },
+            absolute: { accuracy: 'day' },
+          }),
+        })}
+      </div>
+    </Tooltip>
+  );
+};
+
 // Info
 // ─────────────────────────────────────────────────
 export const WorkspacePropertiesTableHeader = ({
@@ -97,6 +131,7 @@ export const WorkspacePropertiesTableHeader = ({
         <div className={clsx(!open ? styles.pageInfoDimmed : null)}>
           {t['com.affine.page-properties.page-info']()}
         </div>
+        <DocUpdatedAtLabel />
         <div
           className={styles.tableHeaderCollapseButtonWrapper}
           data-testid="page-info-collapse"

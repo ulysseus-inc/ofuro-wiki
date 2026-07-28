@@ -92,3 +92,14 @@ export const authInput = style({
 export const signInButton = style({
   backgroundColor: cssVarV2.button.signinbutton.background,
 });
+
+// #93: レート制限（429）に掛かったときの案内
+export const rateLimitedHint = style({
+  marginTop: 8,
+  padding: '8px 12px',
+  borderRadius: 8,
+  fontSize: cssVar('fontXs'),
+  lineHeight: 1.6,
+  color: cssVarV2('text/secondary'),
+  backgroundColor: cssVarV2('layer/background/secondary'),
+});

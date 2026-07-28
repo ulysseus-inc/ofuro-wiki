@@ -56,8 +56,9 @@ FROM node:22-alpine
 
 RUN apk add --no-cache postgresql17-client
 
-# #8: App version — passed via --build-arg VERSION=$(git describe --tags)
-ARG VERSION=0.1.0
+# #87: 製品バージョン。正は Git タグ（vX.Y.Z）で、CI が --build-arg VERSION として渡す。
+# 既定値はローカルビルド用（リリース版と取り違えないよう -dev を付ける）。
+ARG VERSION=0.0.0-dev
 ENV APP_VERSION=${VERSION}
 
 WORKDIR /app

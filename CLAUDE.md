@@ -145,10 +145,34 @@ DB: PostgreSQL or SQLite
 
 ## バージョン管理
 
-- **ofuro-wiki バージョン**: `frontend/package.json` の `version` フィールドで管理（手動更新）
-- **BlockSuite エディターバージョン**: `frontend/blocksuite/affine/all/package.json` の `version`（上流更新時に変わる）
-- リリース時に `package.json` を更新 → Gitタグを打つ運用
-- TODO: リリース（デプロイ）手順書にバージョン更新手順を記載すること
+**バージョンの「正」は Git タグ（`vX.Y.Z`）である。** 他はすべてそこから導出される。
+
+| 対象 | 場所 | 誰が更新するか |
+|------|------|---------------|
+| **製品バージョン** | **Git タグ `vX.Y.Z`** | **リリース時に手動で打つ（唯一の正）** |
+| UI 表示（設定→About） | `frontend/package.json` の `version` | `scripts/set-version.sh` が書き換える |
+| 内部管理 | `backend/package.json` の `version` | 同上 |
+| 実行時の `APP_VERSION` | Docker の `ARG VERSION` → `ENV` | **CI がタグから自動で焼き込む** |
+| Docker イメージタグ | `ghcr.io/...:X.Y.Z` | **CI がタグから自動生成** |
+
+### 触ってはいけないもの
+
+- **`AFFINE_API_VERSION`**（`backend/src/modules/config/config.service.ts`）
+  → **製品バージョンではない。** フォーク元 AFFiNE との通信プロトコル互換用であり、
+    フロントエンドを上流に追従させたときだけ変更する
+- **BlockSuite エディターバージョン**（`frontend/blocksuite/affine/all/package.json`）
+  → 上流更新時に変わるもので、ofuro-wiki の版数とは無関係
+
+### リリース手順
+
+```bash
+bash scripts/set-version.sh 0.1.0   # package.json を書き換え
+git add -A && git commit -m "chore: バージョンを 0.1.0 に更新"
+# PR → master へマージ
+git tag v0.1.0 && git push origin v0.1.0   # ← ここで確定。CI が走る
+```
+
+詳細は [`docs/maintainer-guide.md`](docs/maintainer-guide.md) を参照。
 
 ---
 

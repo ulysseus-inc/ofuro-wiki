@@ -10,6 +10,8 @@ describe('AuthEmailResolver', () => {
   beforeEach(() => {
     mockAuthService = {
       changePassword: jest.fn().mockResolvedValue(true),
+      // resolver 内のトークンリセット経路から呼ばれる（モック漏れでテストが落ちていた）
+      validatePasswordStrength: jest.fn(),
     };
 
     mockMailService = {
@@ -249,7 +251,14 @@ describe('AuthEmailResolver', () => {
       expect(result).toBe(true);
       expect(mockPrisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        data: { passwordHash: expect.any(String) },
+        data: {
+          passwordHash: expect.any(String),
+          // L-1: リセット時は既存の全トークンを失効させる
+          tokenVersion: { increment: 1 },
+          // #93: 併せてログイン失敗カウントと一時ロックも解除する
+          failedLoginCount: 0,
+          lockedUntil: null,
+        },
       });
       expect(mockMailService.deleteToken).toHaveBeenCalledWith('reset-token');
     });

@@ -7,6 +7,8 @@ ofuro-wiki の開発（コントリビュート）を行うための手順です
 
 - Node.js 20+、Yarn（Corepack 経由 / yarn 4.12.0）
 - Docker / Docker Compose v2
+- **PostgreSQL クライアントツール**（任意・バックアップ機能を開発／テストする場合のみ）
+  → [補足: バックアップ機能を扱う場合](#補足-バックアップ機能を扱う場合)
 
 ## 1. 依存関係のインストール
 
@@ -97,6 +99,52 @@ docker compose --profile dev up -d mailpit
 ```bash
 # フロントエンド(8080)・バックエンド(3010) が起動している状態で
 cd e2e && BASE_URL=http://localhost:8080 npx playwright test integration.spec.ts
+
+# バックアップ・エクスポート系
+cd e2e && BASE_URL=http://localhost:8080 npx playwright test backup.spec.ts
+```
+
+## 補足: バックアップ機能を扱う場合
+
+バックアップ／リストアは **`pg_dump` / `pg_restore` を子プロセスとして実行**します。
+
+- **Docker で動かす場合**: イメージに同梱済みのため、追加作業は不要です
+- **ホスト上で `npm run start:dev` する場合**: PostgreSQL クライアントツールが必要です
+
+未インストールのまま実行すると、バックアップ作成が次のエラーになります。
+
+```
+PG_TOOL_UNAVAILABLE: pg_dump を実行できません（ENOENT）。
+```
+
+E2E（`backup.spec.ts`）は、この場合**失敗ではなく skip** になります（理由が表示されます）。
+
+### インストール（Ubuntu / Debian）
+
+⚠️ **サーバーと同じメジャーバージョンが必要です。** 古い `pg_dump` で新しいサーバーを
+ダンプすると `server version mismatch` で失敗します。
+ofuro-wiki の Docker 構成は **PostgreSQL 17** を使います。
+
+```bash
+# PGDG リポジトリを追加してから 17 系を入れる
+sudo apt install -y curl ca-certificates
+sudo install -d /usr/share/postgresql-common/pgdg
+sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+  --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+  https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+  | sudo tee /etc/apt/sources.list.d/pgdg.list
+sudo apt update && sudo apt install -y postgresql-client-17
+
+pg_dump --version   # PostgreSQL 17.x であることを確認
+```
+
+### 代替: Docker コンテナ内で実行する
+
+ホストを汚したくない場合は、バックエンドも Docker で動かせば `pg_dump` は同梱されています。
+
+```bash
+docker compose up -d
 ```
 
 詳細・コントリビューションの流れは [CONTRIBUTING.md](../CONTRIBUTING.md) を参照してください。

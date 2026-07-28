@@ -176,3 +176,14 @@ export const propertyRootHideEmpty = style({
     },
   },
 });
+
+// #107: 「情報」ヘッダーに常時表示する最終更新日
+export const updatedAtLabel = style({
+  marginLeft: 12,
+  marginRight: 'auto',
+  paddingRight: 8,
+  fontSize: cssVar('fontXs'),
+  color: cssVarV2('text/tertiary'),
+  whiteSpace: 'nowrap',
+  flexShrink: 0,
+});

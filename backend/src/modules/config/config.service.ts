@@ -17,10 +17,14 @@ export class ConfigService {
       features.push('Email');
     }
 
-    // AFFiNE フロントエンドとの API 互換バージョン（フロント更新時のみ変更）
+    // AFFiNE フロントエンドとの API 互換バージョン。
+    // ⚠️ これは ofuro-wiki の製品バージョンでは「ない」。フォーク元 AFFiNE の版数であり、
+    //    フロントエンドを上流に追従させたときだけ変更する。リリース時に触ってはいけない。
     const AFFINE_API_VERSION = '0.26.1';
-    // ofuro-wiki のリリースバージョン（APP_VERSION 環境変数 or Docker build-arg で管理）
-    const appVersion = process.env.APP_VERSION || '0.1.0';
+    // ofuro-wiki の製品バージョン。正は Git タグ（vX.Y.Z）で、CI が
+    // --build-arg VERSION → ENV APP_VERSION として焼き込む（#87）。
+    // 未設定時（ローカル開発など）は開発版であることが分かる値にする。
+    const appVersion = process.env.APP_VERSION || '0.0.0-dev';
 
     return {
       version: AFFINE_API_VERSION,

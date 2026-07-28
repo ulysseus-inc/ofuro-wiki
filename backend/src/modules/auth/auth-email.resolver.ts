@@ -216,9 +216,16 @@ export class AuthEmailResolver {
       this.authService.validatePasswordStrength(newPassword);
       const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
       // L-1: リセット時も既存の全トークンを失効させる（tokenVersion +1）。
+      // #93: 併せてログイン失敗カウントと一時ロックを解除する。ロック中でも
+      //      本人はパスワードリセットで復帰でき、15分待つ必要がない。
       await this.prisma.user.update({
         where: { id: result.userId },
-        data: { passwordHash: hash, tokenVersion: { increment: 1 } },
+        data: {
+          passwordHash: hash,
+          tokenVersion: { increment: 1 },
+          failedLoginCount: 0,
+          lockedUntil: null,
+        },
       });
       await this.mailService.deleteToken(token);
       return true;

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma.service';
+import { getAdminEmail } from '../../common/admin-email';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { deriveUserName } from '../../common/user-name.util';
 
@@ -156,18 +157,22 @@ export class AdminService {
   }
 
   async seedAdmin() {
-    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminEmail = getAdminEmail();
     if (!adminEmail) {
       this.logger.log('ADMIN_EMAIL not set, skipping admin seed');
       return;
     }
 
+    // #77: 完全一致で引く（AuthService の isAdminEmail と同じ判定）。
+    // 大文字小文字を無視すると、第三者が ADMIN_EMAIL の大文字小文字違いで
+    // サインアップしておくだけで、再起動時に管理者へ昇格させられてしまう。
     const user = await this.prisma.user.findUnique({
       where: { email: adminEmail },
     });
 
     if (!user) {
-      this.logger.warn(
+      // #77: サインアップ時にも付与するようになったため、この文言どおりに動く
+      this.logger.log(
         `ADMIN_EMAIL=${adminEmail} not found in database. Admin will be set when this user signs up.`,
       );
       return;

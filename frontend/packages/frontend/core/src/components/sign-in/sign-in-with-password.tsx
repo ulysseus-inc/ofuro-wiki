@@ -44,6 +44,9 @@ export const SignInWithPasswordStep = ({
 
   const [password, setPassword] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  // #93: レート制限（429）に掛かった状態。パスワードの照合自体が行われていないため、
+  // 「パスワードが無効」と表示すると事実と異なる（正しいパスワードでも同じ表示になる）。
+  const [rateLimited, setRateLimited] = useState(false);
   const captchaService = useService(CaptchaService);
   const serverService = useService(ServerService);
   const isSelfhosted = useLiveData(
@@ -84,7 +87,20 @@ export const SignInWithPasswordStep = ({
       // Success — keep isLoading true until page navigates away
     } catch (err) {
       console.error(err);
-      setPasswordError(true);
+      // #93: 429（レート制限）はパスワードの正誤と無関係なので、区別して表示する。
+      // レート制限は「IP + 入力されたメールアドレス」単位で、存在しない
+      // メールアドレスでも同じように掛かるため、アカウント列挙の手がかりにならない。
+      //
+      // ステータスコードで判定する。メッセージ文字列での判定は、文言が変われば
+      // 静かに壊れる（レート制限中に「パスワードが無効」と誤表示される）ため、
+      // 旧サーバーとの組み合わせに備えたフォールバックとしてのみ残す。
+      const error = err as { status?: number; name?: string; message?: string };
+      const isRateLimited =
+        error?.status === 429 ||
+        error?.name === 'TOO_MANY_REQUESTS' ||
+        /too many requests|throttler/i.test(String(error?.message ?? ''));
+      setRateLimited(isRateLimited);
+      setPasswordError(!isRateLimited);
       setIsLoading(false);
     }
   }, [
@@ -139,6 +155,11 @@ export const SignInWithPasswordStep = ({
           errorHint={t['com.affine.auth.password.error']()}
           onEnter={onSignIn}
         />
+        {rateLimited && (
+          <div data-testid="rate-limited-hint" className={styles.rateLimitedHint}>
+            {t['com.affine.auth.password.rate-limited']()}
+          </div>
+        )}
         {!isSelfhosted && !isNewUser && (
           <div className={styles.passwordButtonRow}>
             <a

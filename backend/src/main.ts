@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import cookieParser from 'cookie-parser';
@@ -10,6 +11,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AdminService } from './modules/admin/admin.service';
 import { ManualSeedService } from './modules/manual-workspace/manual-seed.service';
 import { parseAllowedOrigins, isWildcardOriginInProduction } from './common/cors';
+import { parseTrustProxy } from './common/trust-proxy';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -28,7 +30,32 @@ async function bootstrap() {
     }
   }
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // #93: リバースプロキシ配下では X-Forwarded-For からクライアントIPを解決する。
+  //
+  // 未設定のままプロキシ(Nginx/Caddy 等)の背後で動かすと、req.ip が常にプロキシの
+  // アドレスになり、レート制限が「利用者ごと」ではなく全体の合計として効いてしまう。
+  //
+  // ⚠️ 既定は無効。直接公開しているサーバーで有効にすると X-Forwarded-For を
+  //    偽装され、レート制限を無制限に回避されるため、プロキシ配下でのみ有効化する。
+  //    値はプロキシの段数（通常 1）、または 'loopback' 等の express の指定子。
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy) {
+    const value = parseTrustProxy(trustProxy);
+    try {
+      app.set('trust proxy', value);
+      logger.log(`Trust proxy enabled: ${JSON.stringify(value)}`);
+    } catch (err) {
+      // express は文字列を IP / サブネットのリストとして解釈するため、
+      // 解釈できない値を渡すと起動時に例外になる。原因が分かる形で落とす。
+      throw new Error(
+        `[ofuro-wiki] TRUST_PROXY の値が不正です: "${trustProxy}"\n` +
+          `  プロキシの段数（例: 1）、'loopback'、または IP/CIDR のカンマ区切りを指定してください。\n` +
+          `  元のエラー: ${(err as Error).message}`,
+      );
+    }
+  }
 
   // #5: Helmet — security headers
   // M-5: CSP を有効化。BlockSuite はインラインスタイル/スクリプト・eval・blob worker を

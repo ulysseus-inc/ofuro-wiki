@@ -1816,3 +1816,135 @@ test.describe('入力検証・セキュリティヘッダ', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// 初期ワークスペースのテンプレート（#75）
+// ---------------------------------------------------------------------------
+test.describe('初期ワークスペースのテンプレート', () => {
+  /**
+   * #75: 初期WSの「はじめに」から「フォルダとタグの使い方」への内部リンクが切れていた。
+   *
+   * インポート時に文書IDが振り直される一方、まだインポートされていない文書への参照は
+   * 旧IDのまま残っていたため（replaceIdMiddleware）、リンク先が存在しない状態だった。
+   *
+   * 初期ワークスペースは「そのユーザーが初めてサインインしたとき」にしか作られないため、
+   * このテストでは新規ユーザーを作成し、終了後に削除する。
+   */
+  test('「はじめに」の内部リンクから「フォルダとタグの使い方」へ遷移できる（#75）', async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+
+    const email = `onboarding-link-${Date.now()}@example.invalid`;
+    const password = 'OnboardingLink123!';
+
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await context.newPage();
+
+    try {
+      // 新規ユーザーでサインイン（未登録アドレスなので自動作成され、初期WSが構築される）
+      await page.goto('/');
+      await dismissDevOverlay(page);
+      await page
+        .locator('input[placeholder*="メールアドレス"], input[placeholder*="email"]')
+        .fill(email);
+      await page.locator('button:has-text("続行"), button:has-text("Continue")').click();
+      await page.locator('input[type="password"]').waitFor({ state: 'visible' });
+      await page.locator('input[type="password"]').fill(password);
+      await page.locator('button:has-text("サインイン"), button:has-text("Sign in")').click();
+      await page.waitForURL(/\/workspace\//, { timeout: 60_000 });
+
+      // オンボーディング文書のインポート完了を待つ
+      await ensureSidebarOpen(page);
+      const gettingStarted = page.locator('text=はじめに').first();
+      await gettingStarted.waitFor({ state: 'visible', timeout: 60_000 });
+      await gettingStarted.click();
+
+      // 「はじめに」本文中の内部リンク
+      const reference = page
+        .locator('affine-reference')
+        .filter({ hasText: 'フォルダとタグの使い方' })
+        .first();
+      await reference.waitFor({ state: 'visible', timeout: 30_000 });
+
+      const urlBefore = page.url();
+      await reference.click();
+
+      // リンク先の文書が開くこと（リンク切れだと存在しないIDに遷移して本文が出ない）
+      await expect(page).not.toHaveURL(urlBefore, { timeout: 15_000 });
+      await expect(
+        page.locator('[data-block-id]').filter({ hasText: 'フォルダとタグの使い方' }).first()
+      ).toBeVisible({ timeout: 30_000 });
+    } finally {
+      // 後片付け: 作成したユーザー（と個人ワークスペース）を Admin 権限で削除する
+      const cleanup = await browser.newContext();
+      const cleanupPage = await cleanup.newPage();
+      try {
+        await signInViaAPI(cleanupPage);
+        const list = await graphqlQuery(
+          cleanupPage,
+          `query ($search: String) { adminUserList(search: $search, take: 20) { items { id email } } }`,
+          { search: email }
+        );
+        const target = list?.data?.adminUserList?.items?.find(
+          (u: any) => u.email === email
+        );
+        if (target) {
+          await graphqlQuery(
+            cleanupPage,
+            `mutation ($id: String!) { adminDeleteUser(userId: $id) }`,
+            { id: target.id }
+          );
+        }
+      } catch {
+        // 後片付けの失敗はテスト結果に影響させない
+      } finally {
+        await cleanupPage.close();
+        await cleanup.close();
+      }
+      await page.close();
+      await context.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ドキュメントの鮮度表示（#107）
+// ---------------------------------------------------------------------------
+test.describe('ドキュメントの鮮度表示', () => {
+  /**
+   * #107: 最終更新日をページ上部（タイトル直下の「情報」欄）に常時表示する。
+   *
+   * これまでは「情報」欄を開かないと見えなかった（既定は折りたたみ）ため、
+   * 読み手が情報の古さに気づけなかった。
+   */
+  test('ページ上部に最終更新日が常時表示される（#107）', async ({
+    sharedPage: page,
+  }) => {
+    // このテスト単体でも動くようにサインインを担保する
+    // （スイート全体では前のテストで済んでいるが、-g で絞ると未サインインになる）
+    if (!/\/workspace\//.test(page.url())) {
+      await signIn(page);
+    }
+    await enterOrCreateWorkspace(page);
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+
+    const label = page.locator('[data-testid="doc-updated-at-label"]');
+    await expect(label).toBeVisible({ timeout: 15_000 });
+
+    // 相対表記で「いつ更新されたか」が読み取れること
+    await expect(label).toContainText('最終更新');
+
+    // 「情報」欄を開かなくても見えていること（折りたたまれた状態で表示される）
+    const collapsed = await page
+      .locator('[data-testid="page-info-collapse"] [data-collapsed]')
+      .first()
+      .getAttribute('data-collapsed')
+      .catch(() => null);
+    if (collapsed !== null) {
+      expect(collapsed).toBe('true');
+      await expect(label).toBeVisible();
+    }
+  });
+});

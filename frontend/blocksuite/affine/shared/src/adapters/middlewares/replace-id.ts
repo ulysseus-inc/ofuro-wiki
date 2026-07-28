@@ -18,7 +18,17 @@ import { filter, map } from 'rxjs';
 import { matchModels } from '../../utils';
 
 export const replaceIdMiddleware =
-  (idGenerator: () => string): TransformerMiddleware =>
+  (
+    idGenerator: () => string,
+    /**
+     * #75: 同じインポート単位（例: 1つの zip）に含まれる文書の旧ID一覧。
+     *
+     * これが渡されると、まだインポートされていない文書への参照に対しても
+     * 先に新IDを発番できるようになり、インポート順に依存したリンク切れを防げる。
+     * 渡さない場合は従来どおり（未知の参照は旧IDのまま）。
+     */
+    knownDocIds?: ReadonlySet<string>
+  ): TransformerMiddleware =>
   ({ slots, docCRUD, assetsManager }) => {
     const idMap = new Map<string, string>();
 
@@ -55,7 +65,27 @@ export const replaceIdMiddleware =
         const delta: DeltaOperation[] = [];
         for (const d of model.props.text.toDelta()) {
           if (d.attributes?.reference?.pageId) {
-            const newId = idMap.get(d.attributes.reference.pageId);
+            const original = d.attributes.reference.pageId;
+            let newId = idMap.get(original);
+
+            // #75: 参照先の文書がまだインポートされていない場合、これまでは
+            // 旧IDのまま残していたためリンク切れになっていた（インポート順に依存）。
+            // EmbedLinkedDoc と同じく、先に新IDを発番して idMap に覚えておくことで、
+            // 後からその文書がインポートされたときに同じIDが割り当てられ、リンクが繋がる。
+            //
+            // 発番するのは「同じインポート単位に含まれる文書」への参照だけに限る。
+            // - インポート先に既に存在する文書 → 旧IDが正しい参照なので触らない
+            // - どちらにも無い文書（zip に含まれない外部参照）→ 旧IDを保持する。
+            //   新IDに書き換えると、後から元IDでその文書が現れても復旧できなくなる。
+            if (
+              !newId &&
+              knownDocIds?.has(original) &&
+              !docCRUD.get(original)
+            ) {
+              newId = idGenerator();
+              idMap.set(original, newId);
+            }
+
             if (!newId) {
               prev += d.insert?.length ?? 0;
               continue;

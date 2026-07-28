@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService, JwtPayload } from './auth.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -36,30 +37,45 @@ export class AuthController {
     private jwtService: JwtService,
   ) {}
 
+  // #93: ここは「連射・DoS の抑制」に徹する。
+  //
+  // この制限は「失敗」ではなく**リクエスト数**を数えるため、成功したサインインも枠を
+  // 消費する。厳しくすると、複数端末・複数タブ・CI から正当にサインインしただけで
+  // 締め出される（可用性の問題）。
+  //
+  // パスワードの総当たりに対する防御は、**失敗だけを数える** AuthService 側の制限
+  // （SIGNIN_MAX_FAILURES: 5回/5分）と、アカウントロックアウト（10回で15分）が担う。
   @Public()
+  @Throttle({ default: { limit: 60, ttl: 5 * 60_000 } })
   @Post('sign-in')
   async signIn(
     @Body() body: SignInDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token, user } = await this.authService.signInOrSignUp(
       body.email,
       body.password,
+      req.ip,
     );
     this.setAuthCookies(res, token);
     return { id: user.id, email: user.email };
   }
 
+  // #93: 大量アカウント作成の抑止
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60 * 60_000 } })
   @Post('sign-up')
   async signUp(
     @Body() body: SignUpDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { token, user } = await this.authService.signUp(
       body.email,
       body.password,
       body.name,
+      req.ip,
     );
     this.setAuthCookies(res, token);
     return { id: user.id, email: user.email };
@@ -89,7 +105,9 @@ export class AuthController {
     return { success: true };
   }
 
+  // #93: メールアドレス列挙の試行回数を抑える
   @Public()
+  @Throttle({ default: { limit: 30, ttl: 5 * 60_000 } })
   @Post('preflight')
   async preflight(@Body() body: PreflightDto) {
     const result = await this.authService.preflight(body.email);

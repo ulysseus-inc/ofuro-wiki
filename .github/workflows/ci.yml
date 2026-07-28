@@ -1,0 +1,55 @@
+name: CI
+
+# #122: PR のたびに静的解析とテストを実行する。
+#
+# 対象は backend のみ。フロントエンドは型検査が成立していないため対象外
+# （TS6305 で型が any に落ちる。詳細と方針は #125）。
+# E2E は DB・フロント・バックエンドの起動が必要で実行に6分以上かかるため、
+# ローカル実行の運用を継続する。
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - main # OSS リポジトリ（ulysseus-inc）のデフォルトブランチ
+  workflow_dispatch:
+
+# 同じブランチで新しい push があれば、実行中のものは打ち切る（待ち時間とコストの削減）
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend (型検査・テスト)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci
+
+      # Prisma Client は生成物（.gitignore 対象）のため、型検査の前に生成する
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Type check
+        working-directory: backend
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: backend
+        run: npm test -- --ci

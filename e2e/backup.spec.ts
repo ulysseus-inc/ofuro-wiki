@@ -21,6 +21,34 @@ import {
 
 const BACKEND_URL = 'http://localhost:3010';
 
+/**
+ * #79: エクスポート可能な（＝自分が Owner の）ワークスペースIDを取得する。
+ *
+ * `workspaces` には**マニュアル専用ワークスペース**（全ユーザーが Reader として
+ * 自動参加する読み取り専用WS・#72）も含まれる。先頭を無条件に使うと、
+ * それを拾って 403 になることがある。
+ */
+async function getOwnedWorkspaceId(page: import('@playwright/test').Page) {
+  const result = await graphqlQuery(page, '{ workspaces { id permission } }');
+  const workspaces: Array<{ id: string; permission: string }> =
+    result?.data?.workspaces ?? [];
+  const owned = workspaces.find(ws => ws.permission === 'Owner');
+  return owned?.id;
+}
+
+/**
+ * #79: pg_dump / pg_restore が使えない環境かどうか。
+ *
+ * バックアップは PostgreSQL クライアントツールを子プロセスで実行するため、
+ * ホスト上で開発している場合は未インストールのことがある
+ * （Docker イメージには同梱されている）。
+ * その場合はテストを失敗ではなく **skip** にして、理由を明示する。
+ */
+function isPgToolUnavailable(result: any): boolean {
+  const messages: string[] = (result?.errors ?? []).map((e: any) => e?.message ?? '');
+  return messages.some(m => m.includes('PG_TOOL_UNAVAILABLE'));
+}
+
 // ---------------------------------------------------------------------------
 // セットアップ
 // ---------------------------------------------------------------------------
@@ -38,9 +66,8 @@ test.describe('Workspace Export / Import', () => {
     await signIn(page);
     await enterOrCreateWorkspace(page);
 
-    // ワークスペース ID を取得
-    const wsResult = await graphqlQuery(page, '{ workspaces { id } }');
-    const workspaceId = wsResult.data.workspaces[0]?.id;
+    // #79: 自分が Owner のワークスペースを選ぶ（マニュアルWSは読み取り専用のため除外）
+    const workspaceId = await getOwnedWorkspaceId(page);
     expect(workspaceId).toBeTruthy();
 
     // エクスポート API を呼び出し
@@ -67,9 +94,8 @@ test.describe('Workspace Export / Import', () => {
     await signIn(page);
     await enterOrCreateWorkspace(page);
 
-    // ワークスペース ID を取得
-    const wsResult = await graphqlQuery(page, '{ workspaces { id } }');
-    const workspaceId = wsResult.data.workspaces[0]?.id;
+    // #79: 自分が Owner のワークスペースを選ぶ（マニュアルWSは読み取り専用のため除外）
+    const workspaceId = await getOwnedWorkspaceId(page);
     expect(workspaceId).toBeTruthy();
 
     // エクスポートしてインポート
@@ -160,6 +186,13 @@ test.describe('Admin Backup API', () => {
       page,
       'mutation { adminCreateBackup { id filename size workspaceCount docCount blobCount status } }'
     );
+
+    // #79: pg_dump が無い開発環境では、失敗ではなく理由を示して skip する
+    test.skip(
+      isPgToolUnavailable(result),
+      'pg_dump が利用できない環境のためスキップ（postgresql-client を導入すると実行されます。docs/development.md 参照）'
+    );
+
     expect(result.data.adminCreateBackup.id).toBeTruthy();
     expect(result.data.adminCreateBackup.status).toBe('completed');
     expect(result.data.adminCreateBackup.workspaceCount).toBeGreaterThanOrEqual(1);
@@ -181,6 +214,13 @@ test.describe('Admin Backup API', () => {
       page,
       'mutation { adminCreateBackup { id } }'
     );
+
+    // #79: pg_dump が無い開発環境では、失敗ではなく理由を示して skip する
+    test.skip(
+      isPgToolUnavailable(createResult),
+      'pg_dump が利用できない環境のためスキップ（postgresql-client を導入すると実行されます。docs/development.md 参照）'
+    );
+
     const backupId = createResult.data.adminCreateBackup.id;
     expect(backupId).toBeTruthy();
 

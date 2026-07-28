@@ -105,6 +105,22 @@ async function importDocs(
     }
   }
 
+  // #75: この zip に含まれる文書の旧IDを先に集めておく。これを
+  // replaceIdMiddleware に渡すことで、まだインポートされていない文書への参照にも
+  // 新IDを先行発番でき、インポート順に依存したリンク切れを防げる。
+  // zip に含まれない文書への参照は対象外（旧IDを保持し、情報を失わない）。
+  const snapshots: DocSnapshot[] = await Promise.all(
+    snapshotsBlobs.map(
+      async blob => JSON.parse(await blob.text()) as DocSnapshot
+    )
+  );
+  const knownDocIds = new Set(
+    snapshots
+      .map(snapshot => snapshot.meta?.id)
+      // filter(Boolean) は型を絞り込まない（Set<string | undefined> になる）
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  );
+
   const job = new Transformer({
     schema,
     blobCRUD: collection.blobSync,
@@ -114,7 +130,7 @@ async function importDocs(
       delete: (id: string) => collection.removeDoc(id),
     },
     middlewares: [
-      replaceIdMiddleware(collection.idGenerator),
+      replaceIdMiddleware(collection.idGenerator, knownDocIds),
       titleMiddleware(collection.meta.docMetas),
     ],
   });
@@ -132,9 +148,7 @@ async function importDocs(
   });
 
   return Promise.all(
-    snapshotsBlobs.map(async blob => {
-      const json = await blob.text();
-      const snapshot = JSON.parse(json) as DocSnapshot;
+    snapshots.map(async snapshot => {
       const tasks: Promise<void>[] = [];
 
       job.walk(snapshot, block => {

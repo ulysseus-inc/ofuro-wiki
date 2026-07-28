@@ -18,6 +18,11 @@ model User {
   // L-1: JWT 即時失効用。パスワード変更/全端末サインアウト/管理者失効で +1 し、
   // 発行済みトークン(payload.tv)と不一致なら失効扱いにする。
   tokenVersion   Int       @default(0) @map("token_version")
+  // #93: ログイン失敗の連続回数と一時ロック。既定は 10回失敗で 15分ロック（自動解除）。
+  // ロック解除時・ログイン成功時・パスワードリセット完了時に 0 へ戻す。
+  failedLoginCount   Int       @default(0) @map("failed_login_count")
+  lockedUntil        DateTime? @map("locked_until") @db.Timestamptz()
+  lastFailedLoginAt  DateTime? @map("last_failed_login_at") @db.Timestamptz()
   isAdmin                Boolean   @default(false) @map("is_admin")
   // #72: マニュアルWS所有などのシステム内部アカウント。ログイン不可・Admin一覧から除外。
   isSystem               Boolean   @default(false) @map("is_system")

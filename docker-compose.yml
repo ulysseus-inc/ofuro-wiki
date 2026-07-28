@@ -9,9 +9,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        # #8: バージョンを git tag から渡す
-        # 例: docker compose build --build-arg VERSION=$(git describe --tags)
-        VERSION: ${APP_VERSION:-0.1.0}
+        # #87: バージョンの正は Git タグ。CI がタグから VERSION を渡す。
+        # ローカルビルドでは開発版であることが分かる既定値になる。
+        # 明示したい場合: APP_VERSION=0.1.0 docker compose build
+        VERSION: ${APP_VERSION:-0.0.0-dev}
     ports:
       - "3010:3010"
     depends_on:
@@ -39,8 +40,9 @@ services:
       AUTH_SIGNIN_AUTOCREATE: ${AUTH_SIGNIN_AUTOCREATE:-true}
       # #2: CORS — * で全許可、ドメイン指定で絞り込み
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
-      # #8: バージョン（build-arg から ENV に渡される）
-      APP_VERSION: ${APP_VERSION:-0.1.0}
+      # #87: APP_VERSION はここで指定しない。
+      # イメージのビルド時に ARG VERSION → ENV APP_VERSION として焼き込まれており、
+      # ここで environment に書くと、その焼き込み値を実行時に上書きしてしまう。
       MAILER_HOST: ${MAILER_HOST:-}
       MAILER_PORT: ${MAILER_PORT:-}
       MAILER_USER: ${MAILER_USER:-}

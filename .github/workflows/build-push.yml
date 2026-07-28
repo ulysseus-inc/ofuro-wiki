@@ -5,6 +5,8 @@ on:
     branches:
       - master
       - main  # OSS リポジトリ（ulysseus-inc）のデフォルトブランチ
+    tags:
+      - 'v*'  # #87: リリースタグ。イメージに版数タグを付け、APP_VERSION を焼き込む
   workflow_dispatch:
 
 env:
@@ -29,13 +31,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # #87: アプリに焼き込むバージョン。タグ push なら "v" を除いた版数、
+      # ブランチ push なら開発版であることが分かる文字列にする。
+      - name: Resolve app version
+        id: ver
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VALUE="${GITHUB_REF_NAME#v}"
+          else
+            VALUE="0.0.0-dev+$(git rev-parse --short HEAD)"
+          fi
+          echo "value=$VALUE" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION=$VALUE"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
 
       - name: Set up Docker Buildx
@@ -50,6 +67,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             SKIP_MOBILE=true
+            VERSION=${{ steps.ver.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -77,7 +95,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-postgres
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=sha-
 
       - name: Set up Docker Buildx

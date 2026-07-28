@@ -13,6 +13,48 @@ import { resolveWithinDir } from './backup-path.util';
 
 const execFileAsync = promisify(execFile);
 
+/**
+ * #79: pg_dump / pg_restore が使えないときのエラーを分かりやすくする。
+ *
+ * これらはコンテナには同梱されている（Dockerfile で postgresql-client を導入）が、
+ * ホスト上で `npm run start:dev` する開発環境には入っていないことが多い。
+ * 素の Node.js は `spawn pg_dump EACCES` / `ENOENT` としか言わないため、
+ * 原因（何を入れればよいか）にたどり着けない。
+ */
+export const PG_TOOL_UNAVAILABLE = 'PG_TOOL_UNAVAILABLE';
+
+function describeMissingPgTool(tool: string, cause: unknown): Error {
+  const code = (cause as NodeJS.ErrnoException)?.code;
+  const error = new Error(
+    `${PG_TOOL_UNAVAILABLE}: ${tool} を実行できません（${code ?? 'unknown'}）。\n` +
+      `バックアップ／リストアは PostgreSQL クライアントツールを使用します。\n` +
+      `  - Docker で運用している場合: イメージに同梱済みのため、通常このエラーは出ません\n` +
+      `  - ホスト上で開発している場合: postgresql-client をインストールしてください\n` +
+      `    （サーバーと同じメジャーバージョンが必要です。詳細: docs/development.md）`,
+  );
+  error.name = PG_TOOL_UNAVAILABLE;
+  return error;
+}
+
+/** #79: pg_dump / pg_restore を実行し、実行できない場合は原因の分かるエラーに変換する。 */
+async function execPgTool(
+  tool: 'pg_dump' | 'pg_restore',
+  args: string[],
+  options?: Parameters<typeof execFileAsync>[2],
+) {
+  try {
+    return await execFileAsync(tool, args, options);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    // 実行ファイルが無い / 実行権限が無い場合だけ、案内付きのエラーに置き換える。
+    // （SQL エラーなど pg_dump 自身の失敗はそのまま伝える）
+    if (code === 'ENOENT' || code === 'EACCES') {
+      throw describeMissingPgTool(tool, err);
+    }
+    throw err;
+  }
+}
+
 const BACKUP_DIR =
   process.env.BACKUP_STORAGE_PATH || path.join(process.cwd(), 'data', 'backups');
 
@@ -125,7 +167,7 @@ export class ScheduledBackupService {
       // CWE-532: パスワードは引数ではなく PGPASSWORD で渡す（失敗時のログ漏洩防止）。
       const { url: dbUrl, password: dbPassword } = getAdminDbUrl();
 
-      await execFileAsync(
+      await execPgTool(
         'pg_dump',
         ['--format=custom', '--file', dumpPath, dbUrl],
         dbPassword
@@ -281,7 +323,7 @@ export class ScheduledBackupService {
       // CWE-532: パスワードは引数ではなく PGPASSWORD で渡す（失敗時のログ漏洩防止）。
       const { url: dbUrl, password: dbPassword } = getAdminDbUrl();
 
-      await execFileAsync(
+      await execPgTool(
         'pg_restore',
         ['--format=custom', '--clean', '--if-exists', `--dbname=${dbUrl}`, dumpPath],
         dbPassword
