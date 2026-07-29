@@ -50,6 +50,7 @@
     "graphql-type-json": "^0.3.2",
     "graphql-upload": "^17.0.0",
     "helmet": "^8.1.0",
+    "jose": "^6.2.4",
     "lib0": "^0.2.117",
     "nodemailer": "^8.0.1",
     "passport": "^0.7.0",
@@ -114,7 +115,7 @@
     "coverageDirectory": "./coverage",
     "testEnvironment": "node",
     "transformIgnorePatterns": [
-      "node_modules/(?!graphql-upload)"
+      "node_modules/(?!(graphql-upload|jose))"
     ]
   }
 }

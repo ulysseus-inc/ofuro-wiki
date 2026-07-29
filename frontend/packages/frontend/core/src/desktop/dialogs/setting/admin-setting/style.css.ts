@@ -293,3 +293,16 @@ export const restoreStepText = style({
   fontSize: cssVar('fontSm'),
   color: cssVarV2('text/secondary'),
 });
+
+// #89: シングルサインオン設定 — IdP に登録するリダイレクト URI の表示
+export const ssoRedirectUri = style({
+  display: 'block',
+  marginTop: '6px',
+  padding: '6px 10px',
+  borderRadius: '6px',
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+  fontSize: cssVar('fontXs'),
+  fontFamily: cssVar('fontFamilyMono'),
+  wordBreak: 'break-all',
+});

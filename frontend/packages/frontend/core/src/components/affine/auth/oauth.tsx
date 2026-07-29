@@ -13,7 +13,12 @@ import {
   LockIcon,
 } from '@blocksuite/icons/rc';
 import { useLiveData, useService } from '@toeverything/infra';
-import { type ReactElement, type SVGAttributes, useCallback } from 'react';
+import {
+  type ReactElement,
+  type SVGAttributes,
+  useCallback,
+  useEffect,
+} from 'react';
 
 const OAuthProviderMap: Record<
   OAuthProviderType,
@@ -45,6 +50,20 @@ export function OAuth({ redirectUrl }: { redirectUrl?: string }) {
   const oauthProviders = useLiveData(
     serverService.server.config$.map(r => r?.oauthProviders)
   );
+  // #89: SSO ボタンの文言は管理画面で設定できる（例:「Keycloak でサインイン」）。
+  // 利用者にとっては「どの IdP のボタンか」が唯一の手がかりなので、設定を反映する。
+  const oidcButtonLabel = useLiveData(
+    serverService.server.config$.map(r => r?.oidcButtonLabel)
+  );
+
+  // ⚠️ サーバー設定は起動時に一度しか取得されない。
+  // 管理者が SSO を有効にした直後は、サインアウトしてもボタンが出ず、
+  // 「設定したのに反映されない」と見える（リロードすれば出る）。
+  // サインイン画面はまさに設定が効いているか確かめる場所なので、
+  // 表示のたびに取り直す。
+  useEffect(() => {
+    serverService.server.revalidateConfig();
+  }, [serverService]);
   const auth = useService(AuthService);
 
   const onContinue = useAsyncCallback(
@@ -98,6 +117,7 @@ export function OAuth({ redirectUrl }: { redirectUrl?: string }) {
       <OAuthProvider
         key={provider}
         provider={provider}
+        label={provider === OAuthProviderType.OIDC ? oidcButtonLabel : undefined}
         onContinue={onContinue}
       />
     );
@@ -106,10 +126,12 @@ export function OAuth({ redirectUrl }: { redirectUrl?: string }) {
 
 interface OauthProviderProps {
   provider: OAuthProviderType;
+  /** 管理画面で設定した文言。未設定なら既定の "Continue with <provider>" */
+  label?: string | null;
   onContinue: (provider: OAuthProviderType) => void;
 }
 
-function OAuthProvider({ onContinue, provider }: OauthProviderProps) {
+function OAuthProvider({ onContinue, provider, label }: OauthProviderProps) {
   const { icon } =
     provider in OAuthProviderMap
       ? OAuthProviderMap[provider]
@@ -128,7 +150,7 @@ function OAuthProvider({ onContinue, provider }: OauthProviderProps) {
       prefix={icon}
       onClick={onClick}
     >
-      Continue with {provider}
+      {label || `Continue with ${provider}`}
     </Button>
   );
 }

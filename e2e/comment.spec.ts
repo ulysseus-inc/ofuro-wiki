@@ -9,7 +9,14 @@
  *   cd e2e && npx playwright test comment.spec.ts
  */
 import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
-import { TEST_USER, ensureTestUser, signIn, graphqlQuery, enterOrCreateWorkspace } from './helpers';
+import {
+  TEST_USER,
+  ensureTestUser,
+  signIn,
+  graphqlQuery,
+  enterOrCreateWorkspace,
+  getOwnedWorkspaceId,
+} from './helpers';
 
 const test = base.extend<
   { sharedPage: Page },
@@ -59,8 +66,9 @@ test.beforeAll(async () => {
 test('セットアップ: サインインしてワークスペースIDを取得', async ({ sharedPage }) => {
   await signIn(sharedPage);
   await enterOrCreateWorkspace(sharedPage);
-  const result = await graphqlQuery(sharedPage, '{ workspaces { id } }');
-  workspaceId = result.data.workspaces[0].id;
+  // 先頭ではなく **自分が Owner の** WS を使う。
+  // 読み取り専用のマニュアルWS（#72）が先頭に来ることがあり、403 になる。
+  workspaceId = (await getOwnedWorkspaceId(sharedPage))!;
   expect(workspaceId).toBeTruthy();
 });
 

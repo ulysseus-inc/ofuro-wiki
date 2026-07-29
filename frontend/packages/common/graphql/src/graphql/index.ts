@@ -324,6 +324,57 @@ export const adminUpdateServerSettingMutation = {
 }`,
 };
 
+// #89: シングルサインオン（OIDC）の設定。
+// 設定は .env ではなく管理画面（DB）に持つ方針のため、GraphQL 経由で読み書きする。
+// ⚠️ clientSecret は「設定済みかどうか」だけを返す（値はサーバーから返さない）。
+export const oidcConfigQuery = {
+  id: 'oidcConfigQuery' as const,
+  op: 'oidcConfig',
+  query: `query oidcConfig {
+  oidcConfig {
+    enabled
+    issuer
+    clientId
+    clientSecretSet
+    buttonLabel
+    emailClaims
+    autoCreateUser
+    redirectUri
+  }
+}`,
+};
+
+export const updateOidcConfigMutation = {
+  id: 'updateOidcConfigMutation' as const,
+  op: 'updateOidcConfig',
+  query: `mutation updateOidcConfig($input: UpdateOidcConfigInput!) {
+  updateOidcConfig(input: $input) {
+    enabled
+    issuer
+    clientId
+    clientSecretSet
+    buttonLabel
+    emailClaims
+    autoCreateUser
+    redirectUri
+  }
+}`,
+};
+
+export const testOidcConnectionMutation = {
+  id: 'testOidcConnectionMutation' as const,
+  op: 'testOidcConnection',
+  query: `mutation testOidcConnection($issuer: String!) {
+  testOidcConnection(issuer: $issuer) {
+    ok
+    message
+    issuer
+    authorizationEndpoint
+    tokenEndpoint
+  }
+}`,
+};
+
 export const adminBackupListQuery = {
   id: 'adminBackupListQuery' as const,
   op: 'adminBackupList',
@@ -881,6 +932,7 @@ export const oauthProvidersQuery = {
   query: `query oauthProviders {
   serverConfig {
     oauthProviders
+    oidcButtonLabel
   }
 }`,
 };

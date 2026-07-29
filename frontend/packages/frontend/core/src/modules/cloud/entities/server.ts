@@ -82,6 +82,7 @@ export class Server extends Entity<{
             credentialsRequirement: config.credentialsRequirement,
             features: config.features,
             oauthProviders: config.oauthProviders,
+            oidcButtonLabel: config.oidcButtonLabel,
             serverName: config.name,
             type: config.type,
             version: config.version,

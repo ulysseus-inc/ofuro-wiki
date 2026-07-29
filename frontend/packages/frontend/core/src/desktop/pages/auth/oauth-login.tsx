@@ -1,7 +1,7 @@
 import { AuthService } from '@ofuro/core/modules/cloud';
 import { OAuthProviderType } from '@ofuro/graphql';
 import { useService } from '@toeverything/infra';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   type LoaderFunction,
   redirect,
@@ -85,7 +85,17 @@ export const Component = () => {
 
   const nav = useNavigate();
 
+  // ⚠️ 認証の開始は**1回だけ**。
+  // React の StrictMode（開発時）は effect を二重に実行するため、
+  // 素朴に書くと1回のクリックで認証が2つ始まる。コールバック側
+  // （oauth-callback.tsx）も同じ理由で同様のガードを持っている。
+  const triggeredRef = useRef(false);
+
   useEffect(() => {
+    if (triggeredRef.current) {
+      return;
+    }
+    triggeredRef.current = true;
     auth
       .oauthPreflight(data.provider, data.client, data.redirectUri)
       .then(({ url }) => {

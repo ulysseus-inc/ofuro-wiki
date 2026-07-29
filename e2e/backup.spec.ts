@@ -16,25 +16,12 @@ import {
   ensureTestUser,
   signIn,
   enterOrCreateWorkspace,
+  getOwnedWorkspaceId,
   graphqlQuery,
 } from './helpers';
 
 const BACKEND_URL = 'http://localhost:3010';
 
-/**
- * #79: エクスポート可能な（＝自分が Owner の）ワークスペースIDを取得する。
- *
- * `workspaces` には**マニュアル専用ワークスペース**（全ユーザーが Reader として
- * 自動参加する読み取り専用WS・#72）も含まれる。先頭を無条件に使うと、
- * それを拾って 403 になることがある。
- */
-async function getOwnedWorkspaceId(page: import('@playwright/test').Page) {
-  const result = await graphqlQuery(page, '{ workspaces { id permission } }');
-  const workspaces: Array<{ id: string; permission: string }> =
-    result?.data?.workspaces ?? [];
-  const owned = workspaces.find(ws => ws.permission === 'Owner');
-  return owned?.id;
-}
 
 /**
  * #79: pg_dump / pg_restore が使えない環境かどうか。

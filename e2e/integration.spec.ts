@@ -1234,17 +1234,34 @@ test.describe('クロスセッション Blob 同期', () => {
         await p2.waitForTimeout(8_000);
 
         // 4. テキストが表示されること
-        const hasText = await p2.evaluate(
-          (text: string) => document.body.innerText.includes(text),
-          TEST_TEXT
-        );
-        expect(hasText).toBe(true);
+        //
+        // ⚠️ 固定の待ち時間で判定しない。別コンテキストへの反映は
+        // Yjs の同期と Blob のダウンロードを挟むため、環境の状態
+        // （ワークスペース作成直後など）によって所要時間が変わる。
+        // 「一定時間で必ず届く」前提にすると、遅いときだけ落ちる。
+        await expect
+          .poll(
+            () =>
+              p2.evaluate(
+                (text: string) => document.body.innerText.includes(text),
+                TEST_TEXT
+              ),
+            { message: '別コンテキストにテキストが同期されない', timeout: 30_000 }
+          )
+          .toBe(true);
 
         // 5. 画像が表示されること（blob: URL の img 要素が存在する）
-        const imgCount = await p2.evaluate(
-          () => document.querySelectorAll('img[src^="blob:"], img[src^="data:"]').length
-        );
-        expect(imgCount).toBeGreaterThan(0);
+        await expect
+          .poll(
+            () =>
+              p2.evaluate(
+                () =>
+                  document.querySelectorAll('img[src^="blob:"], img[src^="data:"]')
+                    .length
+              ),
+            { message: '別コンテキストに画像が同期されない', timeout: 30_000 }
+          )
+          .toBeGreaterThan(0);
 
         // 6. ctx2 で画像を削除（画像ブロックをクリック → Delete キー）
         const imgEl = p2.locator('img[src^="blob:"], img[src^="data:"]').first();

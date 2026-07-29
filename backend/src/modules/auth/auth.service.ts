@@ -454,6 +454,96 @@ export class AuthService {
     });
   }
 
+  /**
+   * #89: OIDC（SSO）でのサインイン。
+   *
+   * IdP 側の認証は済んでいる前提で、こちら側のアカウントに突き合わせる。
+   *
+   * ⚠️ **アカウントの自動作成は既定で行わない。**
+   * 「その IdP でログインできる人」全員が対象になるため、社外にも開かれた IdP
+   * （Google の一般アカウント等）では、自動作成を有効にすると部外者が入れてしまう。
+   * 有効化するかは管理画面で選ばせる（既定 false）。
+   */
+  async signInWithOidc(params: {
+    email: string;
+    name?: string;
+    autoCreateUser: boolean;
+    ip?: string;
+  }) {
+    const { email, name, autoCreateUser, ip } = params;
+
+    // ⚠️ 大文字小文字を無視して既存アカウントを探す。
+    // OIDC 側のメールは小文字化しているが、パスワード認証で作られた
+    // アカウントは入力そのままで保存されている。完全一致で探すと、
+    // 大文字を含むアドレスの既存利用者が SSO で照合できず、
+    // 「アカウントがない」と拒否される／重複アカウントが作られる。
+    const matched = await this.prisma.user.findMany({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      take: 2,
+    });
+
+    // 大文字違いのアカウントが複数ある場合、どれを本人とみなすか決められない。
+    // 取り違えは乗っ取りと同じ結果になるため、選ばずに拒否する。
+    if (matched.length > 1) {
+      this.logger.warn(
+        `OIDC sign-in rejected (multiple accounts differ only by case): ${email} ip=${ip ?? 'unknown'}`,
+      );
+      throw new UnauthorizedException(
+        'このメールアドレスに一致するアカウントが複数あります。管理者にお問い合わせください。',
+      );
+    }
+
+    const user = matched[0];
+
+    if (user) {
+      // システムアカウント（マニュアルWS所有者など）はログインさせない
+      if (user.isSystem) {
+        this.logger.warn(
+          `OIDC sign-in rejected for system account: ${email} ip=${ip ?? 'unknown'}`,
+        );
+        throw new UnauthorizedException('このアカウントではサインインできません。');
+      }
+
+      // #93: パスワード認証と同様、ロック中はサインインさせない
+      if (this.isLocked(user)) {
+        this.logger.warn(
+          `OIDC sign-in rejected for locked account: ${email} ip=${ip ?? 'unknown'}`,
+        );
+        throw new UnauthorizedException('このアカウントではサインインできません。');
+      }
+
+      await this.resetFailedLogins(user);
+      this.logger.log(`OIDC sign-in: ${email}`);
+      return this.generateTokenResponse(user);
+    }
+
+    if (!autoCreateUser) {
+      this.logger.warn(
+        `OIDC sign-in rejected (no account, auto-create disabled): ${email} ip=${ip ?? 'unknown'}`,
+      );
+      throw new UnauthorizedException(
+        'このメールアドレスのアカウントがありません。管理者にお問い合わせください。',
+      );
+    }
+
+    // 自動作成が有効な場合のみ。IP あたりの作成上限は共通で適用する（#93）
+    this.assertSignupAllowed(ip);
+
+    const created = await this.prisma.user.create({
+      data: {
+        email,
+        // SSO 利用者はパスワードを持たない（パスワード認証では入れない）
+        passwordHash: null,
+        name: deriveUserName(email, name),
+        emailVerified: true,
+        isAdmin: isAdminEmail(email),
+      },
+    });
+
+    this.logger.log(`OIDC sign-in: created account for ${email}`);
+    return this.generateTokenResponse(created);
+  }
+
   private generateTokenResponse(user: {
     id: string;
     email: string;

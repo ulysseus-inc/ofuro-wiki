@@ -11,6 +11,7 @@ import { join } from 'path';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ServerConfigModule } from './modules/config/config.module';
+import { OidcModule } from './modules/oidc/oidc.module';
 import { WorkspaceModule } from './modules/workspace/workspace.module';
 import { SyncModule } from './modules/sync/sync.module';
 import { DocModule } from './modules/doc/doc.module';
@@ -132,6 +133,7 @@ const staticImports = [
     AuthModule,
     UserModule,
     ServerConfigModule,
+    OidcModule,
     WorkspaceModule,
     SyncModule,
     DocModule,

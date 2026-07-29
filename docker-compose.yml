@@ -116,6 +116,24 @@ services:
     profiles:
       - dev
 
+  # #89: シングルサインオン（OIDC）の開発・テスト用 IdP。
+  # profiles: [dev] のため、通常の `docker compose up` では起動しない。
+  #   起動: docker compose --profile dev up -d keycloak
+  #   管理: http://localhost:8081 （admin / admin）
+  # realm・クライアント・テストユーザーは docker/keycloak/realm-export.json で自動作成される。
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: start-dev --import-realm --http-port=8081
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro
+    profiles:
+      - dev
+
 volumes:
   pgdata:
   blobdata:

@@ -12,6 +12,7 @@ import {
   RouteLogic,
   useNavigateHelper,
 } from '../../../components/hooks/use-navigate-helper';
+import { OAUTH_RESULT_CHANNEL } from './oauth-callback';
 
 // Logo image served from public directory
 const logoUrl = '/imgs/ofuro-wiki-logo.png';
@@ -38,6 +39,26 @@ export const SignIn = ({
       });
     }
   }, [error, t]);
+
+  // SSO のポップアップで失敗したときは、窓を残さず閉じてここへ伝えてくる。
+  // （ポップアップは noopener 付きで開かれるため BroadcastChannel を使う）
+  useEffect(() => {
+    let channel: BroadcastChannel;
+    try {
+      channel = new BroadcastChannel(OAUTH_RESULT_CHANNEL);
+    } catch {
+      return;
+    }
+    channel.onmessage = event => {
+      if (event.data?.type === 'error') {
+        notify.error({
+          title: t['com.affine.auth.toast.title.failed'](),
+          message: String(event.data.message ?? ''),
+        });
+      }
+    };
+    return () => channel.close();
+  }, [t]);
 
   const handleClose = useCallback(() => {
     jumpToIndex(RouteLogic.REPLACE, {

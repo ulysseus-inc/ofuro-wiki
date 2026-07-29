@@ -1,0 +1,44 @@
+{
+  "realm": "ofuro",
+  "enabled": true,
+  "displayName": "ofuro-wiki dev realm",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "ofuro-wiki",
+      "name": "ofuro-wiki (dev)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "dev-client-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/oauth/callback",
+        "http://localhost:3010/oauth/callback"
+      ],
+      "webOrigins": ["http://localhost:8080", "http://localhost:3010"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "sso-user",
+      "email": "sso-user@example.invalid",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Tester",
+      "enabled": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "SsoTestPass123!",
+          "temporary": false
+        }
+      ]
+    }
+  ]
+}

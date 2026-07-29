@@ -43,6 +43,13 @@ class ServerConfigType {
   @Field(() => [String])
   oauthProviders: string[];
 
+  /**
+   * #89: SSO ボタンに表示する文言（管理画面で設定した値）。
+   * 未設定・SSO 無効時は null を返し、フロントは既定の文言を使う。
+   */
+  @Field(() => String, { nullable: true })
+  oidcButtonLabel?: string | null;
+
   @Field()
   initialized: boolean;
 

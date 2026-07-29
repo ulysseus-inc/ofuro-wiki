@@ -9,6 +9,7 @@ import {
 import { useService } from '@toeverything/infra';
 import { useCallback, useEffect, useState } from 'react';
 
+import { SsoSettings } from './sso-settings';
 import * as styles from './style.css';
 
 interface ServerSetting {
@@ -119,6 +120,8 @@ export const ServerSettings = () => {
           </div>
         </div>
       </SettingWrapper>
+      {/* #89: シングルサインオン（OIDC）。設定は .env ではなくここに持つ */}
+      <SsoSettings />
     </>
   );
 };

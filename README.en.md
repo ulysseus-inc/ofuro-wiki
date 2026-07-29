@@ -49,6 +49,7 @@ Try it right now — no installation required.
 - **Notion-like block editor** — `/` commands and drag & drop, powered by BlockSuite
 - **Real-time collaboration** — simultaneous editing via Yjs + Socket.IO
 - **Full-text search** — fast, Japanese-aware search powered by PGroonga
+- **Single sign-on (SSO)** — OIDC support: sign in with Google, Keycloak, and other providers ([setup guide](docs/sso-setup.md))
 - **Fully self-hosted** — start with a single Docker command, no external service dependencies
 - **Privacy-first** — telemetry and outbound data transmission are disabled by design
 
