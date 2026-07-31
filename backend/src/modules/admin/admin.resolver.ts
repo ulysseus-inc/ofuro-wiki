@@ -1,5 +1,5 @@
 import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { AdminOnly } from '../../common/decorators/admin.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AdminService } from './admin.service';
@@ -18,6 +18,8 @@ import GraphQLJSON from 'graphql-type-json';
 
 @Resolver()
 export class AdminResolver {
+  private readonly logger = new Logger(AdminResolver.name);
+
   constructor(
     private adminService: AdminService,
     private scheduledBackupService: ScheduledBackupService,
@@ -117,21 +119,45 @@ export class AdminResolver {
     return this.scheduledBackupService.deleteBackup(id);
   }
 
+  // #115: パスワード変更機能の 3（Admin による直接変更）。
+  // 管理者が新しいパスワードを決め、利用者はサインイン後に自分で変更し直す。
+  // 本人に URL を渡せる場合は 4（createChangePasswordUrl）を優先する。
+  @AdminOnly()
+  @Mutation(() => Boolean)
+  async adminSetUserPassword(
+    @Args('userId', { type: () => String }) userId: string,
+    @Args('password', { type: () => String }) password: string,
+    @CurrentUser() actor: { id: string; email: string },
+  ): Promise<boolean> {
+    return this.adminService.setUserPassword(userId, password, actor.email);
+  }
+
   @AdminOnly()
   @Mutation(() => String)
   async createChangePasswordUrl(
     @Args('callbackUrl', { type: () => String }) callbackUrl: string,
     @Args('userId', { type: () => String }) userId: string,
+    @CurrentUser() actor: { id: string; email: string },
   ): Promise<string> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
     if (!user) throw new BadRequestException('User not found');
 
+    // #115: 管理者が手渡す URL なので 24時間有効（メール送信の1時間とは別）。
     const token = await this.mailService.createEmailToken(
       userId,
       'password_reset',
+      undefined,
+      MailService.ADMIN_ISSUED_TOKEN_TTL_MS,
     );
+
+    // #115: 発行された URL は、それ単体でパスワードを変更できる。
+    // 誰が誰の分を発行したかを残す（監査ログ #90 の対象）。
+    this.logger.log(
+      `Password reset URL issued for ${user.email} by admin ${actor.email}`,
+    );
+
     return this.mailService.createPasswordResetUrl(token, callbackUrl);
   }
 

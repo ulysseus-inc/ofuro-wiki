@@ -11,8 +11,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma.service';
-import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH } from './dto/auth.dto';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
+import { validatePasswordStrength } from '../../common/password.util';
 import { deriveUserName } from '../../common/user-name.util';
 import { isAdminEmail } from '../../common/admin-email';
 
@@ -86,16 +86,9 @@ export class AuthService {
   ) {}
 
   /** パスワードポリシー検証（サインアップ・変更時の共通チェック）。 */
+  /** 実装は common/password.util に集約している（経路ごとの判定ずれを防ぐため）。 */
   validatePasswordStrength(password: string): void {
-    if (
-      typeof password !== 'string' ||
-      password.length < PASSWORD_MIN_LENGTH ||
-      password.length > PASSWORD_MAX_LENGTH
-    ) {
-      throw new BadRequestException(
-        `パスワードは${PASSWORD_MIN_LENGTH}〜${PASSWORD_MAX_LENGTH}文字にしてください`,
-      );
-    }
+    validatePasswordStrength(password);
   }
 
   private async isRegistrationOpen(): Promise<boolean> {

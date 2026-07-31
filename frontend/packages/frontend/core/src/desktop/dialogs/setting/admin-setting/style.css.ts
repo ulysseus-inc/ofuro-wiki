@@ -58,6 +58,8 @@ export const userRow = style({
 
 export const userInfo = style({
   flex: 1,
+  // 操作列に押し潰されないよう、縮小の下限を明示する
+  minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
   marginLeft: '12px',

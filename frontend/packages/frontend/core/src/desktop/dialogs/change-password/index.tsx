@@ -15,7 +15,7 @@ import type {
   GLOBAL_DIALOG_SCHEMA,
 } from '@ofuro/core/modules/dialogs';
 import { Unreachable } from '@ofuro/env/constant';
-import { changePasswordDirectMutation } from '@ofuro/graphql';
+import { changeMyPasswordMutation } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import { useLiveData, useService } from '@toeverything/infra';
 import { useCallback, useEffect, useState } from 'react';
@@ -70,7 +70,7 @@ export const ChangePasswordDialog = ({
     setLoading(true);
     try {
       await server.gql({
-        query: changePasswordDirectMutation,
+        query: changeMyPasswordMutation,
         variables: {
           currentPassword,
           newPassword,

@@ -1658,6 +1658,103 @@ test.describe('入力検証・セキュリティヘッダ', () => {
     return cookies.map((c) => c.split(';')[0]).join('; ');
   }
 
+  test('【重要】本人が自分のパスワードを変更できる', async () => {
+    // ⚠️ この経路は長らく壊れていた。changePassword に @Public() が付いており
+    // @CurrentUser() が埋まらないため、常に「Invalid parameters」で失敗していた。
+    // 単体テストは user を直接渡していたため気づけなかったので、
+    // ここでは**実際に API を通して**確認する。
+    const email = `pw-change-${Date.now()}@example.invalid`;
+    const oldPassword = 'OldPass123!';
+    const newPassword = 'NewPass456!';
+
+    const signUp = await fetch(`${API}/api/auth/sign-up`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: oldPassword }),
+    });
+    expect([200, 201]).toContain(signUp.status);
+    const cookie = (signUp.headers.getSetCookie?.() ?? [])
+      .map(c => c.split(';')[0])
+      .find(c => c.startsWith('affine_token='))!;
+
+    const gql = (query: string, variables: Record<string, unknown>) =>
+      fetch(`${API}/graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ query, variables }),
+      }).then(r => r.json());
+
+    const mutation = `mutation ($currentPassword: String!, $newPassword: String!) {
+      changeMyPassword(currentPassword: $currentPassword, newPassword: $newPassword)
+    }`;
+
+    // 現在のパスワードが違えば変更できない
+    const wrong = await gql(mutation, {
+      currentPassword: 'WrongPass123!',
+      newPassword,
+    });
+    expect(wrong.errors).toBeDefined();
+
+    // 正しければ変更できる
+    const ok = await gql(mutation, { currentPassword: oldPassword, newPassword });
+    expect(ok.errors).toBeUndefined();
+    expect(ok.data.changeMyPassword).toBe(true);
+
+    const signIn = (password: string) =>
+      fetch(`${API}/api/auth/sign-in`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+    // 新しいパスワードで入れて、古いパスワードでは入れないこと
+    expect([200, 201]).toContain((await signIn(newPassword)).status);
+    expect((await signIn(oldPassword)).status).toBe(401);
+  });
+
+  test('【重要】トークンが失効していてもサインアウトできる', async () => {
+    // ⚠️ パスワード変更やロックで手元のトークンは失効する。
+    // そのときサインアウトが認証を要求すると 401 で弾かれ、Cookie が消せず
+    // 「サインアウトできない状態」で固定される（実際に発生した）。
+    // サインアウトは認証が壊れているときこそ使う操作なので、常に成功させる。
+    const res = await fetch(`${API}/api/auth/sign-out`, {
+      method: 'POST',
+      headers: { Cookie: 'affine_token=this-is-not-a-valid-token' },
+    });
+
+    expect([200, 201]).toContain(res.status);
+
+    // 認証クッキーを確実に消していること
+    const cleared = (res.headers.getSetCookie?.() ?? []).join('; ');
+    expect(cleared).toContain('affine_token=;');
+
+    // 実際に失効したトークンでも同じであること
+    // （パスワード変更・全端末サインアウトで起きる状態）
+    const si = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: TEST_USER.email,
+        password: TEST_USER.password,
+      }),
+    });
+    const tokenCookie = (si.headers.getSetCookie?.() ?? [])
+      .map(c => c.split(';')[0])
+      .find(c => c.startsWith('affine_token='))!;
+
+    // 全端末サインアウトで、この Cookie を失効させる
+    await fetch(`${API}/api/auth/sign-out-all`, {
+      method: 'POST',
+      headers: { Cookie: tokenCookie },
+    });
+
+    const revoked = await fetch(`${API}/api/auth/sign-out`, {
+      method: 'POST',
+      headers: { Cookie: tokenCookie },
+    });
+    expect([200, 201]).toContain(revoked.status);
+  });
+
   test('L-1: sign-out-all で発行済みトークンが即時失効する', async () => {
     // サインインしてトークン Cookie を取得
     const si = await fetch(`${API}/api/auth/sign-in`, {

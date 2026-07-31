@@ -3,13 +3,13 @@ import {
   Logger,
   NotFoundException,
   ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma.service';
 import { getAdminEmail } from '../../common/admin-email';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { deriveUserName } from '../../common/user-name.util';
+import { validatePasswordStrength } from '../../common/password.util';
 
 @Injectable()
 export class AdminService {
@@ -55,11 +55,7 @@ export class AdminService {
       throw new ConflictException('Email already registered');
     }
 
-    if (password.length < 8 || password.length > 128) {
-      throw new BadRequestException(
-        'Password must be between 8 and 128 characters',
-      );
-    }
+    validatePasswordStrength(password);
 
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     return this.prisma.user.create({
@@ -79,6 +75,37 @@ export class AdminService {
         createdAt: true,
       },
     });
+  }
+
+  /**
+   * #115: 管理者が対象ユーザーのパスワードを直接再設定する（機能 3）。
+   *
+   * パスワードを忘れた利用者の復旧経路。現在のパスワードは要求しない
+   * （忘れているから使えない）ため、Admin 権限そのものが唯一の防壁になる。
+   * この操作の後、Admin は対象利用者のパスワードを知った状態になる。
+   * 本人に URL を渡せる場合は 4（変更 URL 発行）を使うこと。
+   * 設定後は対象ユーザーの全セッションを失効させる（tokenVersion +1）。
+   * 乗っ取り時に「気づかれずに居座る」ことを防ぐため、既存セッションは残さない。
+   */
+  async setUserPassword(userId: string, password: string, actorEmail: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    validatePasswordStrength(password);
+
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, tokenVersion: { increment: 1 } },
+    });
+
+    // 誰が誰の分を設定したかを残す（監査ログ #90 の対象）。
+    this.logger.log(
+      `Password reset directly for ${user.email} by admin ${actorEmail}`,
+    );
+    return true;
   }
 
   async deleteUser(userId: string) {

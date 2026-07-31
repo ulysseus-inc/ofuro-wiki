@@ -108,6 +108,49 @@ describe('MailService', () => {
         }),
       });
     });
+
+    // 有効期限は「呼び出し時刻 + TTL」なので、計測した差は必ず TTL 以上になる
+    // （呼び出しに要した時間の分だけ大きい）。上限は余裕をもって判定する。
+    const HOUR = 60 * 60 * 1000;
+    const TOLERANCE = 30 * 1000;
+    const expectTtl = (expiresAt: Date, before: number, expected: number) => {
+      const ttl = expiresAt.getTime() - before;
+      expect(ttl).toBeGreaterThanOrEqual(expected);
+      expect(ttl).toBeLessThan(expected + TOLERANCE);
+    };
+
+    // #115: 有効期間は「どう手渡すか」で決める。用途（type）では決まらない。
+    it('既定の有効期間は1時間', async () => {
+      const before = Date.now();
+      await service.createEmailToken('user-id', 'password_reset');
+      const { expiresAt } = mockPrisma.emailToken.create.mock.calls[0][0].data;
+      expectTtl(expiresAt, before, HOUR);
+    });
+
+    it('管理者発行の有効期間を指定すると24時間になる', async () => {
+      const before = Date.now();
+      await service.createEmailToken(
+        'user-id',
+        'password_reset',
+        undefined,
+        MailService.ADMIN_ISSUED_TOKEN_TTL_MS,
+      );
+      const { expiresAt } = mockPrisma.emailToken.create.mock.calls[0][0].data;
+      expectTtl(expiresAt, before, 24 * HOUR);
+    });
+
+    // メール送信は本文で「1時間後に無効になります」と伝えているため、
+    // 同じ password_reset でもメール経路は 1時間のままでなければならない。
+    it('メール送信のパスワードリセットは1時間のまま', async () => {
+      const before = Date.now();
+      await service.sendPasswordResetEmail(
+        'user-id',
+        'user@example.com',
+        'http://localhost:8080/auth/changePassword',
+      );
+      const { expiresAt } = mockPrisma.emailToken.create.mock.calls[0][0].data;
+      expectTtl(expiresAt, before, HOUR);
+    });
   });
 
   describe('verifyToken', () => {
@@ -242,22 +285,6 @@ describe('MailService', () => {
     });
   });
 
-  describe('sendSetPasswordEmail', () => {
-    it('パスワード設定メールを送信', async () => {
-      await service.sendSetPasswordEmail(
-        'user-id',
-        'user@example.com',
-        'http://localhost:3010/set-password',
-      );
-
-      expect(mockSendMail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          to: 'user@example.com',
-          subject: expect.stringContaining('設定'),
-        }),
-      );
-    });
-  });
 
   describe('sendInvitationEmail', () => {
     it('招待メールを送信', async () => {

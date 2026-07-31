@@ -68,14 +68,30 @@ export class AuthController {
     return { id: user.id, email: user.email };
   }
 
+  /**
+   * サインアウト。
+   *
+   * ⚠️ **認証を要求しない。**
+   * パスワード変更やロックで手元のトークンが失効していると、認証を要求すると
+   * 401 で弾かれ、**クッキーが消せずサインアウトできない状態で固定される**
+   * （実際に発生した）。サインアウトは「認証が壊れているときこそ使いたい」
+   * 操作なので、常に成功してクッキーを消す。
+   *
+   * 認証を求めないことで第三者に強制サインアウトさせられる余地は残るが、
+   * 失うのは手元のセッションだけで、実害は再サインインの手間にとどまる。
+   */
+  @Public()
   @Post('sign-out')
-  @UseGuards(JwtAuthGuard)
   async signOut(@Res({ passthrough: true }) res: Response) {
     clearAuthCookies(res);
     return { success: true };
   }
 
   // L-1: 全端末サインアウト。tokenVersion を +1 して発行済みトークンを一括失効させる。
+  //
+  // こちらは対象の利用者を特定する必要があるため認証を要求する。
+  // トークンが既に失効している場合はセッションも失効済みなので、
+  // 手元を片付けるだけなら上の sign-out で足りる。
   @Post('sign-out-all')
   @UseGuards(JwtAuthGuard)
   async signOutAll(

@@ -89,8 +89,25 @@ const staticImports = [
           `Error: ${formattedError.message} (path: ${formattedError.path?.join('.')}, code: ${formattedError.extensions?.code})`,
         );
 
+        // エラー文言の多言語化。
+        // メッセージが大文字スネークケース（例: INVALID_EMAIL_TOKEN）なら、
+        // それを「エラー名」として extensions.name に載せる。
+        // フロントエンドは t[`error.<name>`]() で利用者の言語の文言に差し替える
+        // （@ofuro/error の UserFriendlyError が extensions から name を読む）。
+        // サーバーが日本語/英語の文章を組み立てると、必ずどちらかの利用者に
+        // 読めない文言が出るため、サーバーは言語に依存しないコードだけを返す。
+        const errorName = /^[A-Z][A-Z0-9_]*$/.test(formattedError.message)
+          ? formattedError.message
+          : undefined;
+        const withName = <T extends { extensions?: Record<string, any> }>(
+          error: T,
+        ): T =>
+          errorName
+            ? { ...error, extensions: { ...error.extensions, name: errorName } }
+            : error;
+
         if (process.env.NODE_ENV !== 'production') {
-          return formattedError;
+          return withName(formattedError);
         }
 
         const ext = (formattedError.extensions ?? {}) as Record<string, any>;
@@ -109,7 +126,7 @@ const staticImports = [
         if (isClientError) {
           // client error はメッセージ・検証詳細(originalError)を保持する。
           // ※ 本番では Apollo が stacktrace を付与しないため内部漏洩はない。
-          return {
+          return withName({
             message: formattedError.message,
             path: formattedError.path,
             locations: formattedError.locations,
@@ -118,7 +135,7 @@ const staticImports = [
               ...(typeof statusCode === 'number' ? { status: statusCode } : {}),
               ...(ext.originalError ? { originalError: ext.originalError } : {}),
             },
-          };
+          });
         }
 
         // 想定外/サーバエラー: 詳細（スタック・Prisma/DBメッセージ等）を隠す。

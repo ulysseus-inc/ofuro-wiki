@@ -1,4 +1,4 @@
-import { Resolver, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Mutation, Query, Args } from '@nestjs/graphql';
 import { UseGuards, BadRequestException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -48,7 +48,7 @@ export class AuthEmailResolver {
       token,
       'email_verification',
     );
-    if (!result) throw new BadRequestException('Invalid or expired token');
+    if (!result) throw new BadRequestException('INVALID_EMAIL_TOKEN');
 
     await this.prisma.user.update({
       where: { id: result.userId },
@@ -89,7 +89,7 @@ export class AuthEmailResolver {
     this.mailService.ensureEnabled();
 
     const result = await this.mailService.verifyToken(token, 'email_change');
-    if (!result) throw new BadRequestException('Invalid or expired token');
+    if (!result) throw new BadRequestException('INVALID_EMAIL_TOKEN');
 
     // Check if new email is already in use
     const existing = await this.prisma.user.findUnique({
@@ -123,7 +123,7 @@ export class AuthEmailResolver {
       token,
       'new_email_verification',
     );
-    if (!result) throw new BadRequestException('Invalid or expired token');
+    if (!result) throw new BadRequestException('INVALID_EMAIL_TOKEN');
     if (result.email !== email) {
       throw new BadRequestException('Email mismatch');
     }
@@ -151,95 +151,88 @@ export class AuthEmailResolver {
     };
   }
 
-  @Mutation(() => Boolean)
-  async sendChangePasswordEmail(
-    @CurrentUser() user: { id: string },
-    @Args('callbackUrl') callbackUrl: string,
-    @Args('email', { nullable: true }) _email?: string,
-  ): Promise<boolean> {
-    this.mailService.ensureEnabled();
-
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-    });
-    if (!dbUser) throw new BadRequestException('User not found');
-
-    await this.mailService.sendPasswordResetEmail(
-      user.id,
-      dbUser.email,
-      callbackUrl,
-    );
-    return true;
-  }
-
-  @Mutation(() => Boolean)
-  async sendSetPasswordEmail(
-    @CurrentUser() user: { id: string },
-    @Args('callbackUrl') callbackUrl: string,
-    @Args('email', { nullable: true }) _email?: string,
-  ): Promise<boolean> {
-    this.mailService.ensureEnabled();
-
-    const dbUser = await this.prisma.user.findUnique({
-      where: { id: user.id },
-    });
-    if (!dbUser) throw new BadRequestException('User not found');
-
-    await this.mailService.sendSetPasswordEmail(
-      user.id,
-      dbUser.email,
-      callbackUrl,
-    );
-    return true;
-  }
-
+  /**
+   * 再設定 URL（トークン）によるパスワード設定。サインイン不要。
+   *
+   * ⚠️ **サインイン中の利用者が自分のパスワードを変更する経路はこちらではない。**
+   * `@Public()` は認証を飛ばすため `@CurrentUser()` が埋まらず、
+   * 「現在のパスワードを検証して変更する」処理には到達できない。
+   * その用途は {@link changeMyPassword}（認証必須）を使う。
+   */
   @Public()
   @Mutation(() => Boolean)
   async changePassword(
-    @CurrentUser() user: { id: string } | undefined,
     @Args('newPassword') newPassword: string,
-    @Args('token', { nullable: true }) token?: string,
+    @Args('token') token: string,
     @Args('userId', { nullable: true }) userId?: string,
-    @Args('currentPassword', { nullable: true }) currentPassword?: string,
   ): Promise<boolean> {
-    // Token-based flow (from email link) — no login required
-    if (token) {
-      const result =
-        (await this.mailService.verifyToken(token, 'password_reset')) ||
-        (await this.mailService.verifyToken(token, 'password_set'));
-      if (!result) {
-        throw new BadRequestException('Invalid or expired token');
-      }
-      if (userId && result.userId !== userId) {
-        throw new BadRequestException('Invalid token');
-      }
-      this.authService.validatePasswordStrength(newPassword);
-      const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
-      // L-1: リセット時も既存の全トークンを失効させる（tokenVersion +1）。
-      // #93: 併せてログイン失敗カウントと一時ロックを解除する。ロック中でも
-      //      本人はパスワードリセットで復帰でき、15分待つ必要がない。
-      await this.prisma.user.update({
-        where: { id: result.userId },
-        data: {
-          passwordHash: hash,
-          tokenVersion: { increment: 1 },
-          failedLoginCount: 0,
-          lockedUntil: null,
-        },
-      });
-      await this.mailService.deleteToken(token);
-      return true;
+    const result =
+      (await this.mailService.verifyToken(token, 'password_reset')) ||
+      (await this.mailService.verifyToken(token, 'password_set'));
+    if (!result) {
+      throw new BadRequestException('INVALID_EMAIL_TOKEN');
     }
-
-    // Direct flow (logged-in user changing own password)
-    if (currentPassword && user) {
-      return this.authService.changePassword(
-        user.id,
-        currentPassword,
-        newPassword,
-      );
+    if (userId && result.userId !== userId) {
+      throw new BadRequestException('INVALID_EMAIL_TOKEN');
     }
+    this.authService.validatePasswordStrength(newPassword);
+    const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+    // L-1: リセット時も既存の全トークンを失効させる（tokenVersion +1）。
+    // #93: 併せてログイン失敗カウントと一時ロックを解除する。ロック中でも
+    //      本人はパスワードリセットで復帰でき、15分待つ必要がない。
+    await this.prisma.user.update({
+      where: { id: result.userId },
+      data: {
+        passwordHash: hash,
+        tokenVersion: { increment: 1 },
+        failedLoginCount: 0,
+        lockedUntil: null,
+      },
+    });
+    await this.mailService.deleteToken(token);
+    return true;
+  }
 
-    throw new BadRequestException('Invalid parameters');
+  /**
+   * #115: 再設定 URL のトークンが今も使えるかどうかだけを返す。
+   *
+   * 画面を開いた時点で「使用済み・期限切れ」を案内するために使う。
+   * これが無いと、無効な URL でもフォームが出てしまい、利用者は
+   * パスワードを入力して送信するまで気づけない。
+   *
+   * ⚠️ **状態を変えない**（トークンを消費しない）。
+   * 未認証で叩ける点は changePassword と同じで、得られる情報も
+   * 「そのトークンが有効か」だけであり、changePassword を叩いても
+   * 同じことが分かるため、新たに漏れる情報は無い。
+   * トークンは32バイト乱数のため総当たりは非現実的。
+   */
+  @Public()
+  @Query(() => Boolean)
+  async isPasswordTokenValid(
+    @Args('token') token: string,
+  ): Promise<boolean> {
+    const result =
+      (await this.mailService.verifyToken(token, 'password_reset')) ||
+      (await this.mailService.verifyToken(token, 'password_set'));
+    return !!result;
+  }
+
+  /**
+   * サインイン中の利用者が、自分のパスワードを変更する。
+   *
+   * 現在のパスワードの検証が必要なため、**認証必須**（`@Public()` を付けない）。
+   * 付けると `@CurrentUser()` が埋まらず、誰の変更なのか分からなくなる。
+   */
+  @Mutation(() => Boolean)
+  async changeMyPassword(
+    @CurrentUser() user: { id: string },
+    @Args('currentPassword') currentPassword: string,
+    @Args('newPassword') newPassword: string,
+  ): Promise<boolean> {
+    return this.authService.changePassword(
+      user.id,
+      currentPassword,
+      newPassword,
+    );
   }
 }

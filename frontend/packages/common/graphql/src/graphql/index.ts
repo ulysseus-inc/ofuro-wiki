@@ -233,6 +233,22 @@ export const createChangePasswordUrlMutation = {
 }`,
 };
 
+export const adminSetUserPasswordMutation = {
+  id: 'adminSetUserPasswordMutation' as const,
+  op: 'adminSetUserPassword',
+  query: `mutation adminSetUserPassword($userId: String!, $password: String!) {
+  adminSetUserPassword(userId: $userId, password: $password)
+}`,
+};
+
+export const isPasswordTokenValidQuery = {
+  id: 'isPasswordTokenValidQuery' as const,
+  op: 'isPasswordTokenValid',
+  query: `query isPasswordTokenValid($token: String!) {
+  isPasswordTokenValid(token: $token)
+}`,
+};
+
 export const appConfigQuery = {
   id: 'appConfigQuery' as const,
   op: 'appConfig',
@@ -535,11 +551,11 @@ export const changePasswordMutation = {
 }`,
 };
 
-export const changePasswordDirectMutation = {
-  id: 'changePasswordDirectMutation' as const,
-  op: 'changePassword',
-  query: `mutation changePassword($currentPassword: String!, $newPassword: String!) {
-  changePassword(currentPassword: $currentPassword, newPassword: $newPassword)
+export const changeMyPasswordMutation = {
+  id: 'changeMyPasswordMutation' as const,
+  op: 'changeMyPassword',
+  query: `mutation changeMyPassword($currentPassword: String!, $newPassword: String!) {
+  changeMyPassword(currentPassword: $currentPassword, newPassword: $newPassword)
 }`,
 };
 
@@ -1432,22 +1448,6 @@ export const sendChangeEmailMutation = {
   op: 'sendChangeEmail',
   query: `mutation sendChangeEmail($callbackUrl: String!) {
   sendChangeEmail(callbackUrl: $callbackUrl)
-}`,
-};
-
-export const sendChangePasswordEmailMutation = {
-  id: 'sendChangePasswordEmailMutation' as const,
-  op: 'sendChangePasswordEmail',
-  query: `mutation sendChangePasswordEmail($callbackUrl: String!) {
-  sendChangePasswordEmail(callbackUrl: $callbackUrl)
-}`,
-};
-
-export const sendSetPasswordEmailMutation = {
-  id: 'sendSetPasswordEmailMutation' as const,
-  op: 'sendSetPasswordEmail',
-  query: `mutation sendSetPasswordEmail($callbackUrl: String!) {
-  sendSetPasswordEmail(callbackUrl: $callbackUrl)
 }`,
 };
 

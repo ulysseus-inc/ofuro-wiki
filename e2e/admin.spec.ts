@@ -135,6 +135,296 @@ test.describe('Admin API', () => {
     );
   });
 
+  test('【重要】パスワード再設定 URL を発行できる（#115）', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `reset-target-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const result = await graphqlQuery(
+      page,
+      `mutation ($userId: String!, $callbackUrl: String!) {
+        createChangePasswordUrl(userId: $userId, callbackUrl: $callbackUrl)
+      }`,
+      { userId, callbackUrl: 'http://localhost:8080/auth/changePassword' }
+    );
+
+    expect(result.errors).toBeUndefined();
+    const url: string = result.data.createChangePasswordUrl;
+    // 再設定画面へ、使い捨てトークン付きで飛ぶ URL であること
+    expect(url).toContain('/auth/changePassword?token=');
+    expect(url.split('token=')[1]?.length).toBeGreaterThan(20);
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】Admin 以外はパスワード再設定 URL を発行できない（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // この URL は単体でパスワードを変更できる。発行できる人を誤ると
+    // 一般利用者が他人のパスワードを掌握できてしまう。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `non-admin-${Date.now()}@example.com`;
+    const password = 'TestPass123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id isAdmin }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+    expect(created.data.adminCreateUser.isAdmin).toBe(false);
+
+    // 作成した一般ユーザーとして実行する
+    const context = await browser.newContext();
+    const memberPage = await context.newPage();
+    const signInRes = await memberPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(signInRes.ok()).toBe(true);
+    await memberPage.goto('/');
+
+    const result = await graphqlQuery(
+      memberPage,
+      `mutation ($userId: String!, $callbackUrl: String!) {
+        createChangePasswordUrl(userId: $userId, callbackUrl: $callbackUrl)
+      }`,
+      { userId, callbackUrl: 'http://localhost:8080/auth/changePassword' }
+    );
+
+    expect(result.errors).toBeDefined();
+    expect(result.data?.createChangePasswordUrl).toBeFalsy();
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】Admin がパスワードを再設定でき、それでサインインできる（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // パスワードを忘れた利用者の主な復旧経路。mutation が true を返すだけでは
+    // 「本当に設定されたか」は分からないため、実際にサインインまで確認する。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `set-pw-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const newPassword = 'AdminIssued456!';
+    const result = await graphqlQuery(
+      page,
+      `mutation ($userId: String!, $password: String!) {
+        adminSetUserPassword(userId: $userId, password: $password)
+      }`,
+      { userId, password: newPassword }
+    );
+    expect(result.errors).toBeUndefined();
+    expect(result.data.adminSetUserPassword).toBe(true);
+
+    const context = await browser.newContext();
+    const userPage = await context.newPage();
+
+    // 設定した新しいパスワードでサインインできる
+    const okRes = await userPage.request.post('/api/auth/sign-in', {
+      data: { email, password: newPassword },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(okRes.ok()).toBe(true);
+
+    // 元のパスワードは使えなくなっている（上書きされたことの確認）
+    const ngRes = await userPage.request.post('/api/auth/sign-in', {
+      data: { email, password: 'TestPass123!' },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(ngRes.ok()).toBe(false);
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】パスワードの再設定で既存セッションが失効する（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // 乗っ取られたアカウントを復旧する場面を想定する。ここで攻撃者の
+    // セッションが生き残ると、パスワードを変えても居座られる。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `revoke-pw-${Date.now()}@example.com`;
+    const password = 'TestPass123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    // 先にサインインしてセッションを作っておく
+    const context = await browser.newContext();
+    const userPage = await context.newPage();
+    const signInRes = await userPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(signInRes.ok()).toBe(true);
+    // /api/auth/session は未認証でも 200 を返す（{ user: null }）。
+    // ステータスではなく中身を見ないと、失効を検証したことにならない。
+    const before = await (await userPage.request.get('/api/auth/session')).json();
+    expect(before.user?.email).toBe(email);
+
+    // Admin がパスワードを再設定する
+    await graphqlQuery(
+      page,
+      `mutation ($userId: String!, $password: String!) {
+        adminSetUserPassword(userId: $userId, password: $password)
+      }`,
+      { userId, password: 'AdminIssued456!' }
+    );
+
+    // 既存セッションが失効している
+    const after = await (await userPage.request.get('/api/auth/session')).json();
+    expect(after.user).toBeNull();
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】Admin 以外はパスワードを再設定できない（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // 発行できる人を誤ると、一般利用者が他人のアカウントを直接乗っ取れる。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `non-admin-setpw-${Date.now()}@example.com`;
+    const password = 'TestPass123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id isAdmin }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+    expect(created.data.adminCreateUser.isAdmin).toBe(false);
+
+    const context = await browser.newContext();
+    const memberPage = await context.newPage();
+    const signInRes = await memberPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(signInRes.ok()).toBe(true);
+    await memberPage.goto('/');
+
+    const result = await graphqlQuery(
+      memberPage,
+      `mutation ($userId: String!, $password: String!) {
+        adminSetUserPassword(userId: $userId, password: $password)
+      }`,
+      { userId, password: 'Hijacked456!' }
+    );
+    expect(result.errors).toBeDefined();
+    expect(result.data?.adminSetUserPassword).toBeFalsy();
+
+    // 拒否されたので、元のパスワードのまま使える
+    const stillOk = await memberPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(stillOk.ok()).toBe(true);
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】パスワード変更 URL のトークンは1回で無効になる（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // この URL は単体でパスワードを変更できる。使い捨てでないと、
+    // 渡したチャットに残った URL で何度でも乗っ取られる。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `token-reuse-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const issued = await graphqlQuery(
+      page,
+      `mutation ($userId: String!, $callbackUrl: String!) {
+        createChangePasswordUrl(userId: $userId, callbackUrl: $callbackUrl)
+      }`,
+      { userId, callbackUrl: 'http://localhost:8080/auth/changePassword' }
+    );
+    const token = issued.data.createChangePasswordUrl.split('token=')[1];
+
+    // 未認証の文脈から使う（本来の利用者と同じ状態）
+    const context = await browser.newContext();
+    const guest = await context.newPage();
+    await guest.goto('/');
+
+    const first = await graphqlQuery(
+      guest,
+      `mutation ($token: String!, $newPassword: String!) {
+        changePassword(token: $token, newPassword: $newPassword)
+      }`,
+      { token, newPassword: 'FirstUse123!' }
+    );
+    expect(first.errors).toBeUndefined();
+    expect(first.data.changePassword).toBe(true);
+
+    // 2回目は拒否される
+    const second = await graphqlQuery(
+      guest,
+      `mutation ($token: String!, $newPassword: String!) {
+        changePassword(token: $token, newPassword: $newPassword)
+      }`,
+      { token, newPassword: 'SecondUse456!' }
+    );
+    expect(second.errors).toBeDefined();
+    expect(second.data?.changePassword).toBeFalsy();
+    // エラー名を返すこと。フロントはこれを i18n キー error.<name> に対応づけて
+    // 利用者の言語で表示する。生の英語メッセージを出さないための土台。
+    expect(second.errors[0].extensions?.name).toBe('INVALID_EMAIL_TOKEN');
+
+    // 2回目のパスワードでサインインできない＝本当に変わっていない
+    const ng = await guest.request.post('/api/auth/sign-in', {
+      data: { email, password: 'SecondUse456!' },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(ng.ok()).toBe(false);
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
   test('adminServerSettings でサーバー設定を変更できる', async ({ page }) => {
     await signIn(page);
     await enterOrCreateWorkspace(page);
@@ -215,6 +505,168 @@ test.describe('Admin Panel UI', () => {
              document.body.innerText.includes('User Management');
     });
     expect(hasAdmin).toBe(true);
+  });
+
+  test('ユーザー一覧からパスワード変更 URL を発行できる（#115）', async ({ page }) => {
+    // ⚠️ この経路が無いと、パスワードを忘れた利用者の復旧手段が
+    // 「Admin が GraphQL を手で叩く」しか無くなる（#115 の起票理由）。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // ユーザー管理タブ（既定で開いている想定だが、明示的に選ぶ）
+    await page.getByText('ユーザー管理', { exact: true }).first().click();
+
+    // 操作はメニューに畳まれている（行に直接並べるとユーザー名が潰れるため）
+    const actions = page.locator('[data-testid="admin-user-actions"]').first();
+    await actions.waitFor({ state: 'visible', timeout: 15_000 });
+    await actions.click();
+
+    const resetButton = page.locator('[data-testid="admin-reset-password"]');
+    await resetButton.waitFor({ state: 'visible', timeout: 10_000 });
+    await resetButton.click();
+
+    // 発行された URL が画面に出ること（SMTP 未設定でも手渡しできるようにするため）
+    const url = page.locator('[data-testid="admin-reset-password-url"]');
+    await expect(url).toBeVisible({ timeout: 15_000 });
+    await expect(url).toContainText('/auth/changePassword?token=');
+  });
+
+  test('ユーザー一覧からパスワードを再設定できる（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // パスワード忘れの主な復旧経路。API が通っていても、ボタン・モーダル・
+    // i18n キーのいずれかが欠けると利用者には使えない（SSO で実際に起きた）。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    // 対象となる一般ユーザーを作っておく
+    const email = `ui-setpw-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({
+      timeout: 5_000,
+    });
+    await page.getByText('ユーザー管理', { exact: true }).first().click();
+
+    // 一覧はページングされるため、対象ユーザーを絞り込んでから操作する
+    await page.locator('[data-testid="admin-user-search"]').fill(email);
+    const actions = page.locator('[data-testid="admin-user-actions"]').first();
+    await actions.waitFor({ state: 'visible', timeout: 15_000 });
+    await actions.click();
+
+    const setButton = page.locator('[data-testid="admin-set-password"]');
+    await setButton.waitFor({ state: 'visible', timeout: 10_000 });
+    await setButton.click();
+
+    const newPassword = 'UiIssued456!';
+    const input = page.locator('[data-testid="admin-set-password-input"]');
+    await expect(input).toBeVisible({ timeout: 10_000 });
+    await input.fill(newPassword);
+    await page.getByRole('button', { name: '再設定する' }).click();
+
+    // 画面が閉じただけでは設定されたか分からないため、実際にサインインして確かめる
+    const context = await browser.newContext();
+    const userPage = await context.newPage();
+    await expect
+      .poll(
+        async () => {
+          const res = await userPage.request.post('/api/auth/sign-in', {
+            data: { email, password: newPassword },
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return res.ok();
+        },
+        { timeout: 15_000 }
+      )
+      .toBe(true);
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('使用済みのパスワード変更 URL を開くと、その場で無効と分かる（#115）', async ({
+    page,
+    browser,
+  }) => {
+    // 検証しないと、無効な URL でも入力フォームが出てしまい、
+    // 利用者はパスワードを入力して送信するまで気づけない。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `expired-url-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const issued = await graphqlQuery(
+      page,
+      `mutation ($userId: String!, $callbackUrl: String!) {
+        createChangePasswordUrl(userId: $userId, callbackUrl: $callbackUrl)
+      }`,
+      { userId, callbackUrl: 'http://localhost:8080/auth/changePassword' }
+    );
+    const url: string = issued.data.createChangePasswordUrl;
+    const token = url.split('token=')[1];
+
+    const context = await browser.newContext();
+    const guest = await context.newPage();
+    await guest.goto('/');
+
+    // まだ使っていない URL では、入力フォームが出る
+    await guest.goto(`/auth/changePassword?token=${token}`);
+    await expect(
+      guest.locator('input[type="password"]').first()
+    ).toBeVisible({ timeout: 15_000 });
+
+    // 使う
+    const used = await graphqlQuery(
+      guest,
+      `mutation ($token: String!, $newPassword: String!) {
+        changePassword(token: $token, newPassword: $newPassword)
+      }`,
+      { token, newPassword: 'FirstUse123!' }
+    );
+    expect(used.data.changePassword).toBe(true);
+
+    // 使用済みの URL では、フォームではなく案内が出る
+    await guest.goto(`/auth/changePassword?token=${token}`);
+    await expect(guest.locator('body')).toContainText(
+      'この URL は使用できません',
+      { timeout: 15_000 }
+    );
+    await expect(guest.locator('input[type="password"]')).toHaveCount(0);
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
   });
 
   test('Admin 画面のラベルがデフォルト言語（日本語）で表示される', async ({ page }) => {

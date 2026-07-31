@@ -728,6 +728,110 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.nav.users"](): string;
     /**
+      * `Single sign-on (OIDC)`
+      */
+    ["com.affine.admin.sso.title"](): string;
+    /**
+      * `Enable single sign-on`
+      */
+    ["com.affine.admin.sso.enabled"](): string;
+    /**
+      * `Shows an SSO button on the sign-in page. The button stays hidden while the configuration is incomplete.`
+      */
+    ["com.affine.admin.sso.enabled.description"](): string;
+    /**
+      * `Redirect URI`
+      */
+    ["com.affine.admin.sso.redirect-uri"](): string;
+    /**
+      * `Register this value in your identity provider (Google, Keycloak, etc.) as an authorized redirect URI.`
+      */
+    ["com.affine.admin.sso.redirect-uri.description"](): string;
+    /**
+      * `Copy`
+      */
+    ["com.affine.admin.sso.copy"](): string;
+    /**
+      * `Copied`
+      */
+    ["com.affine.admin.sso.copied"](): string;
+    /**
+      * `Failed to copy`
+      */
+    ["com.affine.admin.sso.copy-failed"](): string;
+    /**
+      * `Issuer URL`
+      */
+    ["com.affine.admin.sso.issuer"](): string;
+    /**
+      * `The issuer URL of your identity provider. Do not append /.well-known/openid-configuration.`
+      */
+    ["com.affine.admin.sso.issuer.description"](): string;
+    /**
+      * `Client ID`
+      */
+    ["com.affine.admin.sso.client-id"](): string;
+    /**
+      * `Client secret`
+      */
+    ["com.affine.admin.sso.client-secret"](): string;
+    /**
+      * `Configured (enter a value only to change it)`
+      */
+    ["com.affine.admin.sso.client-secret.set"](): string;
+    /**
+      * `Not configured`
+      */
+    ["com.affine.admin.sso.client-secret.unset"](): string;
+    /**
+      * `Value issued by your identity provider`
+      */
+    ["com.affine.admin.sso.client-secret.placeholder"](): string;
+    /**
+      * `Button label`
+      */
+    ["com.affine.admin.sso.button-label"](): string;
+    /**
+      * `Email claim names`
+      */
+    ["com.affine.admin.sso.email-claims"](): string;
+    /**
+      * `Comma-separated, in priority order. Add upn for providers such as Microsoft Entra ID that may not return email.`
+      */
+    ["com.affine.admin.sso.email-claims.description"](): string;
+    /**
+      * `Create an account when an unregistered user signs in with SSO`
+      */
+    ["com.affine.admin.sso.auto-create"](): string;
+    /**
+      * `⚠️ Keep this off for identity providers open to outsiders (such as consumer Google accounts). When on, anyone who can sign in to that provider can use this server.`
+      */
+    ["com.affine.admin.sso.auto-create.description"](): string;
+    /**
+      * `Test connection`
+      */
+    ["com.affine.admin.sso.test"](): string;
+    /**
+      * `Testing…`
+      */
+    ["com.affine.admin.sso.testing"](): string;
+    /**
+      * `Connection test failed`
+      */
+    ["com.affine.admin.sso.test-failed"](): string;
+    /**
+      * `Saved`
+      */
+    ["com.affine.admin.sso.saved"](): string;
+    /**
+      * `Failed to save`
+      */
+    ["com.affine.admin.sso.save-failed"](): string;
+    /**
+      * `Failed to load the current settings. Reload the page before making changes.`
+      */
+    ["com.affine.admin.sso.load-failed"](): string;
+    /**
       * `Server Settings`
       */
     ["com.affine.admin.nav.settings"](): string;
@@ -828,6 +932,68 @@ export function useAFFiNEI18N(): {
       * `Delete User`
       */
     ["com.affine.admin.users.delete.title"](): string;
+    /**
+      * `Issue password URL`
+      */
+    ["com.affine.admin.users.resetPassword"](): string;
+    /**
+      * `Password change URL`
+      */
+    ["com.affine.admin.users.resetPassword.title"](): string;
+    /**
+      * `This URL lets {{email}} set a new password. Share it with them over a secure channel.`
+      */
+    ["com.affine.admin.users.resetPassword.desc"](options: {
+        readonly email: string;
+    }): string;
+    /**
+      * `⚠️ Anyone with this URL can change the password. It expires in 24 hours, can only be used once, and cannot be shown again once closed.`
+      */
+    ["com.affine.admin.users.resetPassword.warning"](): string;
+    /**
+      * `Reset password`
+      */
+    ["com.affine.admin.users.setPassword"](): string;
+    /**
+      * `Reset the password`
+      */
+    ["com.affine.admin.users.setPassword.title"](): string;
+    /**
+      * `Set a new password for {{email}}. Share it with them over a secure channel.`
+      */
+    ["com.affine.admin.users.setPassword.desc"](options: {
+        readonly email: string;
+    }): string;
+    /**
+      * `⚠️ You will know the password you set here. Prefer "Issue password URL" when you can send them a link. Resetting also signs the user out of all sessions. Tell them to change it right after signing in, from Settings → Account → Change password.`
+      */
+    ["com.affine.admin.users.setPassword.warning"](): string;
+    /**
+      * `Reset password`
+      */
+    ["com.affine.admin.users.setPassword.confirm"](): string;
+    /**
+      * `Password reset for {{email}}`
+      */
+    ["com.affine.admin.users.setPassword.done"](options: {
+        readonly email: string;
+    }): string;
+    /**
+      * `Could not reset the password`
+      */
+    ["com.affine.admin.users.setPassword.failed"](): string;
+    /**
+      * `URL copied`
+      */
+    ["com.affine.admin.users.resetPassword.copied"](): string;
+    /**
+      * `Could not copy`
+      */
+    ["com.affine.admin.users.resetPassword.copyFailed"](): string;
+    /**
+      * `Could not issue the URL`
+      */
+    ["com.affine.admin.users.resetPassword.failed"](): string;
     /**
       * `Are you sure you want to delete {{email}}? This action cannot be undone.`
       */
@@ -1509,6 +1675,10 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.auth.password.error"](): string;
     /**
+      * `Too many attempts. Sign-in is temporarily limited — please wait a while (up to about 15 minutes) and try again.`
+      */
+    ["com.affine.auth.password.rate-limited"](): string;
+    /**
       * `Set password failed`
       */
     ["com.affine.auth.password.set-failed"](): string;
@@ -1517,6 +1687,38 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.auth.reset.password"](): string;
     /**
+      * `Current password`
+      */
+    ["com.affine.auth.password.current"](): string;
+    /**
+      * `New password`
+      */
+    ["com.affine.auth.password.new"](): string;
+    /**
+      * `Confirm new password`
+      */
+    ["com.affine.auth.password.confirm"](): string;
+    /**
+      * `New passwords do not match`
+      */
+    ["com.affine.auth.password.confirm.mismatch"](): string;
+    /**
+      * `Password must be at least 8 characters`
+      */
+    ["com.affine.auth.password.too.short"](): string;
+    /**
+      * `Current password is incorrect`
+      */
+    ["com.affine.auth.password.wrong"](): string;
+    /**
+      * `Password changed`
+      */
+    ["com.affine.auth.password.changed.successfully"](): string;
+    /**
+      * `Could not change the password`
+      */
+    ["com.affine.auth.password.change.failed"](): string;
+    /**
       * `You will receive an email with a link to reset your password. Please check your inbox.`
       */
     ["com.affine.auth.reset.password.message"](): string;
@@ -1524,6 +1726,14 @@ export function useAFFiNEI18N(): {
       * `Password reset successful`
       */
     ["com.affine.auth.reset.password.page.success"](): string;
+    /**
+      * `This link can no longer be used`
+      */
+    ["com.affine.auth.reset.password.expired.title"](): string;
+    /**
+      * `A password change link can only be used once and expires 24 hours after it is issued. Ask your administrator to issue a new one.`
+      */
+    ["com.affine.auth.reset.password.expired.subtitle"](): string;
     /**
       * `Reset your ofuro-wiki password`
       */
@@ -3443,6 +3653,12 @@ export function useAFFiNEI18N(): {
       * `Info`
       */
     ["com.affine.page-properties.page-info"](): string;
+    /**
+      * `Updated {{time}}`
+      */
+    ["com.affine.page-properties.updated-at"](options: {
+        readonly time: string;
+    }): string;
     /**
       * `View Info`
       */

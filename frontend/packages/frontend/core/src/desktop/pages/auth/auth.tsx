@@ -1,5 +1,6 @@
-import { notify } from '@ofuro/component';
+import { Button, notify } from '@ofuro/component';
 import {
+  AuthPageContainer,
   ChangeEmailPage,
   ChangePasswordPage,
   OnboardingPage,
@@ -9,11 +10,12 @@ import {
 } from '@ofuro/component/auth-components';
 import {
   changePasswordMutation,
+  isPasswordTokenValidQuery,
   sendVerifyChangeEmailMutation,
 } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import { useLiveData, useService } from '@toeverything/infra';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { LoaderFunction } from 'react-router-dom';
 import { redirect, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
@@ -23,7 +25,11 @@ import {
   RouteLogic,
   useNavigateHelper,
 } from '../../../components/hooks/use-navigate-helper';
-import { AuthService, ServerService } from '../../../modules/cloud';
+import {
+  AuthService,
+  GraphQLService,
+  ServerService,
+} from '../../../modules/cloud';
 import { AppContainer } from '../../components/app-container';
 import { ConfirmChangeEmail } from './confirm-change-email';
 import { ConfirmVerifiedEmail } from './email-verified-email';
@@ -39,6 +45,70 @@ const authTypeSchema = z.enum([
   'subscription-redirect',
   'verify-email',
 ]);
+
+/**
+ * #115: 再設定 URL のトークンを、画面を開いた時点で検証する。
+ *
+ * 検証しないと、使用済み・期限切れの URL でもパスワード入力フォームが出てしまい、
+ * 利用者は送信するまで無効だと気づけない（実際に確認で繰り返し指摘された）。
+ * 検証クエリは状態を変えず、トークンを消費しない。
+ */
+const PasswordTokenGate = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
+  const t = useI18n();
+  const graphqlService = useService(GraphQLService);
+  const { jumpToIndex } = useNavigateHelper();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get('token') ?? '';
+  const [valid, setValid] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!token) {
+      setValid(false);
+      return;
+    }
+    graphqlService
+      .gql({ query: isPasswordTokenValidQuery, variables: { token } })
+      .then(res => {
+        if (!cancelled) setValid(!!res.isPasswordTokenValid);
+      })
+      .catch(() => {
+        // 通信できない場合はフォームを出す（送信時に改めて検証される）。
+        // ここで「無効」と断定すると、有効な URL を持つ人を締め出してしまう。
+        if (!cancelled) setValid(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [graphqlService, token]);
+
+  if (valid === null) {
+    return <AppContainer fallback />;
+  }
+
+  if (!valid) {
+    return (
+      <AuthPageContainer
+        title={t['com.affine.auth.reset.password.expired.title']()}
+        subtitle={t['com.affine.auth.reset.password.expired.subtitle']()}
+      >
+        <Button
+          variant="primary"
+          size="large"
+          onClick={() => jumpToIndex(RouteLogic.REPLACE)}
+        >
+          {t['com.affine.auth.open.affine']()}
+        </Button>
+      </AuthPageContainer>
+    );
+  }
+
+  return <>{children}</>;
+};
 
 export const Component = () => {
   const authService = useService(AuthService);
@@ -126,20 +196,24 @@ export const Component = () => {
     }
     case 'changePassword': {
       return (
-        <ChangePasswordPage
-          passwordLimits={passwordLimits}
-          onSetPassword={onSetPassword}
-          onOpenAffine={onOpenAffine}
-        />
+        <PasswordTokenGate>
+          <ChangePasswordPage
+            passwordLimits={passwordLimits}
+            onSetPassword={onSetPassword}
+            onOpenAffine={onOpenAffine}
+          />
+        </PasswordTokenGate>
       );
     }
     case 'setPassword': {
       return (
-        <SetPasswordPage
-          passwordLimits={passwordLimits}
-          onSetPassword={onSetPassword}
-          onOpenAffine={onOpenAffine}
-        />
+        <PasswordTokenGate>
+          <SetPasswordPage
+            passwordLimits={passwordLimits}
+            onSetPassword={onSetPassword}
+            onOpenAffine={onOpenAffine}
+          />
+        </PasswordTokenGate>
       );
     }
     case 'changeEmail': {

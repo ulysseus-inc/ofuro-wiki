@@ -48,13 +48,27 @@ export class MailService {
     }
   }
 
+  /**
+   * #115: トークンの有効期間は「どう手渡すか」で決める。用途（type）では決まらない。
+   * メールで送るものは利用者がその場で受け取れるため 1時間で足りる（既定）。
+   * 管理者が発行してチャット等で手渡す再設定 URL は受け渡しに時間差が生じるため、
+   * 1時間では実運用に耐えない。呼び出し側が ADMIN_ISSUED_TOKEN_TTL_MS を明示する。
+   *
+   * ⚠️ password_reset は「メール送信」と「管理者発行」の両方で使う。
+   * type で切り替えると、メール本文の「1時間後に無効になります」と実際の期限がずれる。
+   * 設定可能にはしない（選択肢を増やすより、既定値を明記する方が運用しやすい）。
+   */
+  static readonly DEFAULT_TOKEN_TTL_MS = 60 * 60 * 1000; // 1時間
+  static readonly ADMIN_ISSUED_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24時間
+
   async createEmailToken(
     userId: string,
     type: string,
     email?: string,
+    ttlMs: number = MailService.DEFAULT_TOKEN_TTL_MS,
   ): Promise<string> {
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const expiresAt = new Date(Date.now() + ttlMs);
 
     await this.prisma.emailToken.create({
       data: { userId, token, type, email, expiresAt },
@@ -163,6 +177,13 @@ export class MailService {
     this.logger.log(`New email verification sent to ${newEmail}`);
   }
 
+  /**
+   * ⚠️ 現在この送信経路の呼び出し元は無い。
+   * 本人向けの `sendChangePasswordEmail` mutation（AFFiNE 由来の「メールで本人確認して
+   * パスワードを変更する」流れ）は、PR #130 で `changeMyPassword`（現在のパスワードを
+   * 検証する方式）に置き換わったため削除した。
+   * この送信処理自体は **#132（Admin 発行 URL のメール送信）で再利用する**ため残している。
+   */
   async sendPasswordResetEmail(
     userId: string,
     email: string,
@@ -188,31 +209,7 @@ export class MailService {
     this.logger.log(`Password reset email sent to ${email}`);
   }
 
-  async sendSetPasswordEmail(
-    userId: string,
-    email: string,
-    callbackUrl: string,
-  ): Promise<void> {
-    this.ensureEnabled();
-    const token = await this.createEmailToken(userId, 'password_set');
-    const url = `${callbackUrl}?token=${token}`;
-
-    await this.transporter!.sendMail({
-      from: this.sender,
-      to: email,
-      subject: 'ofuro-wiki: パスワードの設定',
-      html: `
-        <h2>パスワードの設定</h2>
-        <p>以下のリンクをクリックしてパスワードを設定してください。</p>
-        <p><a href="${url}">パスワードを設定する</a></p>
-        <p>このリンクは1時間後に無効になります。</p>
-        <p>心当たりがない場合は、このメールを無視してください。</p>
-      `,
-    });
-
-    this.logger.log(`Set password email sent to ${email}`);
-  }
-
+  /** #115: Admin 発行の変更 URL を組み立てる（トークンの発行は呼び出し側）。 */
   createPasswordResetUrl(token: string, callbackUrl: string): string {
     return `${callbackUrl}?token=${token}`;
   }

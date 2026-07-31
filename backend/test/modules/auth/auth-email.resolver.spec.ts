@@ -194,55 +194,12 @@ describe('AuthEmailResolver', () => {
     });
   });
 
-  describe('sendChangePasswordEmail', () => {
-    it('パスワードリセットメールを送信', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'user-1',
-        email: 'user@example.com',
-      });
-
-      const result = await resolver.sendChangePasswordEmail(
-        { id: 'user-1' },
-        'http://localhost/reset',
-      );
-
-      expect(result).toBe(true);
-      expect(mockMailService.sendPasswordResetEmail).toHaveBeenCalledWith(
-        'user-1',
-        'user@example.com',
-        'http://localhost/reset',
-      );
-    });
-  });
-
-  describe('sendSetPasswordEmail', () => {
-    it('パスワード設定メールを送信', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({
-        id: 'user-1',
-        email: 'user@example.com',
-      });
-
-      const result = await resolver.sendSetPasswordEmail(
-        { id: 'user-1' },
-        'http://localhost/set',
-      );
-
-      expect(result).toBe(true);
-      expect(mockMailService.sendSetPasswordEmail).toHaveBeenCalledWith(
-        'user-1',
-        'user@example.com',
-        'http://localhost/set',
-      );
-    });
-  });
-
   describe('changePassword', () => {
     it('トークンベースでパスワードをリセット', async () => {
       mockMailService.verifyToken.mockResolvedValue({ userId: 'user-1' });
       mockPrisma.user.update.mockResolvedValue({});
 
       const result = await resolver.changePassword(
-        undefined,
         'newPass123',
         'reset-token',
         'user-1',
@@ -270,7 +227,6 @@ describe('AuthEmailResolver', () => {
       mockPrisma.user.update.mockResolvedValue({});
 
       const result = await resolver.changePassword(
-        undefined,
         'newPass123',
         'set-token',
         'user-1',
@@ -291,12 +247,7 @@ describe('AuthEmailResolver', () => {
       mockMailService.verifyToken.mockResolvedValue({ userId: 'user-1' });
 
       await expect(
-        resolver.changePassword(
-          undefined,
-          'newPass',
-          'token',
-          'wrong-user',
-        ),
+        resolver.changePassword('newPass', 'token', 'wrong-user'),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -304,22 +255,20 @@ describe('AuthEmailResolver', () => {
       mockMailService.verifyToken.mockResolvedValue(null);
 
       await expect(
-        resolver.changePassword(
-          undefined,
-          'newPass',
-          'bad-token',
-          'user-1',
-        ),
+        resolver.changePassword('newPass', 'bad-token', 'user-1'),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('ログイン済みユーザーが現パスワードで変更', async () => {
-      const result = await resolver.changePassword(
+      // ⚠️ サインイン中の変更は **changeMyPassword**（認証必須）で行う。
+      // かつては changePassword に @Public() を付けたまま
+      // @CurrentUser() で受け取ろうとしていたため、実際には常に
+      // 「Invalid parameters」で失敗していた（この単体テストは
+      // user を直接渡していたため気づけなかった）。
+      const result = await resolver.changeMyPassword(
         { id: 'user-1' },
-        'newPass123',
-        undefined,
-        undefined,
         'currentPass',
+        'newPass123',
       );
 
       expect(result).toBe(true);
@@ -330,10 +279,14 @@ describe('AuthEmailResolver', () => {
       );
     });
 
-    it('パラメータ不足でエラー', async () => {
-      await expect(
-        resolver.changePassword(undefined, 'newPass'),
-      ).rejects.toThrow(BadRequestException);
+    it('トークンが空ならエラー（トークン経由でしか使えない）', async () => {
+      // 現在のパスワードによる変更は changeMyPassword 側に分離したため、
+      // こちらは有効なトークンが無ければ何もできない
+      mockMailService.verifyToken.mockResolvedValue(null);
+
+      await expect(resolver.changePassword('newPass', '')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });
