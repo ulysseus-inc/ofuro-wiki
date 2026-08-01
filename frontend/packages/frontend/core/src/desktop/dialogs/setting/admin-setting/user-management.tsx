@@ -23,6 +23,7 @@ import {
 import { useService } from '@toeverything/infra';
 import { useCallback, useEffect, useState } from 'react';
 
+import { CsvImport } from './csv-import';
 import * as styles from './style.css';
 
 interface AdminUser {
@@ -43,6 +44,8 @@ export const UserManagement = () => {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  /** #92: CSV 一括登録のパネルを開いているか */
+  const [showCsvImport, setShowCsvImport] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
   /** #115: 発行したパスワード再設定 URL（閉じると再表示できない） */
   const [resetUrl, setResetUrl] = useState<{ user: AdminUser; url: string } | null>(
@@ -179,14 +182,30 @@ export const UserManagement = () => {
           }}
         />
         <Button
+          data-testid="admin-csv-import-toggle"
+          onClick={() => {
+            setShowCsvImport(v => !v);
+            setShowCreateForm(false);
+          }}
+        >
+          {showCsvImport
+            ? t['Cancel']()
+            : t['com.affine.admin.users.csv.open']()}
+        </Button>
+        <Button
           type="primary"
-          onClick={() => setShowCreateForm(v => !v)}
+          onClick={() => {
+            setShowCreateForm(v => !v);
+            setShowCsvImport(false);
+          }}
         >
           {showCreateForm
             ? t['Cancel']()
             : t['com.affine.admin.users.add']()}
         </Button>
       </div>
+
+      {showCsvImport && <CsvImport onImported={fetchUsers} />}
 
       {showCreateForm && (
         <CreateUserForm

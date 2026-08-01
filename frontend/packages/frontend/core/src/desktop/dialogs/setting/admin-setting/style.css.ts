@@ -308,3 +308,40 @@ export const ssoRedirectUri = style({
   fontFamily: cssVar('fontFamilyMono'),
   wordBreak: 'break-all',
 });
+
+// #92: CSV の記入例。改行をそのまま見せる必要があるため、
+// ssoRedirectUri（1行のURI用）とは分けている。
+export const csvExample = style({
+  display: 'block',
+  marginTop: '6px',
+  padding: '8px 10px',
+  borderRadius: '6px',
+  background: cssVarV2('layer/background/secondary'),
+  color: cssVarV2('text/primary'),
+  fontSize: cssVar('fontXs'),
+  fontFamily: cssVar('fontFamilyMono'),
+  whiteSpace: 'pre',
+  overflowX: 'auto',
+});
+
+// #92: 検証結果のバッジ。NG は色で区別できるようにする
+// （同じ配色だと、行数が多いときに目で追えない）。
+export const csvOkBadge = style({
+  padding: '2px 8px',
+  borderRadius: '4px',
+  fontSize: cssVar('fontXs'),
+  fontWeight: 500,
+  flexShrink: 0,
+  background: cssVarV2('status/success'),
+  color: cssVarV2('button/pureWhiteText'),
+});
+
+export const csvNgBadge = style({
+  padding: '2px 8px',
+  borderRadius: '4px',
+  fontSize: cssVar('fontXs'),
+  fontWeight: 500,
+  flexShrink: 0,
+  background: cssVarV2('status/error'),
+  color: cssVarV2('button/pureWhiteText'),
+});

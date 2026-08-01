@@ -1,13 +1,26 @@
-mutation ImportUsers($input: ImportUsersInput!) {
-  importUsers(input: $input) {
-    __typename
-    ... on UserType {
-      id
+mutation adminValidateUserCsv($csv: String!) {
+  adminValidateUserCsv(csv: $csv) {
+    okCount
+    ngCount
+    rows {
+      line
+      email
       name
-      email
+      ok
+      error
     }
-    ... on UserImportFailedType {
+  }
+}
+
+mutation adminImportUsers($csv: String!) {
+  adminImportUsers(csv: $csv) {
+    okCount
+    ngCount
+    rows {
+      line
       email
+      name
+      ok
       error
     }
   }

@@ -102,3 +102,37 @@ export class AdminCreateUserInput {
   @IsOptional()
   name?: string;
 }
+
+// #92: CSV 一括登録。検証と登録で同じ形を返す（画面が同じ表で扱えるようにするため）。
+@ObjectType()
+export class CsvUserRowResult {
+  /** CSV 上の行番号（ヘッダーを1とする）。どの行が NG かを示すために必要。 */
+  @Field(() => Int)
+  line: number;
+
+  @Field()
+  email: string;
+
+  @Field({ nullable: true })
+  name?: string;
+
+  /** 検証では「登録できる見込み」、登録では「登録できた」を表す。 */
+  @Field()
+  ok: boolean;
+
+  /** NG の理由。利用者が CSV を直せるよう、行ごとに具体的に返す。 */
+  @Field({ nullable: true })
+  error?: string;
+}
+
+@ObjectType()
+export class CsvImportResult {
+  @Field(() => [CsvUserRowResult])
+  rows: CsvUserRowResult[];
+
+  @Field(() => Int)
+  okCount: number;
+
+  @Field(() => Int)
+  ngCount: number;
+}

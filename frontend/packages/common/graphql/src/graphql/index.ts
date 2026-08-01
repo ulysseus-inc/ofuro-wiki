@@ -249,6 +249,42 @@ export const isPasswordTokenValidQuery = {
 }`,
 };
 
+export const adminValidateUserCsvMutation = {
+  id: 'adminValidateUserCsvMutation' as const,
+  op: 'adminValidateUserCsv',
+  query: `mutation adminValidateUserCsv($csv: String!) {
+  adminValidateUserCsv(csv: $csv) {
+    okCount
+    ngCount
+    rows {
+      line
+      email
+      name
+      ok
+      error
+    }
+  }
+}`,
+};
+
+export const adminImportUsersMutation = {
+  id: 'adminImportUsersMutation' as const,
+  op: 'adminImportUsers',
+  query: `mutation adminImportUsers($csv: String!) {
+  adminImportUsers(csv: $csv) {
+    okCount
+    ngCount
+    rows {
+      line
+      email
+      name
+      ok
+      error
+    }
+  }
+}`,
+};
+
 export const appConfigQuery = {
   id: 'appConfigQuery' as const,
   op: 'appConfig',

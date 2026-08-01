@@ -13,7 +13,10 @@ import {
   ServerSettingType,
   BackupRecordType,
   BackupRecordList,
+  CsvImportResult,
+  CsvUserRowResult,
 } from './admin.model';
+import { parseUserCsv, CsvFormatError } from './user-csv.util';
 import GraphQLJSON from 'graphql-type-json';
 
 @Resolver()
@@ -43,6 +46,47 @@ export class AdminResolver {
   @Mutation(() => AdminUserItem)
   async adminCreateUser(@Args('input', { type: () => AdminCreateUserInput }) input: AdminCreateUserInput) {
     return this.adminService.createUser(input.email, input.password, input.name);
+  }
+
+  // #92: CSV の検証のみ行う（登録しない）。画面はこの結果を一覧表示し、
+  // Admin が確認してから adminImportUsers を呼ぶ。
+  @AdminOnly()
+  @Mutation(() => CsvImportResult)
+  async adminValidateUserCsv(
+    @Args('csv', { type: () => String }) csv: string,
+  ): Promise<CsvImportResult> {
+    const rows = this.parseCsvOrThrow(csv);
+    return this.toResult(await this.adminService.validateUserCsv(rows));
+  }
+
+  // #92: CSV の内容を登録する。検証結果は信用せず、ここでも同じ検証を行う。
+  @AdminOnly()
+  @Mutation(() => CsvImportResult)
+  async adminImportUsers(
+    @Args('csv', { type: () => String }) csv: string,
+    @CurrentUser() actor: { id: string; email: string },
+  ): Promise<CsvImportResult> {
+    const rows = this.parseCsvOrThrow(csv);
+    return this.toResult(
+      await this.adminService.importUsersFromCsv(rows, actor.email),
+    );
+  }
+
+  /** CSV の書式エラーは行単位ではなく全体の失敗として返す。 */
+  private parseCsvOrThrow(csv: string) {
+    try {
+      return parseUserCsv(csv);
+    } catch (e) {
+      if (e instanceof CsvFormatError) {
+        throw new BadRequestException(e.message);
+      }
+      throw e;
+    }
+  }
+
+  private toResult(rows: CsvUserRowResult[]): CsvImportResult {
+    const okCount = rows.filter((r) => r.ok).length;
+    return { rows, okCount, ngCount: rows.length - okCount };
   }
 
   @AdminOnly()

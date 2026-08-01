@@ -425,6 +425,191 @@ test.describe('Admin API', () => {
     await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
   });
 
+  test('【重要】CSV を検証しても登録されない（#92）', async ({ page }) => {
+    // 2段階にしている意味がここにある。検証で登録されてしまうと、
+    // 「確認してから登録する」という前提が崩れる。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `csv-validate-${Date.now()}@example.com`;
+    const csv = `email,name,password\n${email},検証 太郎,CsvPass123!`;
+
+    const result = await graphqlQuery(
+      page,
+      `mutation ($csv: String!) {
+        adminValidateUserCsv(csv: $csv) { okCount ngCount rows { line email ok error } }
+      }`,
+      { csv }
+    );
+    expect(result.data.adminValidateUserCsv.okCount).toBe(1);
+
+    // 実際には作られていない
+    const list = await graphqlQuery(
+      page,
+      `query ($search: String!) {
+        adminUserList(search: $search) { totalCount }
+      }`,
+      { search: email }
+    );
+    expect(list.data.adminUserList.totalCount).toBe(0);
+  });
+
+  test('【重要】CSV で複数ユーザーを登録でき、そのパスワードでサインインできる（#92）', async ({
+    page,
+    browser,
+  }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const stamp = Date.now();
+    const first = `csv-a-${stamp}@example.com`;
+    const second = `csv-b-${stamp}@example.com`;
+    const password = 'CsvPass123!';
+    const csv = [
+      'email,name,password',
+      `${first},"山田, 太郎",${password}`,
+      `${second},,${password}`,
+    ].join('\n');
+
+    const result = await graphqlQuery(
+      page,
+      `mutation ($csv: String!) {
+        adminImportUsers(csv: $csv) { okCount ngCount rows { line email ok error } }
+      }`,
+      { csv }
+    );
+    expect(result.errors).toBeUndefined();
+    expect(result.data.adminImportUsers.okCount).toBe(2);
+
+    // 登録できたと返ってきただけでは分からないため、実際にサインインする
+    const context = await browser.newContext();
+    const guest = await context.newPage();
+    for (const email of [first, second]) {
+      const res = await guest.request.post('/api/auth/sign-in', {
+        data: { email, password },
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.ok()).toBe(true);
+    }
+    await context.close();
+
+    // 後始末
+    const list = await graphqlQuery(
+      page,
+      `query ($search: String!) { adminUserList(search: $search) { items { id } } }`,
+      { search: `csv-` + stamp }
+    );
+    for (const item of list.data.adminUserList.items) {
+      await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${item.id}") }`);
+    }
+  });
+
+  test('【重要】NG 行があっても OK 行は登録される（#92）', async ({ page }) => {
+    // 1行の書式ミスで全部やり直しになると、数十行の CSV では運用に耐えない。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const stamp = Date.now();
+    const good = `csv-ok-${stamp}@example.com`;
+    const csv = [
+      'email,name,password',
+      `${good},登録される,CsvPass123!`,
+      `bad-email-${stamp},形式不正,CsvPass123!`,
+      `csv-weak-${stamp}@example.com,パスワード短い,short`,
+      `${good},CSV内で重複,CsvPass123!`,
+    ].join('\n');
+
+    const result = await graphqlQuery(
+      page,
+      `mutation ($csv: String!) {
+        adminImportUsers(csv: $csv) { okCount ngCount rows { line email ok error } }
+      }`,
+      { csv }
+    );
+    const data = result.data.adminImportUsers;
+    expect(data.okCount).toBe(1);
+    expect(data.ngCount).toBe(3);
+
+    // 行番号と理由が返ること（これが無いと利用者は CSV を直せない）
+    const rows = data.rows;
+    expect(rows.map((r: any) => r.line)).toEqual([2, 3, 4, 5]);
+    expect(rows[1].error).toContain('形式');
+    expect(rows[2].error).toContain('パスワード');
+    expect(rows[3].error).toContain('重複');
+
+    const list = await graphqlQuery(
+      page,
+      `query ($search: String!) { adminUserList(search: $search) { items { id } } }`,
+      { search: `csv-` + stamp }
+    );
+    for (const item of list.data.adminUserList.items) {
+      await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${item.id}") }`);
+    }
+  });
+
+  test('【重要】既存ユーザーは CSV で上書きされない（#92）', async ({
+    page,
+    browser,
+  }) => {
+    // CSV の取り違えで既存利用者のパスワードが書き換わると影響が大きい。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `csv-existing-${Date.now()}@example.com`;
+    const original = 'Original123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${original}" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const csv = `email,name,password\n${email},上書きしたい,Overwritten456!`;
+    const result = await graphqlQuery(
+      page,
+      `mutation ($csv: String!) {
+        adminImportUsers(csv: $csv) { okCount ngCount rows { ok error } }
+      }`,
+      { csv }
+    );
+    expect(result.data.adminImportUsers.okCount).toBe(0);
+    expect(result.data.adminImportUsers.rows[0].error).toContain('すでに登録');
+
+    const context = await browser.newContext();
+    const guest = await context.newPage();
+    // 元のパスワードのまま
+    const ok = await guest.request.post('/api/auth/sign-in', {
+      data: { email, password: original },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(ok.ok()).toBe(true);
+    // CSV のパスワードでは入れない
+    const ng = await guest.request.post('/api/auth/sign-in', {
+      data: { email, password: 'Overwritten456!' },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(ng.ok()).toBe(false);
+    await context.close();
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('CSV の書式エラーは全体の失敗として返る（#92）', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const result = await graphqlQuery(
+      page,
+      `mutation ($csv: String!) {
+        adminValidateUserCsv(csv: $csv) { okCount }
+      }`,
+      { csv: 'mail,password\na@example.com,CsvPass123!' }
+    );
+    expect(result.errors).toBeDefined();
+    expect(result.errors[0].message).toContain('email');
+  });
+
   test('adminServerSettings でサーバー設定を変更できる', async ({ page }) => {
     await signIn(page);
     await enterOrCreateWorkspace(page);
@@ -667,6 +852,84 @@ test.describe('Admin Panel UI', () => {
 
     await context.close();
     await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('画面から CSV を選ぶと検証結果が出て、登録できる（#92）', async ({
+    page,
+    browser,
+  }) => {
+    // API が通っていても、ボタン・ファイル選択・i18n のどれかが欠けると使えない。
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({
+      timeout: 5_000,
+    });
+    await page.getByText('ユーザー管理', { exact: true }).first().click();
+
+    await page.locator('[data-testid="admin-csv-import-toggle"]').click();
+
+    const stamp = Date.now();
+    const email = `csv-ui-${stamp}@example.com`;
+    const password = 'CsvPass123!';
+    await page.locator('[data-testid="admin-csv-file"]').setInputFiles({
+      name: 'users.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        `email,name,password\n${email},画面 太郎,${password}\nbad-${stamp},形式不正,${password}\n`,
+        'utf-8'
+      ),
+    });
+
+    // 検証結果（OK 1件 / NG 1件）が出る
+    const rows = page.locator('[data-testid="admin-csv-rows"]');
+    await expect(rows).toBeVisible({ timeout: 15_000 });
+    await expect(rows).toContainText('OK');
+    await expect(rows).toContainText('NG');
+    await expect(rows).toContainText('2行目');
+
+    // この時点ではまだ登録されていない
+    const before = await graphqlQuery(
+      page,
+      `query ($search: String!) { adminUserList(search: $search) { totalCount } }`,
+      { search: email }
+    );
+    expect(before.data.adminUserList.totalCount).toBe(0);
+
+    await page.locator('[data-testid="admin-csv-import"]').click();
+
+    // 登録され、そのパスワードでサインインできる
+    const context = await browser.newContext();
+    const guest = await context.newPage();
+    await expect
+      .poll(
+        async () => {
+          const res = await guest.request.post('/api/auth/sign-in', {
+            data: { email, password },
+            headers: { 'Content-Type': 'application/json' },
+          });
+          return res.ok();
+        },
+        { timeout: 20_000 }
+      )
+      .toBe(true);
+    await context.close();
+
+    const list = await graphqlQuery(
+      page,
+      `query ($search: String!) { adminUserList(search: $search) { items { id } } }`,
+      { search: `csv-ui-` + stamp }
+    );
+    for (const item of list.data.adminUserList.items) {
+      await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${item.id}") }`);
+    }
   });
 
   test('Admin 画面のラベルがデフォルト言語（日本語）で表示される', async ({ page }) => {

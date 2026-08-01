@@ -896,6 +896,74 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.users.add"](): string;
     /**
+      * `Import from CSV`
+      */
+    ["com.affine.admin.users.csv.open"](): string;
+    /**
+      * `The first row is the header (email,name,password). Column order does not matter. Use UTF-8, up to 500 rows per import.`
+      */
+    ["com.affine.admin.users.csv.format"](): string;
+    /**
+      * `email and password are required (password must be 8–128 characters). Leave name blank to derive it from the email address. Passwords are not generated for you. After importing, tell each user to change their password from Settings → Account → Change password.`
+      */
+    ["com.affine.admin.users.csv.rules"](): string;
+    /**
+      * `Download template`
+      */
+    ["com.affine.admin.users.csv.template"](): string;
+    /**
+      * `Choose a CSV file`
+      */
+    ["com.affine.admin.users.csv.choose"](): string;
+    /**
+      * `Could not read the CSV file`
+      */
+    ["com.affine.admin.users.csv.invalidFile"](): string;
+    /**
+      * `{{ok}} can be imported / {{ng}} cannot. Nothing has been imported yet. To fix the errors, edit the CSV and upload it again; otherwise use the button below to import.`
+      */
+    ["com.affine.admin.users.csv.resultCheck"](options: Readonly<{
+        ok: string;
+        ng: string;
+    }>): string;
+    /**
+      * `Imported: {{ok}} succeeded / {{ng}} failed`
+      */
+    ["com.affine.admin.users.csv.resultDone"](options: Readonly<{
+        ok: string;
+        ng: string;
+    }>): string;
+    /**
+      * `Line {{line}}`
+      */
+    ["com.affine.admin.users.csv.line"](options: {
+        readonly line: string;
+    }): string;
+    /**
+      * `OK`
+      */
+    ["com.affine.admin.users.csv.ok"](): string;
+    /**
+      * `NG`
+      */
+    ["com.affine.admin.users.csv.ng"](): string;
+    /**
+      * `Import {{count}} users`
+      */
+    ["com.affine.admin.users.csv.import"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Imported {{count}} users`
+      */
+    ["com.affine.admin.users.csv.done"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Import failed`
+      */
+    ["com.affine.admin.users.csv.failed"](): string;
+    /**
       * `Users ({{count}})`
       */
     ["com.affine.admin.users.count"](options: {

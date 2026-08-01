@@ -10,6 +10,12 @@ import { getAdminEmail } from '../../common/admin-email';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { deriveUserName } from '../../common/user-name.util';
 import { validatePasswordStrength } from '../../common/password.util';
+import { ParsedCsvRow } from './user-csv.util';
+import { CsvUserRowResult } from './admin.model';
+
+// メールアドレスの簡易検証。RFC 準拠の完全な判定は行わない
+// （厳密にやるほど正当なアドレスを弾く危険が増すため、明らかな誤りだけを弾く）。
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 @Injectable()
 export class AdminService {
@@ -106,6 +112,115 @@ export class AdminService {
       `Password reset directly for ${user.email} by admin ${actorEmail}`,
     );
     return true;
+  }
+
+  /**
+   * #92: CSV の各行を検証する。**登録は行わない。**
+   *
+   * 画面はこの結果を一覧表示し、Admin が確認してから登録する。
+   * 登録後に失敗行を報告する方式だと後始末が発生するため、押す前に分かるようにする。
+   */
+  async validateUserCsv(rows: ParsedCsvRow[]): Promise<CsvUserRowResult[]> {
+    // 既存ユーザーとの重複は1件ずつ問い合わせると行数分のクエリになるため、
+    // 対象メールアドレスをまとめて引く。
+    const emails = rows.map((r) => r.email.toLowerCase()).filter(Boolean);
+    const existing = await this.prisma.user.findMany({
+      where: { email: { in: emails, mode: 'insensitive' } },
+      select: { email: true },
+    });
+    const taken = new Set(existing.map((u) => u.email.toLowerCase()));
+
+    const seen = new Set<string>();
+    return rows.map((row) => {
+      const error = this.validateCsvRow(row, taken, seen);
+      if (!error) seen.add(row.email.toLowerCase());
+      return {
+        line: row.line,
+        email: row.email,
+        name: row.name || undefined,
+        ok: !error,
+        error,
+      };
+    });
+  }
+
+  /** #92: 1行分の検証。理由を1つだけ返す（利用者が直す順序を迷わないため）。 */
+  private validateCsvRow(
+    row: ParsedCsvRow,
+    taken: Set<string>,
+    seen: Set<string>,
+  ): string | undefined {
+    if (!row.email) {
+      return 'メールアドレスが空です';
+    }
+    if (!EMAIL_PATTERN.test(row.email)) {
+      return 'メールアドレスの形式が正しくありません';
+    }
+    const key = row.email.toLowerCase();
+    if (seen.has(key)) {
+      return 'この CSV 内で重複しています';
+    }
+    if (taken.has(key)) {
+      return 'すでに登録されているメールアドレスです';
+    }
+    if (!row.password) {
+      return 'パスワードが空です';
+    }
+    // 前後の空白は、区切り文字の後ろに空けた分が紛れ込んだのか、
+    // 意図した文字なのかを区別できない。黙ってどちらかに倒すと、
+    // 「CSV に書いた値でサインインできない」事故になるため直してもらう。
+    if (row.password !== row.password.trim()) {
+      return 'パスワードの前後に空白が含まれています';
+    }
+    try {
+      validatePasswordStrength(row.password);
+    } catch (e: any) {
+      return e?.message ?? 'パスワードが要件を満たしていません';
+    }
+    return undefined;
+  }
+
+  /**
+   * #92: CSV の内容を登録する。
+   *
+   * ⚠️ 画面が持っている検証結果は信用せず、**登録時にも同じ検証を行う**。
+   * 検証から登録までの間に、別の Admin が同じメールアドレスを登録している
+   * 可能性があるため。
+   *
+   * 行ごとに判定し、失敗した行があっても他の行は登録する（全件ロールバックしない）。
+   */
+  async importUsersFromCsv(
+    rows: ParsedCsvRow[],
+    actorEmail: string,
+  ): Promise<CsvUserRowResult[]> {
+    const validated = await this.validateUserCsv(rows);
+    const byLine = new Map(rows.map((r) => [r.line, r]));
+    const results: CsvUserRowResult[] = [];
+
+    for (const candidate of validated) {
+      if (!candidate.ok) {
+        results.push(candidate);
+        continue;
+      }
+      const row = byLine.get(candidate.line)!;
+      try {
+        await this.createUser(row.email, row.password, row.name || undefined);
+        results.push(candidate);
+      } catch (e: any) {
+        // 同時実行で一意制約に触れた場合もここへ来る。1行の失敗で全体は止めない。
+        results.push({
+          ...candidate,
+          ok: false,
+          error: e?.message ?? '登録できませんでした',
+        });
+      }
+    }
+
+    const created = results.filter((r) => r.ok).length;
+    this.logger.log(
+      `CSV import by admin ${actorEmail}: ${created} created, ${results.length - created} failed`,
+    );
+    return results;
   }
 
   async deleteUser(userId: string) {
