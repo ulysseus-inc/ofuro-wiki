@@ -7,6 +7,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../../prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { UserType } from '../user/user.model';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 
@@ -17,6 +18,7 @@ export class AuthEmailResolver {
     private authService: AuthService,
     private mailService: MailService,
     private prisma: PrismaService,
+    private audit: AuditService,
   ) {}
 
   @Mutation(() => Boolean)
@@ -56,6 +58,21 @@ export class AuthEmailResolver {
     });
 
     await this.mailService.deleteToken(token);
+
+    // #90: この経路は @Public()。実行者は特定できないが、
+    // **対象はトークンから分かる**（引数の userId は任意で、省略もできる）。
+    // Interceptor は結果を見られないため、ここで記録する。
+    const target = await this.prisma.user.findUnique({
+      where: { id: result.userId },
+      select: { email: true },
+    });
+    await this.audit.record({
+      action: 'user.password.reset.token',
+      actor: { id: result.userId, email: target?.email },
+      targetType: 'user',
+      targetId: result.userId,
+      targetName: target?.email,
+    });
     return true;
   }
 

@@ -1,5 +1,6 @@
 import { ObjectType, Field, Int, InputType, GraphQLISODateTime } from '@nestjs/graphql';
 import { IsEmail, IsString, IsOptional, MinLength, MaxLength } from 'class-validator';
+import GraphQLJSON from 'graphql-type-json';
 
 @ObjectType()
 export class AdminUserItem {
@@ -135,4 +136,58 @@ export class CsvImportResult {
 
   @Field(() => Int)
   ngCount: number;
+}
+
+// #90: 監査ログの一覧。
+@ObjectType()
+export class AuditLogItem {
+  @Field()
+  id: string;
+
+  @Field(() => GraphQLISODateTime)
+  createdAt: Date;
+
+  @Field()
+  action: string;
+
+  @Field({ nullable: true })
+  actorId?: string;
+
+  /** 当時のメールアドレス。利用者が削除されても残る。 */
+  @Field()
+  actorEmail: string;
+
+  @Field({ nullable: true })
+  actorName?: string;
+
+  @Field({ nullable: true })
+  targetType?: string;
+
+  @Field({ nullable: true })
+  targetId?: string;
+
+  @Field({ nullable: true })
+  targetName?: string;
+
+  @Field({ nullable: true })
+  workspaceId?: string;
+
+  @Field({ nullable: true })
+  ip?: string;
+
+  @Field({ nullable: true })
+  userAgent?: string;
+
+  /** before / after / meta の3キー。画面では整形して表示する。 */
+  @Field(() => GraphQLJSON, { nullable: true })
+  detail?: unknown;
+}
+
+@ObjectType()
+export class AuditLogList {
+  @Field(() => [AuditLogItem])
+  items: AuditLogItem[];
+
+  @Field(() => Int)
+  totalCount: number;
 }

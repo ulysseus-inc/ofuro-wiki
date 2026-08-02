@@ -8,6 +8,9 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { ScheduleModule } from '@nestjs/schedule';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { LoggingModule } from './modules/logging/logging.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { AccessLogMiddleware } from './modules/logging/access-log.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ServerConfigModule } from './modules/config/config.module';
@@ -72,6 +75,8 @@ const staticImports = [
     ...staticImports,
     AuthzModule,
     ScheduleModule.forRoot(),
+    LoggingModule,
+    AuditModule,
     // Rate limiting — 300 requests per minute per IP (self-hosted: generous limit)
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -177,6 +182,8 @@ const staticImports = [
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    // #90: アクセスログは最初に通す（後続で弾かれた要求も記録するため）
+    consumer.apply(AccessLogMiddleware).forRoutes('*');
     consumer.apply(MobileRedirectMiddleware).forRoutes('*');
   }
 }

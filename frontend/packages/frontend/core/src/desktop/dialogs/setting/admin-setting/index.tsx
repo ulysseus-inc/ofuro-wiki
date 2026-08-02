@@ -1,11 +1,18 @@
 import { UserFeatureService } from '@ofuro/core/modules/cloud/services/user-feature';
 import type { SettingTab } from '@ofuro/core/modules/dialogs/constant';
 import { useI18n } from '@ofuro/i18n';
-import { AdminIcon, SettingsIcon, SaveIcon, ResetIcon } from '@blocksuite/icons/rc';
+import {
+  AdminIcon,
+  SettingsIcon,
+  SaveIcon,
+  ResetIcon,
+  HistoryIcon,
+} from '@blocksuite/icons/rc';
 import { useLiveData, useService } from '@toeverything/infra';
 import { useEffect, useMemo } from 'react';
 
 import type { SettingSidebarItem, SettingState } from '../types';
+import { AuditLogPanel } from './audit-log-panel';
 import { BackupPanel } from './backup-panel';
 import { RestorePanel } from './restore-panel';
 import { ServerSettings } from './server-settings';
@@ -38,6 +45,12 @@ export const useAdminSettingList = (): AdminSettingList => {
         testId: 'admin-settings-trigger',
       },
       {
+        key: 'admin:audit' as SettingTab,
+        title: t['com.affine.admin.nav.audit'](),
+        icon: <HistoryIcon />,
+        testId: 'admin-audit-trigger',
+      },
+      {
         key: 'admin:backup' as SettingTab,
         title: t['com.affine.admin.nav.backup'](),
         icon: <SaveIcon />,
@@ -64,6 +77,8 @@ export const AdminSetting = ({ activeTab }: AdminSettingProps) => {
       return <UserManagement />;
     case 'admin:settings':
       return <ServerSettings />;
+    case 'admin:audit':
+      return <AuditLogPanel />;
     case 'admin:backup':
       return <BackupPanel />;
     case 'admin:restore':

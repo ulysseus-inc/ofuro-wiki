@@ -10,6 +10,7 @@ import { getAdminEmail } from '../../common/admin-email';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { deriveUserName } from '../../common/user-name.util';
 import { validatePasswordStrength } from '../../common/password.util';
+import { AuditService } from '../audit/audit.service';
 import { ParsedCsvRow } from './user-csv.util';
 import { CsvUserRowResult } from './admin.model';
 
@@ -21,7 +22,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private audit: AuditService,
+  ) {}
 
   async listUsers(search?: string, skip = 0, take = 20) {
     // #72: システム内部アカウント（マニュアルWS所有等）は外部に出さない。
@@ -107,10 +111,15 @@ export class AdminService {
       data: { passwordHash, tokenVersion: { increment: 1 } },
     });
 
-    // 誰が誰の分を設定したかを残す（監査ログ #90 の対象）。
-    this.logger.log(
-      `Password reset directly for ${user.email} by admin ${actorEmail}`,
-    );
+    // #90: 対象のメールアドレスを残したいので、ここで明示的に記録する
+    // （Interceptor では対象が UUID でしか分からない）
+    await this.audit.record({
+      action: 'user.password.reset',
+      actor: { email: actorEmail },
+      targetType: 'user',
+      targetId: userId,
+      targetName: user.email,
+    });
     return true;
   }
 
@@ -217,13 +226,20 @@ export class AdminService {
     }
 
     const created = results.filter((r) => r.ok).length;
-    this.logger.log(
-      `CSV import by admin ${actorEmail}: ${created} created, ${results.length - created} failed`,
-    );
+    // #90: 件数は結果にしか無いため、ここで記録する
+    await this.audit.record({
+      action: 'user.import',
+      actor: { email: actorEmail },
+      targetType: 'user',
+      detail: {
+        meta: { ok: created, ng: results.length - created },
+      },
+    });
     return results;
   }
 
-  async deleteUser(userId: string) {
+  /** #90: actor は監査ログに残すため必須。誰が消したか分からない記録は役に立たない。 */
+  async deleteUser(userId: string, actor: { id?: string; email: string }) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
     });
@@ -231,9 +247,33 @@ export class AdminService {
       throw new NotFoundException('User not found');
     }
 
+    // #90: 消したものの名前は**消す前にしか取れない**。
+    // UUID だけ残しても、参照先が消えているため後から何を消したのか分からない。
+    const ownedWorkspaces = await this.prisma.workspace.findMany({
+      where: { ownerId: userId },
+      select: { id: true, name: true },
+    });
+
     // Delete owned workspaces first to avoid FK constraint on ownerId
     await this.prisma.workspace.deleteMany({ where: { ownerId: userId } });
     await this.prisma.user.delete({ where: { id: userId } });
+
+    await this.audit.record({
+      action: 'user.delete',
+      actor,
+      targetType: 'user',
+      targetId: userId,
+      targetName: user.email,
+      detail: {
+        meta: {
+          // 連鎖して消えたワークスペースも残す（利用者削除に伴い黙って消える）
+          deletedWorkspaces: ownedWorkspaces.map((w) => ({
+            id: w.id,
+            name: w.name,
+          })),
+        },
+      },
+    });
     return true;
   }
 

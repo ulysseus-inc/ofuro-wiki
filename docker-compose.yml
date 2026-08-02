@@ -32,6 +32,9 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       BLOB_STORAGE_PATH: /data/blobs
       BACKUP_STORAGE_PATH: /data/backups
+      # #90: ログの保存先と保持日数（docs/logging.md）
+      LOG_STORAGE_PATH: /data/logs
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-90}
       NODE_ENV: production
       # #10: メール内リンク等に使用するベースURL
       BASE_URL: ${BASE_URL}
@@ -54,6 +57,16 @@ services:
     volumes:
       - blobdata:/data/blobs
       - ${BACKUP_HOST_PATH:-./backups}:/data/backups
+      # #90: アクセスログ・アプリケーションログの長期保持（90日）。
+      # コンテナを作り直しても消えないよう、ボリュームに置く。
+      - logdata:/data/logs
+    # #90: 標準出力は「直近の確認用」と割り切り、容量で抑える。
+    # 長期保持は上の /data/logs（日次ファイル + 日次削除）が担う。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3010/api/health"]
       interval: 30s
@@ -137,3 +150,4 @@ services:
 volumes:
   pgdata:
   blobdata:
+  logdata:

@@ -13,10 +13,14 @@ export const searchBar = style({
   gap: '8px',
   alignItems: 'center',
   marginBottom: '8px',
+  // #90: 監査ログの絞り込みは項目が多い。折り返さないと画面外へ溢れ、
+  // エクスポートボタンに手が届かなくなる
+  flexWrap: 'wrap',
 });
 
 export const searchInput = style({
   flex: 1,
+  minWidth: '180px',
   padding: '8px 12px',
   borderRadius: '8px',
   border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
@@ -344,4 +348,37 @@ export const csvNgBadge = style({
   flexShrink: 0,
   background: cssVarV2('status/error'),
   color: cssVarV2('button/pureWhiteText'),
+});
+
+// #90: 監査ログの期間指定。
+// 日付入力を2つ並べるだけでは、どちらが開始でどちらが終了か分からない。
+// ラベルと区切りを付け、幅も固定する（伸ばすと入力欄に見えない）。
+export const dateRange = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '6px',
+  flexShrink: 0,
+});
+
+export const dateRangeLabel = style({
+  fontSize: cssVar('fontSm'),
+  color: cssVarV2('text/secondary'),
+  whiteSpace: 'nowrap',
+});
+
+export const dateInput = style({
+  width: '150px',
+  flexShrink: 0,
+  padding: '8px 10px',
+  borderRadius: '8px',
+  border: `1px solid ${cssVarV2('layer/insideBorder/border')}`,
+  background: cssVarV2('layer/background/primary'),
+  fontSize: cssVar('fontSm'),
+  outline: 'none',
+  color: cssVarV2('text/primary'),
+  selectors: {
+    '&:focus': {
+      borderColor: cssVarV2('button/primary'),
+    },
+  },
 });

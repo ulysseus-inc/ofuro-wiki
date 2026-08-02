@@ -840,6 +840,212 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.nav.backup"](): string;
     /**
+      * `Audit log`
+      */
+    ["com.affine.admin.nav.audit"](): string;
+    /**
+      * `A record of who did what, and when`
+      */
+    ["com.affine.admin.audit.subtitle"](): string;
+    /**
+      * `Filter by actor email...`
+      */
+    ["com.affine.admin.audit.filter.actor"](): string;
+    /**
+      * `Filter by action (e.g. user.)...`
+      */
+    ["com.affine.admin.audit.filter.action"](): string;
+    /**
+      * `Period`
+      */
+    ["com.affine.admin.audit.filter.period"](): string;
+    /**
+      * `Start date`
+      */
+    ["com.affine.admin.audit.filter.from"](): string;
+    /**
+      * `End date`
+      */
+    ["com.affine.admin.audit.filter.to"](): string;
+    /**
+      * `Export as CSV`
+      */
+    ["com.affine.admin.audit.export"](): string;
+    /**
+      * `Export failed`
+      */
+    ["com.affine.admin.audit.exportFailed"](): string;
+    /**
+      * `Records ({{count}})`
+      */
+    ["com.affine.admin.audit.count"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `No matching records`
+      */
+    ["com.affine.admin.audit.empty"](): string;
+    /**
+      * `Could not load the audit log (this does not mean there are no records)`
+      */
+    ["com.affine.admin.audit.loadFailed"](): string;
+    /**
+      * `Actor`
+      */
+    ["com.affine.admin.audit.detail.actor"](): string;
+    /**
+      * `Time`
+      */
+    ["com.affine.admin.audit.detail.time"](): string;
+    /**
+      * `Target`
+      */
+    ["com.affine.admin.audit.detail.target"](): string;
+    /**
+      * `Sign-in failed`
+      */
+    ["com.affine.admin.audit.action.auth.signin.failed"](): string;
+    /**
+      * `Signed in`
+      */
+    ["com.affine.admin.audit.action.auth.signin"](): string;
+    /**
+      * `Signed out everywhere`
+      */
+    ["com.affine.admin.audit.action.auth.signout.all"](): string;
+    /**
+      * `Account locked`
+      */
+    ["com.affine.admin.audit.action.auth.locked"](): string;
+    /**
+      * `User created`
+      */
+    ["com.affine.admin.audit.action.user.create"](): string;
+    /**
+      * `User deleted`
+      */
+    ["com.affine.admin.audit.action.user.delete"](): string;
+    /**
+      * `Users imported`
+      */
+    ["com.affine.admin.audit.action.user.import"](): string;
+    /**
+      * `Admin role changed`
+      */
+    ["com.affine.admin.audit.action.user.admin.change"](): string;
+    /**
+      * `Password changed`
+      */
+    ["com.affine.admin.audit.action.user.password.change"](): string;
+    /**
+      * `Password reset by admin`
+      */
+    ["com.affine.admin.audit.action.user.password.reset"](): string;
+    /**
+      * `Password reset via URL`
+      */
+    ["com.affine.admin.audit.action.user.password.reset.token"](): string;
+    /**
+      * `Password URL issued`
+      */
+    ["com.affine.admin.audit.action.user.password.url"](): string;
+    /**
+      * `Sessions revoked`
+      */
+    ["com.affine.admin.audit.action.user.sessions.revoke"](): string;
+    /**
+      * `Admin access denied`
+      */
+    ["com.affine.admin.audit.action.admin.denied"](): string;
+    /**
+      * `Workspace access denied`
+      */
+    ["com.affine.admin.audit.action.workspace.denied"](): string;
+    /**
+      * `Workspace created`
+      */
+    ["com.affine.admin.audit.action.workspace.create"](): string;
+    /**
+      * `Workspace deleted`
+      */
+    ["com.affine.admin.audit.action.workspace.delete"](): string;
+    /**
+      * `Member invited`
+      */
+    ["com.affine.admin.audit.action.workspace.member.invite"](): string;
+    /**
+      * `Invitation accepted`
+      */
+    ["com.affine.admin.audit.action.workspace.member.accept"](): string;
+    /**
+      * `Invite link created`
+      */
+    ["com.affine.admin.audit.action.workspace.invite.link.create"](): string;
+    /**
+      * `Invite link revoked`
+      */
+    ["com.affine.admin.audit.action.workspace.invite.link.revoke"](): string;
+    /**
+      * `Member removed`
+      */
+    ["com.affine.admin.audit.action.workspace.member.remove"](): string;
+    /**
+      * `Left workspace`
+      */
+    ["com.affine.admin.audit.action.workspace.member.leave"](): string;
+    /**
+      * `Member role changed`
+      */
+    ["com.affine.admin.audit.action.workspace.member.role"](): string;
+    /**
+      * `Member approved`
+      */
+    ["com.affine.admin.audit.action.workspace.member.approve"](): string;
+    /**
+      * `Document edited`
+      */
+    ["com.affine.admin.audit.action.doc.update"](): string;
+    /**
+      * `Document created`
+      */
+    ["com.affine.admin.audit.action.doc.create"](): string;
+    /**
+      * `Document deleted`
+      */
+    ["com.affine.admin.audit.action.doc.delete"](): string;
+    /**
+      * `Document restored`
+      */
+    ["com.affine.admin.audit.action.doc.restore"](): string;
+    /**
+      * `Document published`
+      */
+    ["com.affine.admin.audit.action.doc.publish"](): string;
+    /**
+      * `Document unpublished`
+      */
+    ["com.affine.admin.audit.action.doc.unpublish"](): string;
+    /**
+      * `Server setting changed`
+      */
+    ["com.affine.admin.audit.action.setting.update"](): string;
+    /**
+      * `SSO settings changed`
+      */
+    ["com.affine.admin.audit.action.sso.config.update"](): string;
+    /**
+      * `Backup created`
+      */
+    ["com.affine.admin.audit.action.backup.create"](): string;
+    /**
+      * `Backup deleted`
+      */
+    ["com.affine.admin.audit.action.backup.delete"](): string;
+    /**
+      * `Audit log cleanup`
+      */
+    ["com.affine.admin.audit.action.audit.cleanup"](): string;
+    /**
       * `Restore`
       */
     ["com.affine.admin.nav.restore"](): string;

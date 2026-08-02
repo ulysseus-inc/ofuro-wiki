@@ -7,6 +7,11 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import graphqlUploadExpress from 'graphql-upload/graphqlUploadExpress.mjs';
 import { AppModule } from './app.module';
+import {
+  FileLogger,
+  resolveLogLevels,
+} from './modules/logging/file-logger';
+import { LogFileService } from './modules/logging/log-file.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AdminService } from './modules/admin/admin.service';
 import { ManualSeedService } from './modules/manual-workspace/manual-seed.service';
@@ -30,7 +35,24 @@ async function bootstrap() {
     }
   }
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // #90: 起動直後のログもファイルへ残すためバッファする
+    bufferLogs: true,
+  });
+
+  // #90: 停止時に onModuleDestroy を呼ばせる。
+  // これが無いと、集約中のドキュメント編集（最大15分ぶん）が
+  // 再起動のたびに黙って失われる。
+  app.enableShutdownHooks();
+
+  // #90: アプリケーションログを標準出力に加えてファイルへも書く。
+  // 標準出力だけだと Docker のローテート（容量基準）でしか制御できず、
+  // 「90日保持」を保証できない（docs/logging.md 5章）。
+  FileLogger.attach(app.get(LogFileService));
+  // #90: 既定では debug / verbose を出さない。1メッセージごとの記録が
+  // アプリケーションログの大半を占めるため（docs/logging.md 3章）。
+  // 調査時は LOG_LEVEL=debug で有効化する。
+  app.useLogger(new FileLogger({ logLevels: resolveLogLevels() }));
 
   // #93: リバースプロキシ配下では X-Forwarded-For からクライアントIPを解決する。
   //

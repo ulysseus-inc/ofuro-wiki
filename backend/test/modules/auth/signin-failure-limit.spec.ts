@@ -41,7 +41,7 @@ describe('AuthService — サインイン失敗の回数制限 (#93)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never);
+    } as never, { record: jest.fn() } as never);
   });
 
   const wrong = (ip = IP) => service.signIn(user.email, 'wrong-password', ip);
@@ -135,7 +135,7 @@ describe('AuthService — 自動作成時の失敗記録クリア (#93)', () => 
     };
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never);
+    } as never, { record: jest.fn() } as never);
   });
 
   it('未登録アドレスへの失敗が残っていても、作成成功後はクリアされる', async () => {

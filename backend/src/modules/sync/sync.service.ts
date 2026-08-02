@@ -67,6 +67,27 @@ export class SyncService {
     };
   }
 
+  /**
+   * #90: そのドキュメントの保存済みデータがまだ無いか（＝新規作成か）。
+   *
+   * ドキュメントはブラウザ側（Yjs）で作られ、サーバーには作成の通知が来ない。
+   * **最初の更新が届いた時点で何も無ければ新規作成**とみなすための判定。
+   * 呼び出し側が「接続ごと・ドキュメントごとに1回」に絞ること。
+   */
+  async isNewDoc(workspaceId: string, docId: string): Promise<boolean> {
+    const [snapshot, update] = await Promise.all([
+      this.prisma.docSnapshot.findFirst({
+        where: { workspaceId, docId },
+        select: { docId: true },
+      }),
+      this.prisma.docUpdate.findFirst({
+        where: { workspaceId, docId },
+        select: { id: true },
+      }),
+    ]);
+    return !snapshot && !update;
+  }
+
   async pushUpdate(
     workspaceId: string,
     docId: string,

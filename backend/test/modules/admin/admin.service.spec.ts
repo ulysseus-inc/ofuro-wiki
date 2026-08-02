@@ -18,7 +18,7 @@ describe('AdminService', () => {
         update: jest.fn().mockResolvedValue({}),
       },
     };
-    service = new AdminService(mockPrisma);
+    service = new AdminService(mockPrisma, { record: jest.fn() } as any);
   });
 
   // #92: CSV 一括登録

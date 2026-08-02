@@ -11,6 +11,7 @@ import type { Request, Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService, JwtPayload } from './auth.service';
+import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { Public } from '../../common/decorators/public.decorator';
 import { SignInDto, SignUpDto, PreflightDto } from './dto/auth.dto';
@@ -22,6 +23,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private jwtService: JwtService,
+    private audit: AuditService,
   ) {}
 
   // #93: ここは「連射・DoS の抑制」に徹する。
@@ -98,9 +100,18 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const userId = (req as any).user?.id;
-    if (userId) {
-      await this.authService.revokeAllSessions(userId);
+    const user = (req as any).user;
+    if (user?.id) {
+      await this.authService.revokeAllSessions(user.id);
+      // #90: 全端末の失効は、乗っ取り対応の痕跡として残す価値が高い
+      await this.audit.record({
+        action: 'auth.signout.all',
+        actor: { id: user.id, email: user.email, name: user.name },
+        targetType: 'user',
+        targetId: user.id,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'],
+      });
     }
     clearAuthCookies(res);
     return { success: true };

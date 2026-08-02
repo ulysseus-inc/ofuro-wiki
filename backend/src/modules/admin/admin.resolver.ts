@@ -15,9 +15,12 @@ import {
   BackupRecordList,
   CsvImportResult,
   CsvUserRowResult,
+  AuditLogList,
 } from './admin.model';
 import { parseUserCsv, CsvFormatError } from './user-csv.util';
 import GraphQLJSON from 'graphql-type-json';
+import { AuditService } from '../audit/audit.service';
+import { AuditQueryService } from '../audit/audit-query.service';
 
 @Resolver()
 export class AdminResolver {
@@ -28,6 +31,8 @@ export class AdminResolver {
     private scheduledBackupService: ScheduledBackupService,
     private mailService: MailService,
     private prisma: PrismaService,
+    private audit: AuditService,
+    private auditQuery: AuditQueryService,
   ) {}
 
   @AdminOnly()
@@ -93,8 +98,9 @@ export class AdminResolver {
   @Mutation(() => Boolean)
   async adminDeleteUser(
     @Args('userId', { type: () => String }) userId: string,
+    @CurrentUser() actor: { id: string; email: string },
   ) {
-    return this.adminService.deleteUser(userId);
+    return this.adminService.deleteUser(userId, actor);
   }
 
   @AdminOnly()
@@ -197,12 +203,69 @@ export class AdminResolver {
     );
 
     // #115: 発行された URL は、それ単体でパスワードを変更できる。
-    // 誰が誰の分を発行したかを残す（監査ログ #90 の対象）。
-    this.logger.log(
-      `Password reset URL issued for ${user.email} by admin ${actor.email}`,
-    );
+    // 誰が誰の分を発行したかを残す。対象のメールアドレスを残したいので、
+    // Interceptor ではなくここで記録する。
+    await this.audit.record({
+      action: 'user.password.url',
+      actor: { id: actor.id, email: actor.email },
+      targetType: 'user',
+      targetId: userId,
+      targetName: user.email,
+    });
 
     return this.mailService.createPasswordResetUrl(token, callbackUrl);
+  }
+
+  // #90: 監査ログの閲覧。Admin のみ。
+  @AdminOnly()
+  @Query(() => AuditLogList)
+  async adminAuditLogs(
+    @Args('actor', { nullable: true }) actor?: string,
+    @Args('action', { nullable: true }) action?: string,
+    @Args('from', { nullable: true }) from?: string,
+    @Args('to', { nullable: true }) to?: string,
+    @Args('skip', { type: () => Int, nullable: true, defaultValue: 0 })
+    skip?: number,
+    @Args('take', { type: () => Int, nullable: true, defaultValue: 50 })
+    take?: number,
+  ): Promise<AuditLogList> {
+    const result = await this.auditQuery.list(
+      { actor, action, from: parseDate(from), to: parseDate(to) },
+      skip,
+      take,
+    );
+    return {
+      items: result.items.map((item) => ({
+        ...item,
+        actorId: item.actorId ?? undefined,
+        actorName: item.actorName ?? undefined,
+        targetType: item.targetType ?? undefined,
+        targetId: item.targetId ?? undefined,
+        targetName: item.targetName ?? undefined,
+        workspaceId: item.workspaceId ?? undefined,
+        ip: item.ip ?? undefined,
+        userAgent: item.userAgent ?? undefined,
+        detail: item.detail ?? undefined,
+      })),
+      totalCount: result.totalCount,
+    };
+  }
+
+  // #90: CSV エクスポート。件数上限を設けている（全件だと応答が返らない）
+  @AdminOnly()
+  @Query(() => String)
+  async adminAuditLogsCsv(
+    @Args('actor', { nullable: true }) actor?: string,
+    @Args('action', { nullable: true }) action?: string,
+    @Args('from', { nullable: true }) from?: string,
+    @Args('to', { nullable: true }) to?: string,
+  ): Promise<string> {
+    return this.auditQuery.toCsv({
+      actor,
+      action,
+      from: parseDate(from),
+      to: parseDate(to),
+    });
   }
 
   @AdminOnly()
@@ -220,4 +283,11 @@ export class AdminResolver {
     await this.mailService.sendTestEmail(config);
     return true;
   }
+}
+
+/** 不正な日付は「指定なし」として扱う（画面の入力ミスで500にしない）。 */
+function parseDate(value?: string): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }

@@ -11,6 +11,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma.service';
+import { AuditService } from '../audit/audit.service';
+import { createDedupeWindow } from '../../common/dedupe-window.util';
 import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { validatePasswordStrength } from '../../common/password.util';
 import { deriveUserName } from '../../common/user-name.util';
@@ -72,6 +74,16 @@ const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
 const SIGNIN_MAX_FAILURES = 5;
 const SIGNIN_FAILURE_WINDOW_MS = 5 * 60 * 1000;
 
+/**
+ * #90: サインイン失敗の記録を短時間にまとめる窓。
+ *
+ * ⚠️ ここは**未認証で叩ける**。1リクエスト1行にすると、メールアドレスを
+ * 変えながら投げるだけで監査ログを無制限に膨らませられる（保持3年）。
+ * 「同じ IP・同じ理由」は1分に1回だけ記録する。
+ * 攻撃の兆候は分単位で追え、#117 の検知材料は失われない。
+ */
+const signinFailureWindow = createDedupeWindow(60 * 1000);
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -83,6 +95,9 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
+    // #90: 認証は失敗時に例外を投げるため、Interceptor では拾えない。
+    // ここで明示的に記録する（docs/logging.md 2.7）。
+    private audit: AuditService,
   ) {}
 
   /** パスワードポリシー検証（サインアップ・変更時の共通チェック）。 */
@@ -238,6 +253,18 @@ export class AuthService {
       // タイミング攻撃対策: 不在/パスワード未設定でもダミー比較で時間を均一化。
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       this.recordSigninFailure(email, ip);
+      // #90: **未登録アドレスへの試行こそ記録する。**
+      // 総当たり・アカウント列挙はここに現れる（#117 の主要な検知材料）。
+      // 記録しないと、存在しないアドレスへの大量試行が痕跡ゼロになる。
+      const reason = user ? 'no_password' : 'unknown_email';
+      if (!signinFailureWindow.shouldSkip(`${ip ?? '-'}:${reason}`)) {
+        await this.audit.record({
+          action: 'auth.signin.failed',
+          actor: { id: user?.id, email },
+          ip,
+          detail: { meta: { reason } },
+        });
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -250,6 +277,21 @@ export class AuthService {
           `until=${user.lockedUntil?.toISOString()}`,
       );
       this.recordSigninFailure(email, ip);
+      // #90: ロック後も試行は続く。ここを記録しないと
+      // **ロックした瞬間から攻撃がログ上で消える**。
+      if (!signinFailureWindow.shouldSkip(`${ip ?? '-'}:locked:${user.id}`)) {
+        await this.audit.record({
+          action: 'auth.signin.failed',
+          actor: { id: user.id, email: user.email },
+          ip,
+          detail: {
+            meta: {
+              reason: 'locked',
+              lockedUntil: user.lockedUntil?.toISOString(),
+            },
+          },
+        });
+      }
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -263,6 +305,15 @@ export class AuthService {
     // 成功したサインインは枠を消費しない（複数端末・複数タブでも締め出されない）
     this.clearSigninFailures(email, ip);
     await this.resetFailedLogins(user);
+
+    // #90: 成功も記録する。**失敗だけでは不正ログインの「成功」を追えない**。
+    // 「深夜に見慣れない IP から成功した」を後から調べられることが監査の要点。
+    // サインインは REST 経路のため、GraphQL の Interceptor では拾えない。
+    await this.audit.record({
+      action: 'auth.signin',
+      actor: { id: user.id, email: user.email, name: user.name },
+      ip,
+    });
 
     return this.generateTokenResponse(user);
   }
@@ -310,6 +361,20 @@ export class AuthService {
           `${user.email} ip=${ip ?? 'unknown'}`,
       );
     }
+
+    // #90: 失敗の検知は監査の主目的であり、#117 はこの記録の上に成り立つ
+    await this.audit.record({
+      action: shouldLock ? 'auth.locked' : 'auth.signin.failed',
+      actor: { id: user.id, email: user.email },
+      targetType: 'user',
+      targetId: user.id,
+      ip,
+      detail: {
+        meta: shouldLock
+          ? { attempts: count, lockedUntil: lockedUntil?.toISOString() }
+          : { attempts: count, max: LOGIN_MAX_FAILED_ATTEMPTS },
+      },
+    });
   }
 
   /** #93: ログイン成功・パスワードリセット完了時に失敗カウントとロックを解除する。 */
@@ -346,9 +411,26 @@ export class AuthService {
       }
       // 自動作成の経路でも、サインインが成立した以上は失敗の記録を消す
       // （signIn 側と挙動を揃える。未登録時の失敗が新規アカウントに残らないように）
-      const created = await this.signUp(email, password, undefined, ip);
-      this.clearSigninFailures(email, ip);
-      return created;
+      try {
+        const created = await this.signUp(email, password, undefined, ip);
+        this.clearSigninFailures(email, ip);
+        return created;
+      } catch (e: any) {
+        // ⚠️ 未登録メールへのサインインが**同時に2つ届く**と、両方が
+        // 「利用者が存在しない」と判定して作成へ進む
+        // （ブラウザの再送や、タブを2つ開いた場合に起きる）。
+        //
+        // 割り込みの時点で例外が2通りに分かれる。
+        //   - signUp の重複確認より後  → P2002（一意制約違反）→ 500 になっていた
+        //   - signUp の重複確認より前  → ConflictException → 409 になり、
+        //     さらに**利用者の存在を漏らす**（M-2 の方針に反する）
+        //
+        // どちらも「他方が先に作った」だけなので、サインインとしてやり直す。
+        const isDuplicate =
+          e?.code === 'P2002' || e instanceof ConflictException;
+        if (!isDuplicate) throw e;
+        return this.signIn(email, password, ip);
+      }
     }
     return this.signIn(email, password, ip);
   }
@@ -481,6 +563,12 @@ export class AuthService {
       this.logger.warn(
         `OIDC sign-in rejected (multiple accounts differ only by case): ${email} ip=${ip ?? 'unknown'}`,
       );
+      await this.audit.record({
+        action: 'auth.signin.failed',
+        actor: { email },
+        ip,
+        detail: { meta: { method: 'sso', reason: 'ambiguous_email' } },
+      });
       throw new UnauthorizedException(
         'このメールアドレスに一致するアカウントが複数あります。管理者にお問い合わせください。',
       );
@@ -494,6 +582,12 @@ export class AuthService {
         this.logger.warn(
           `OIDC sign-in rejected for system account: ${email} ip=${ip ?? 'unknown'}`,
         );
+        await this.audit.record({
+          action: 'auth.signin.failed',
+          actor: { id: user.id, email },
+          ip,
+          detail: { meta: { method: 'sso', reason: 'system_account' } },
+        });
         throw new UnauthorizedException('このアカウントではサインインできません。');
       }
 
@@ -502,11 +596,25 @@ export class AuthService {
         this.logger.warn(
           `OIDC sign-in rejected for locked account: ${email} ip=${ip ?? 'unknown'}`,
         );
+        await this.audit.record({
+          action: 'auth.signin.failed',
+          actor: { id: user.id, email },
+          ip,
+          detail: { meta: { method: 'sso', reason: 'locked' } },
+        });
         throw new UnauthorizedException('このアカウントではサインインできません。');
       }
 
       await this.resetFailedLogins(user);
       this.logger.log(`OIDC sign-in: ${email}`);
+      // #90: SSO 運用では**認証イベントがこの経路にしか流れない**。
+      // 記録しないと、SSO の導入先では監査ログに認証の記録がゼロになる。
+      await this.audit.record({
+        action: 'auth.signin',
+        actor: { id: user.id, email: user.email, name: user.name },
+        ip,
+        detail: { meta: { method: 'sso' } },
+      });
       return this.generateTokenResponse(user);
     }
 
@@ -534,6 +642,23 @@ export class AuthService {
     });
 
     this.logger.log(`OIDC sign-in: created account for ${email}`);
+    // SSO による自動作成は「いつの間にか増えたアカウント」になりうるため、
+    // 作成とサインインの両方を残す
+    await this.audit.record({
+      action: 'user.create',
+      actor: { id: created.id, email: created.email, name: created.name },
+      targetType: 'user',
+      targetId: created.id,
+      targetName: created.email,
+      ip,
+      detail: { meta: { method: 'sso', autoCreated: true } },
+    });
+    await this.audit.record({
+      action: 'auth.signin',
+      actor: { id: created.id, email: created.email, name: created.name },
+      ip,
+      detail: { meta: { method: 'sso', firstSignin: true } },
+    });
     return this.generateTokenResponse(created);
   }
 

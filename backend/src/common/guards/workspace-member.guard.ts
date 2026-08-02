@@ -8,6 +8,8 @@ import {
 import { Reflector } from '@nestjs/core';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { PrismaService } from '../../prisma.service';
+import { AuditService } from '../../modules/audit/audit.service';
+import { recordDenial } from './audit-denial.util';
 import {
   WORKSPACE_ROLE_KEY,
   WORKSPACE_ROLE_RANK,
@@ -29,6 +31,8 @@ export class WorkspaceMemberGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private prisma: PrismaService,
+    // #90: 拒否は Interceptor に届かないため、ここで記録する
+    private audit: AuditService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -92,12 +96,23 @@ export class WorkspaceMemberGuard implements CanActivate {
     }
 
     if (!member || member.status !== 'accepted') {
+      // 非メンバーによるワークスペースへのアクセス試行。#117 の検知対象
+      await recordDenial(this.audit, context, 'workspace.denied', {
+        workspaceId,
+        reason: member ? `status_${member.status}` : 'not_member',
+      });
       throw new ForbiddenException('Access denied to this workspace');
     }
 
     const userRank = WORKSPACE_ROLE_RANK[member.role] ?? 0;
     const requiredRank = WORKSPACE_ROLE_RANK[requirement.minRole] ?? 0;
     if (userRank < requiredRank) {
+      await recordDenial(this.audit, context, 'workspace.denied', {
+        workspaceId,
+        reason: 'insufficient_role',
+        role: member.role,
+        required: requirement.minRole,
+      });
       throw new ForbiddenException(
         `Requires '${requirement.minRole}' role in this workspace`,
       );

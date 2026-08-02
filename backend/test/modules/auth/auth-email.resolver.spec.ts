@@ -36,6 +36,7 @@ describe('AuthEmailResolver', () => {
       mockAuthService,
       mockMailService,
       mockPrisma,
+      { record: jest.fn() } as never,
     );
   });
 

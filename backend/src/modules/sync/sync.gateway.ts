@@ -14,6 +14,9 @@ import { SyncService } from './sync.service';
 import { AwarenessService } from './awareness.service';
 import { IndexerService } from '../search/indexer.service';
 import { PrismaService } from '../../prisma.service';
+import { DocEditAggregator } from '../audit/doc-edit-aggregator';
+import { AuditService } from '../audit/audit.service';
+import { LogFileService } from '../logging/log-file.service';
 import { parseAllowedOrigins } from '../../common/cors';
 
 // AFFiNE protocol: response wrapper
@@ -44,12 +47,42 @@ function awarenessRoom(
   return `${spaceType}:${spaceId}:${docId}:awareness`;
 }
 
-interface ConnectionState {
-  userId?: string;
-  spaces: Set<string>; // joined "spaceType:spaceId" keys
-  awarenessDocs: Set<string>; // joined "spaceType:spaceId:docId" keys
+/**
+ * #90: 利用者が作ったドキュメントではない内部データか。
+ *
+ * ワークスペースのルート doc（docId が spaceId と同じ）や、
+ * `db$` / `userdata$` などの内部ドキュメントは編集操作として記録しない。
+ */
+function isInternalDoc(spaceId: string, docId: string): boolean {
+  return docId === spaceId || docId.includes('$');
 }
 
+interface ConnectionState {
+  userId?: string;
+  // #90: 監査ログ・アクセスログに「当時の利用者」を残すため保持する。
+  // 接続時の1クエリで取得し、以降は使い回す（毎回引くと打鍵ごとの負荷になる）。
+  userEmail?: string;
+  userName?: string;
+  spaces: Set<string>; // joined "spaceType:spaceId" keys
+  awarenessDocs: Set<string>; // joined "spaceType:spaceId:docId" keys
+  // #90: この接続で既に「新規作成かどうか」を判定済みのドキュメント（"spaceId:docId"）。
+  // 判定は1回だけでよく、打鍵のたびに問い合わせないためのもの。
+  checkedDocs: Set<string>;
+  connectedAt: number;
+  ip?: string;
+  userAgent?: string;
+}
+
+/**
+ * ⚠️ #90: **1メッセージごとに出る記録は `logger.debug()` を使うこと。**
+ *
+ * `space:push-doc-update` は打鍵のたび、`space:load-doc-timestamps` は
+ * 定期的に飛ぶ。これらを `logger.log()`（INFO）で出すと、実測で
+ * **アプリケーションログの77%**を占め、100名規模では1日140MBに達した。
+ *
+ * INFO に残すのは接続・切断・join・リストアモードなど、**接続単位の事象**のみ。
+ * 詳細が必要なときは LOG_LEVEL=debug で有効化する（docs/logging.md 3章）。
+ */
 @WebSocketGateway({
   cors: {
     // #2/M-3: HTTP と同じ ALLOWED_ORIGINS ポリシーに従う（従来は any-origin 固定だった）
@@ -102,6 +135,12 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private jwtService: JwtService,
     private indexerService: IndexerService,
     private prisma: PrismaService,
+    // #90: 編集は打鍵のたびに飛ぶため、15分ごとに1件へ集約して記録する
+    private editAggregator: DocEditAggregator,
+    // #90: WebSocket の接続・切断はアクセスログへ。engine.io のハンドシェイクは
+    // Express を通らないため、ミドルウェアでは記録できない
+    private logFile: LogFileService,
+    private audit: AuditService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -131,13 +170,34 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
       }
 
+      // ⚠️ X-Forwarded-For は**プロキシ配下でのみ**信じる。
+      // 直接公開しているサーバーで無条件に信じると、クライアントが任意の値を
+      // 送れるため、**偽装した IP が監査ログに残る**（HTTP 側の trust proxy と
+      // 同じ考え方・main.ts 参照）。
+      const forwarded = process.env.TRUST_PROXY
+        ? (client.handshake.headers['x-forwarded-for'] as string)
+            ?.split(',')[0]
+            ?.trim()
+        : undefined;
+      const ip = forwarded || client.handshake.address;
+      const userAgent = client.handshake.headers['user-agent'];
       this.connections.set(client.id, {
         userId,
         spaces: new Set(),
         awarenessDocs: new Set(),
+        checkedDocs: new Set(),
+        connectedAt: Date.now(),
+        ip,
+        userAgent,
       });
       this.logger.log(
         `Client connected: ${client.id} (user: ${userId || 'anonymous'})`,
+      );
+      this.logFile.write(
+        'access',
+        `${new Date().toISOString()} WS-CONNECT ${client.id} ip=${ip ?? '-'} user=${
+          userId ?? '-'
+        } ua="${(userAgent ?? '').slice(0, 255)}"`,
       );
 
       // L-1: 接続登録後に tokenVersion を検証。検証が完了する（または失効が
@@ -148,10 +208,18 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const verificationPromise = this.prisma.user
           .findUnique({
             where: { id: check.sub },
-            select: { tokenVersion: true },
+            // #90: 監査ログ用に当時のメールアドレス・氏名も取る（追加クエリを避ける）
+            select: { tokenVersion: true, email: true, name: true },
           })
           .then((user) => {
             const isValid = !!user && user.tokenVersion === check.tv;
+            if (isValid) {
+              const conn = this.connections.get(client.id);
+              if (conn) {
+                conn.userEmail = user.email;
+                conn.userName = user.name ?? undefined;
+              }
+            }
             if (!isValid) {
               this.logger.warn(`Disconnecting ${client.id}: token revoked`);
               client.disconnect(true);
@@ -186,6 +254,15 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
     this.connections.delete(client.id);
     this.logger.log(`Client disconnected: ${client.id}`);
+    if (conn) {
+      const seconds = Math.round((Date.now() - conn.connectedAt) / 1000);
+      this.logFile.write(
+        'access',
+        `${new Date().toISOString()} WS-DISCONNECT ${client.id} ${seconds}s ip=${
+          conn.ip ?? '-'
+        } user=${conn.userId ?? '-'} email=${conn.userEmail ?? '-'}`,
+      );
+    }
   }
 
   // ─── space:join ──────────────────────────────────────────────
@@ -263,7 +340,7 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ): Promise<
     WsResponse<{ missing: string; state: string; timestamp: number }>
   > {
-    this.logger.log(
+    this.logger.debug(
       `space:load-doc from ${client.id}: spaceType=${data.spaceType} spaceId=${data.spaceId} docId=${data.docId} hasStateVector=${!!data.stateVector}`,
     );
 
@@ -292,7 +369,7 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         stateVector,
       );
 
-      this.logger.log(
+      this.logger.debug(
         `space:load-doc response for ${data.docId}: missing=${result.missing.length}bytes state=${result.state.length}bytes`,
       );
 
@@ -343,9 +420,14 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return err('ACCESS_DENIED', 'Access denied to this space');
     }
 
-    this.logger.log(
+    this.logger.debug(
       `space:push-doc-update from ${client.id}: docId=${data.docId} updateSize=${data.update.length}chars`,
     );
+
+    // #90: 監査ログの記録が、利用者の編集を巻き込んで失敗してはいけない。
+    // ⚠️ ここで例外を投げると handler が抜けて ack が返らず、**その更新が保存されない**。
+    // 監査ログのために利用者のデータを失うのは本末転倒（fail-open の方針）。
+    await this.recordEditAudit(conn, data.spaceType, data.spaceId, data.docId);
 
     try {
       const update = Buffer.from(data.update, 'base64');
@@ -398,7 +480,7 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody()
     data: { spaceType: string; spaceId: string; timestamp?: number },
   ): Promise<WsResponse<Record<string, number>>> {
-    this.logger.log(
+    this.logger.debug(
       `space:load-doc-timestamps from ${client.id}: spaceId=${data.spaceId} after=${data.timestamp ?? 'none'}`,
     );
 
@@ -420,7 +502,7 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.spaceId,
         data.timestamp,
       );
-      this.logger.log(
+      this.logger.debug(
         `space:load-doc-timestamps response: ${Object.keys(timestamps).length} docs`,
       );
       return ok(timestamps);
@@ -455,7 +537,127 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return err('ACCESS_DENIED', 'Access denied to this space');
     }
 
+    // #90: タイトルは**消す前にしか取れない**。docId だけ残しても
+    // 「何を消したのか」が後から分からない。
+    const meta =
+      conn.userId && data.spaceType === 'workspace'
+        ? await this.prisma.docMeta
+            .findFirst({
+              where: { workspaceId: data.spaceId, docId: data.docId },
+              select: { title: true },
+            })
+            .catch(() => null)
+        : null;
+
     await this.syncService.deleteDoc(data.spaceId, data.docId);
+
+    // #90: 消えた事実は最も追跡価値が高い。削除は明確なイベントなので1件ずつ残す
+    if (
+      conn.userId &&
+      data.spaceType === 'workspace' &&
+      !isInternalDoc(data.spaceId, data.docId)
+    ) {
+      await this.recordDocAudit(
+        conn,
+        'doc.delete',
+        data.spaceId,
+        data.docId,
+        meta?.title ?? undefined,
+      );
+    }
+  }
+
+  /**
+   * #90: 編集の監査ログ（新規作成の判定＋集約）。
+   *
+   * **例外を外へ出さない。** この処理の失敗で利用者の更新が失われないようにする。
+   */
+  private async recordEditAudit(
+    conn: ConnectionState,
+    spaceType: string,
+    spaceId: string,
+    docId: string,
+  ): Promise<void> {
+    if (!conn.userId || spaceType !== 'workspace') return;
+    // 内部ドキュメント（ワークスペースのルート、db$/userdata$ 等）は
+    // 利用者の操作ではない。記録すると1ページ編集で複数行が立ち、
+    // しかも名前が無い UUID だけの行になって一覧が読めなくなる
+    if (isInternalDoc(spaceId, docId)) return;
+
+    try {
+      // ドキュメントはブラウザ側（Yjs）で作られ、サーバーには「作成した」という
+      // 通知が来ない。**最初の更新が届いた時点で保存済みデータが無ければ新規作成**
+      // とみなす。判定は**接続ごと・ドキュメントごとに1回だけ**行う
+      // （打鍵のたびに問い合わせると、集約で減らした負荷を打ち消してしまう）。
+      //
+      // ⚠️ キーに spaceId を含める。docId だけだと、同じ接続で別ワークスペースの
+      // 同じ docId に触れたとき、2つ目の doc.create が落ちる
+      const key = `${spaceId}:${docId}`;
+      if (!conn.checkedDocs.has(key)) {
+        conn.checkedDocs.add(key);
+        if (await this.syncService.isNewDoc(spaceId, docId)) {
+          await this.recordDocAudit(conn, 'doc.create', spaceId, docId);
+        }
+      }
+
+      // 接続直後の検証が終わる前に編集が届くと email が未設定になりうる。
+      // 「誰が編集したか分からない記録」を残さないよう、その場合だけ引き直す
+      if (!conn.userEmail) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: conn.userId },
+          select: { email: true, name: true },
+        });
+        if (user) {
+          conn.userEmail = user.email;
+          conn.userName = user.name ?? undefined;
+        }
+      }
+
+      this.editAggregator.track({
+        actorId: conn.userId,
+        actorEmail: conn.userEmail ?? 'unknown',
+        actorName: conn.userName ?? undefined,
+        workspaceId: spaceId,
+        docId,
+      });
+    } catch (e) {
+      this.logger.error(
+        `監査ログの記録に失敗しました (doc=${docId}): ${(e as Error).message}`,
+      );
+    }
+  }
+
+  /** #90: ドキュメント操作の監査ログ。当時の利用者を残すため email を補う。 */
+  private async recordDocAudit(
+    conn: ConnectionState,
+    action: string,
+    workspaceId: string,
+    docId: string,
+    targetName?: string,
+  ): Promise<void> {
+    if (!conn.userEmail && conn.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: conn.userId },
+        select: { email: true, name: true },
+      });
+      if (user) {
+        conn.userEmail = user.email;
+        conn.userName = user.name ?? undefined;
+      }
+    }
+    await this.audit.record({
+      action,
+      actor: {
+        id: conn.userId,
+        email: conn.userEmail,
+        name: conn.userName,
+      },
+      targetType: 'doc',
+      targetId: docId,
+      targetName,
+      workspaceId,
+      ip: conn.ip,
+    });
   }
 
   // ─── space:join-awareness ────────────────────────────────────

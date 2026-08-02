@@ -51,7 +51,7 @@ describe('AuthService — ログイン試行回数制限とロックアウト (#
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never);
+    } as never, { record: jest.fn() } as never);
   });
 
   const signInWrong = (ip = '203.0.113.1') =>
@@ -180,7 +180,7 @@ describe('AuthService — アカウント作成の回数制限 (#93)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never);
+    } as never, { record: jest.fn() } as never);
   });
 
   it('同一IPからは1時間に10件までしか作成できない', async () => {

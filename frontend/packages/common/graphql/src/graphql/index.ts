@@ -285,6 +285,36 @@ export const adminImportUsersMutation = {
 }`,
 };
 
+export const adminAuditLogsQuery = {
+  id: 'adminAuditLogsQuery' as const,
+  op: 'adminAuditLogs',
+  query: `query adminAuditLogs($actor: String, $action: String, $from: String, $to: String, $skip: Int, $take: Int) {
+  adminAuditLogs(actor: $actor, action: $action, from: $from, to: $to, skip: $skip, take: $take) {
+    totalCount
+    items {
+      id
+      createdAt
+      action
+      actorEmail
+      actorName
+      targetType
+      targetId
+      targetName
+      ip
+      detail
+    }
+  }
+}`,
+};
+
+export const adminAuditLogsCsvQuery = {
+  id: 'adminAuditLogsCsvQuery' as const,
+  op: 'adminAuditLogsCsv',
+  query: `query adminAuditLogsCsv($actor: String, $action: String, $from: String, $to: String) {
+  adminAuditLogsCsv(actor: $actor, action: $action, from: $from, to: $to)
+}`,
+};
+
 export const appConfigQuery = {
   id: 'appConfigQuery' as const,
   op: 'appConfig',

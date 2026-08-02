@@ -46,7 +46,7 @@ describe('AuthService — OIDC サインイン (#89)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never);
+    } as never, { record: jest.fn() } as never);
   });
 
   afterEach(() => {

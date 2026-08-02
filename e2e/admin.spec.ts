@@ -610,6 +610,172 @@ test.describe('Admin API', () => {
     expect(result.errors[0].message).toContain('email');
   });
 
+  test('【重要】管理操作が監査ログに記録される（#90）', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `audit-target-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    // 記録は成功後に非同期で書かれるため、現れるまで待つ
+    await expect
+      .poll(
+        async () => {
+          const result = await graphqlQuery(
+            page,
+            `query { adminAuditLogs(action: "user.create", take: 20) {
+              items { action actorEmail targetId detail }
+            } }`
+          );
+          return result.data.adminAuditLogs.items.some(
+            (i: any) => i.targetId === userId
+          );
+        },
+        { timeout: 15_000 }
+      )
+      .toBe(true);
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】監査ログにパスワードが残らない（#90）', async ({ page }) => {
+    // 引数をそのまま記録すると、パスワードを保存しない設計が意味を失う
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `audit-secret-${Date.now()}@example.com`;
+    const password = 'SuperSecret999!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    await expect
+      .poll(
+        async () => {
+          const result = await graphqlQuery(
+            page,
+            `query { adminAuditLogs(action: "user.", take: 50) { items { detail } } }`
+          );
+          return JSON.stringify(result.data.adminAuditLogs.items);
+        },
+        { timeout: 15_000 }
+      )
+      .not.toContain(password);
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】Admin 以外による管理操作の試行が記録される（#90）', async ({
+    page,
+    browser,
+  }) => {
+    // Guard の拒否は Interceptor に届かない。ここが記録されないと
+    // 「誰が管理操作を試みたか」が永久に分からない（#117 の土台）
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `audit-denied-${Date.now()}@example.com`;
+    const password = 'TestPass123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const context = await browser.newContext();
+    const memberPage = await context.newPage();
+    await memberPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    await memberPage.goto('/');
+    // 一般利用者が管理操作を試みる（拒否される）
+    await graphqlQuery(memberPage, `query { adminUserList { totalCount } }`);
+    await context.close();
+
+    await expect
+      .poll(
+        async () => {
+          const result = await graphqlQuery(
+            page,
+            `query { adminAuditLogs(action: "admin.denied", take: 20) {
+              items { actorEmail detail }
+            } }`
+          );
+          return result.data.adminAuditLogs.items.some(
+            (i: any) => i.actorEmail === email
+          );
+        },
+        { timeout: 15_000 }
+      )
+      .toBe(true);
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('【重要】監査ログは Admin 以外が読めない（#90）', async ({
+    page,
+    browser,
+  }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const email = `audit-reader-${Date.now()}@example.com`;
+    const password = 'TestPass123!';
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "${password}" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const context = await browser.newContext();
+    const memberPage = await context.newPage();
+    await memberPage.request.post('/api/auth/sign-in', {
+      data: { email, password },
+      headers: { 'Content-Type': 'application/json' },
+    });
+    await memberPage.goto('/');
+
+    const result = await graphqlQuery(
+      memberPage,
+      `query { adminAuditLogs(take: 5) { totalCount } }`
+    );
+    expect(result.errors).toBeDefined();
+    expect(result.data?.adminAuditLogs).toBeFalsy();
+
+    await context.close();
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
+  });
+
+  test('監査ログを CSV でエクスポートできる（#90）', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+
+    const result = await graphqlQuery(
+      page,
+      `query { adminAuditLogsCsv(action: "user.") }`
+    );
+    expect(result.errors).toBeUndefined();
+    const csv: string = result.data.adminAuditLogsCsv;
+    expect(csv.split('\n')[0]).toContain('"日時"');
+    // 数式として解釈される値が素通りしていないこと
+    expect(csv).not.toMatch(/^"=/m);
+  });
+
   test('adminServerSettings でサーバー設定を変更できる', async ({ page }) => {
     await signIn(page);
     await enterOrCreateWorkspace(page);
@@ -930,6 +1096,55 @@ test.describe('Admin Panel UI', () => {
     for (const item of list.data.adminUserList.items) {
       await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${item.id}") }`);
     }
+  });
+
+  test('監査ログ画面が開き、記録と詳細が見られる（#90）', async ({ page }) => {
+    // API が通っていても、タブ・一覧・詳細のどれかが欠けると使えない
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    // 記録を1件作っておく
+    const email = `audit-ui-${Date.now()}@example.com`;
+    const created = await graphqlQuery(
+      page,
+      `mutation {
+        adminCreateUser(input: { email: "${email}", password: "TestPass123!" }) { id }
+      }`
+    );
+    const userId = created.data.adminCreateUser.id;
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    await page.locator('[data-testid="admin-audit-trigger"]').click();
+
+    const list = page.locator('[data-testid="audit-log-list"]');
+    await expect(list).toBeVisible({ timeout: 15_000 });
+    // 操作名は利用者の言語で表示する。生の action 名（user.create）を
+    // 期待値にすると、日本語化した時点で「機能は正しいのに落ちる」テストになる
+    await expect(list).toContainText('ユーザー作成', { timeout: 15_000 });
+
+    // 実行者で絞り込める
+    await page.locator('[data-testid="audit-filter-actor"]').fill('e2e-test');
+    await expect(list).toContainText('e2e-test@ofuro-wiki.local', {
+      timeout: 15_000,
+    });
+
+    // 行をクリックすると詳細が出る
+    await list.locator('div').filter({ hasText: 'ユーザー作成' }).first().click();
+    await expect(page.locator('[data-testid="audit-detail"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await graphqlQuery(page, `mutation { adminDeleteUser(userId: "${userId}") }`);
   });
 
   test('Admin 画面のラベルがデフォルト言語（日本語）で表示される', async ({ page }) => {

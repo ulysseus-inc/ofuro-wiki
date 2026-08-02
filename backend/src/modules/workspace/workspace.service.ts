@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../mail/mail.service';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class WorkspaceService {
@@ -9,6 +10,7 @@ export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private mailService: MailService,
+    private audit: AuditService,
   ) {}
 
   async createWorkspace(userId: string, name?: string) {
@@ -36,10 +38,27 @@ export class WorkspaceService {
       where: { id: workspaceId },
     });
     if (!workspace) throw new NotFoundException('Workspace not found');
+    // #90: 画面・CSV・絞り込みはすべて actorEmail を見る。
+    // id だけ渡すと actorEmail が 'anonymous' になり、実行者を追えない
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
     if (workspace.ownerId !== userId) {
       throw new ForbiddenException('Only the owner can delete a workspace');
     }
     await this.prisma.workspace.delete({ where: { id: workspaceId } });
+
+    // #90: 名前は**消す前にしか取れない**。UUID だけ残しても、
+    // 参照先が消えているため後から何を消したのか分からない。
+    await this.audit.record({
+      action: 'workspace.delete',
+      actor: { id: userId, email: actor?.email, name: actor?.name },
+      targetType: 'workspace',
+      targetId: workspaceId,
+      targetName: workspace.name ?? undefined,
+      workspaceId,
+    });
     return true;
   }
 
