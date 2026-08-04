@@ -254,6 +254,47 @@ export class AuthService {
     this.signinFailures.delete(this.signinKey(email, ip));
   }
 
+  /**
+   * 「アカウントが無い／パスワードが設定されていない」ための失敗を記録する。
+   *
+   * ⚠️ **この処理を通らない経路を作らないこと。**
+   * サインインの入口は `signInOrSignUp` で、未登録アドレスは
+   * **`signIn` に到達しないまま終わる経路がある**
+   * （`AUTH_SIGNIN_AUTOCREATE=false` または登録クローズ時）。
+   * 以前はこの記録を `signIn` の中だけに置いていたため、
+   * **本番の推奨構成でだけ、列挙が監査ログにもカウンタにも残らなかった。**
+   * 開発環境は自動作成が有効でこの経路を通らず、実環境に出すまで気づけなかった。
+   *
+   * @param userId 利用者が存在する場合のみ渡す（パスワード未設定のケース）
+   */
+  private async recordMissingAccountAttempt(
+    email: string,
+    ip: string | undefined,
+    userId?: string,
+  ): Promise<void> {
+    // #90: **未登録アドレスへの試行こそ記録する。**
+    // 総当たり・アカウント列挙はここに現れる（#117 の主要な検知材料）。
+    // 記録しないと、存在しないアドレスへの大量試行が痕跡ゼロになる。
+    const reason = userId ? 'no_password' : 'unknown_email';
+
+    // #117 検知条件D: 存在しないアドレスへの試行を数える。
+    //
+    // ⚠️ **重複抑止の外で数える。** 直下の抑止キーは `IP + 理由` であり
+    // アドレスを含まないため、1つの IP からの列挙は監査ログ上ほぼ消える。
+    // ここで全件数えることで、記録量を増やさずに列挙を検知できる
+    // （docs/intrusion-detection.md 2.2）。
+    if (!userId) this.attackCounter.recordUnknownEmail(ip);
+
+    if (signinFailureWindow.shouldSkip(`${ip ?? '-'}:${reason}`)) return;
+
+    await this.audit.record({
+      action: 'auth.signin.failed',
+      actor: { id: userId, email },
+      ip,
+      detail: { meta: { reason } },
+    });
+  }
+
   async signIn(email: string, password: string, ip?: string) {
     // #93: 失敗が続いている場合は、パスワード照合（bcrypt）に入る前に打ち切る。
     // 存在しないアドレスでも同様に数えるため、応答からアカウントの有無は判別できない。
@@ -264,27 +305,7 @@ export class AuthService {
       // タイミング攻撃対策: 不在/パスワード未設定でもダミー比較で時間を均一化。
       await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       this.recordSigninFailure(email, ip);
-      // #90: **未登録アドレスへの試行こそ記録する。**
-      // 総当たり・アカウント列挙はここに現れる（#117 の主要な検知材料）。
-      // 記録しないと、存在しないアドレスへの大量試行が痕跡ゼロになる。
-      const reason = user ? 'no_password' : 'unknown_email';
-
-      // #117 検知条件D: 存在しないアドレスへの試行を数える。
-      //
-      // ⚠️ **重複抑止の外で数える。** 直下の抑止キーは `IP + 理由` であり
-      // アドレスを含まないため、1つの IP からの列挙は監査ログ上ほぼ消える。
-      // ここで全件数えることで、記録量を増やさずに列挙を検知できる
-      // （docs/intrusion-detection.md 2.2）。
-      if (!user) this.attackCounter.recordUnknownEmail(ip);
-
-      if (!signinFailureWindow.shouldSkip(`${ip ?? '-'}:${reason}`)) {
-        await this.audit.record({
-          action: 'auth.signin.failed',
-          actor: { id: user?.id, email },
-          ip,
-          detail: { meta: { reason } },
-        });
-      }
+      await this.recordMissingAccountAttempt(email, ip, user?.id);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -427,6 +448,9 @@ export class AuthService {
         // 揃えるため、不在時もダミーハッシュで比較してから 401 を返す。
         await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
         this.recordSigninFailure(email, ip);
+        // ⚠️ ここは `signIn` に到達せずに終わる。記録を忘れると、
+        // **本番の推奨構成でだけアカウント列挙が痕跡ゼロになる**（#117 条件D）。
+        await this.recordMissingAccountAttempt(email, ip);
         throw new UnauthorizedException('Invalid credentials');
       }
       // 自動作成の経路でも、サインインが成立した以上は失敗の記録を消す
