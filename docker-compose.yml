@@ -41,6 +41,34 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       # sign-in での未登録メール自動作成を無効化する場合は false（既定: true）
       AUTH_SIGNIN_AUTOCREATE: ${AUTH_SIGNIN_AUTOCREATE:-true}
+      # #93: リバースプロキシ(Caddy/Nginx)配下で実IPを取得するための段数。
+      #
+      # ⚠️ **未設定だと壊れ方が静か。** IP は記録され続けるため、それが接続元なのか
+      # プロキシのIPなのか、見ただけでは分からない。実害は3つある。
+      #   - 監査ログの発信元が全部プロキシのIPになる（誰の操作か追えない）
+      #   - レート制限が「利用者ごと」ではなく全員の合計で働く
+      #     （1人の連続失敗で全員が締め出される）
+      #   - #117 の通知が「攻撃元IPを遮断」と案内するのに、そのIPが取れない
+      #
+      # 直接インターネットに公開している場合は設定しないこと（XFF を偽装される）。
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      # #117: 不審なログイン試行の検知（docs/intrusion-detection.md 6章）。
+      # 未設定なら既定値で動く。運用しながら調整する。
+      ALERT_DISABLED: ${ALERT_DISABLED:-}
+      ALERT_WINDOW_MINUTES: ${ALERT_WINDOW_MINUTES:-}
+      ALERT_LOCK_THRESHOLD: ${ALERT_LOCK_THRESHOLD:-}
+      ALERT_SPRAY_ACCOUNT_THRESHOLD: ${ALERT_SPRAY_ACCOUNT_THRESHOLD:-}
+      ALERT_THROTTLE_THRESHOLD: ${ALERT_THROTTLE_THRESHOLD:-}
+      ALERT_UNKNOWN_EMAIL_THRESHOLD: ${ALERT_UNKNOWN_EMAIL_THRESHOLD:-}
+      ALERT_RESOLVE_QUIET_MINUTES: ${ALERT_RESOLVE_QUIET_MINUTES:-}
+      # ⚠️ アバターは**ファイルとして保存し、そこから配信する**。
+      # 既定の ./data/avatars（コンテナ内）のままだと、コンテナを作り直すたびに
+      # 消える。DB の avatar_url は残るため、**画像だけが 404 になる**。
+      AVATAR_STORAGE_PATH: /data/avatars
+      # #34: バックアップ(pg_dump)専用の接続。未設定なら MIGRATE / DATABASE_URL を使う
+      BACKUP_DATABASE_URL: ${DOCKER_BACKUP_DATABASE_URL:-}
+      # 既定の表示言語（未設定なら ja）
+      DEFAULT_LANGUAGE: ${DEFAULT_LANGUAGE:-}
       # #2: CORS — * で全許可、ドメイン指定で絞り込み
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
       # #87: APP_VERSION はここで指定しない。
@@ -60,6 +88,8 @@ services:
       # #90: アクセスログ・アプリケーションログの長期保持（90日）。
       # コンテナを作り直しても消えないよう、ボリュームに置く。
       - logdata:/data/logs
+      # アバター画像。ボリュームが無いとコンテナ再作成で消える（上の注記を参照）。
+      - avatardata:/data/avatars
     # #90: 標準出力は「直近の確認用」と割り切り、容量で抑える。
     # 長期保持は上の /data/logs（日次ファイル + 日次削除）が担う。
     logging:
@@ -151,3 +181,4 @@ volumes:
   pgdata:
   blobdata:
   logdata:
+  avatardata:
