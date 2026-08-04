@@ -52,6 +52,7 @@ import type { AffineTextStyleAttributes } from '@blocksuite/affine-shared/types'
 import {
   createDefaultDoc,
   isInsideBlockByFlavour,
+  notifyFileOpenFailed,
   openSingleFileWith,
   type Signal,
   translateSlashItem,
@@ -477,7 +478,13 @@ const contentMediaToolGroup: KeyboardToolPanelGroup = {
         const model = selectedModels?.[0];
         if (!model) return;
 
-        const file = await openSingleFileWith();
+        let file: File | null;
+        try {
+          file = await openSingleFileWith();
+        } catch (err) {
+          notifyFileOpenFailed(std, err);
+          return;
+        }
         if (!file) return;
 
         await addSiblingAttachmentBlocks(std, [file], model);
@@ -1099,7 +1106,13 @@ export const defaultKeyboardToolbarConfig: KeyboardToolbarConfig = {
         const model = selectedModels?.[0];
         if (!model) return;
 
-        const file = await openSingleFileWith();
+        let file: File | null;
+        try {
+          file = await openSingleFileWith();
+        } catch (err) {
+          notifyFileOpenFailed(std, err);
+          return;
+        }
         if (!file) return;
 
         await addSiblingAttachmentBlocks(std, [file], model);

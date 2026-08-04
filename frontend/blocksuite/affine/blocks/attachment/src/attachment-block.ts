@@ -25,6 +25,7 @@ import {
 } from '@blocksuite/affine-shared/services';
 import {
   formatSize,
+  notifyFileOpenFailed,
   openSingleFileWith,
   translateSlashItem,
 } from '@blocksuite/affine-shared/utils';
@@ -157,7 +158,13 @@ export class AttachmentBlockComponent extends CaptionedBlockComponent<Attachment
     const state = this.resourceController.state$.peek();
     if (state.uploading) return;
 
-    const file = await openSingleFileWith();
+    let file: File | null;
+    try {
+      file = await openSingleFileWith();
+    } catch (err) {
+      notifyFileOpenFailed(this.std, err);
+      return;
+    }
     if (!file) return;
 
     const sourceId = await this.std.store.blobSync.set(file);

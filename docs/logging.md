@@ -176,9 +176,15 @@ model AuditLog {
 | `sso.config.update` | ✅ | ✅ | — | Interceptor |
 | `backup.create` / `backup.delete` | ✅ | ✅ | — | Interceptor |
 | `audit.cleanup` | — | — | — | AuditService（`system`） |
+| `security.alert` | — | ✅※ | ✅※ | IntrusionDetectionService（`system`） |
+| `security.alert.resolved` | — | ✅※ | ✅※ | 同上 |
 
 ※ `auth.signin.failed` の実行者は**入力されたメールアドレス**（存在しない場合もそのまま残す）。
 ※ `user.password.reset.token` は `@Public()` のため実行者を特定できず、**対象＝実行者**として記録する。
+※ `security.alert` 系は**システムが出す**ため実行者は `system`。対象はロックされたアカウント
+（種別A）のみで、種別B・C・D は対象を特定しないため入らない。
+検知内容は `detail.meta`（種別・深刻度・観測値・発信元・**メール送信の結果**）。
+詳細は [`intrusion-detection.md`](intrusion-detection.md)。
 
 #### この表の使い方
 

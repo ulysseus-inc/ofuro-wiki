@@ -218,6 +218,7 @@ describe('操作名の翻訳 (#90)', () => {
       'backup.',
       'sso.',
       'audit.',
+      'security.',
     ];
     const actions = new Set<string>();
     for (const file of collect(root)) {
@@ -310,6 +311,7 @@ describe('記録一覧（マトリクス）の整合 (#90)', () => {
       'backup.',
       'sso.',
       'audit.',
+      'security.',
     ];
     const collect = (dir: string): string[] =>
       fs.readdirSync(dir, { withFileTypes: true }).flatMap((e: any) => {

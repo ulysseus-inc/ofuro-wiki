@@ -3,6 +3,24 @@ import { PrismaService } from '../../prisma.service';
 import { createTransport, Transporter } from 'nodemailer';
 import { randomBytes } from 'crypto';
 
+/**
+ * 接続の最初から TLS を張るポート（SMTPS）。
+ *
+ * | ポート | 方式 | secure |
+ * |---|---|---|
+ * | 587 / 25 | **STARTTLS**（平文で接続してから TLS へ切り替える） | `false` |
+ * | **465** | **SSL/TLS**（最初から TLS） | **`true`** |
+ *
+ * ⚠️ **`secure: false` を固定してはいけない。** 465 では接続そのものが成立せず、
+ * 「設定したのにメールが届かない」状態になる。しかも
+ * `Mail service enabled` はログに出るため、**設定は正しいように見える。**
+ */
+const IMPLICIT_TLS_PORT = 465;
+
+export function useImplicitTls(port: number): boolean {
+  return port === IMPLICIT_TLS_PORT;
+}
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -17,10 +35,11 @@ export class MailService {
 
     if (host && port) {
       const ignoreTLS = process.env.MAILER_IGNORE_TLS === 'true';
+      const portNumber = parseInt(port, 10);
       this.transporter = createTransport({
         host,
-        port: parseInt(port, 10),
-        secure: false,
+        port: portNumber,
+        secure: useImplicitTls(portNumber),
         auth:
           process.env.MAILER_USER && process.env.MAILER_PASSWORD
             ? {
@@ -30,7 +49,11 @@ export class MailService {
             : undefined,
         tls: ignoreTLS ? { rejectUnauthorized: false } : undefined,
       });
-      this.logger.log(`Mail service enabled (host: ${host}:${port})`);
+      // どちらの方式で繋ぐかを残す。届かないときの切り分けで最初に見る情報
+      this.logger.log(
+        `Mail service enabled (host: ${host}:${port}, ` +
+          `${useImplicitTls(portNumber) ? 'SSL/TLS' : 'STARTTLS'})`,
+      );
     } else {
       this.logger.warn(
         'Mail service disabled: MAILER_HOST or MAILER_PORT not configured',
@@ -225,7 +248,9 @@ export class MailService {
     const testTransporter = createTransport({
       host: config.host,
       port: config.port,
-      secure: false,
+      // ⚠️ 本番の接続と同じ判定にする。ここだけ違うと
+      // 「テストは通るのに本番では届かない」（またはその逆）になる
+      secure: useImplicitTls(config.port),
       auth:
         config.username && config.password
           ? { user: config.username, pass: config.password }
@@ -302,6 +327,58 @@ export class MailService {
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * #117: 不審なログイン試行の検知を Admin へ通知する。
+   *
+   * **プレーンテキストで送る。** 対処手順を読ませるものであり、装飾に意味がない。
+   * HTML メールを警戒する環境でも確実に読める方を優先する。
+   *
+   * 宛先は BCC。Admin 同士に他の Admin のアドレスを見せる必要がない。
+   *
+   * ⚠️ **受理された宛先と拒否された宛先を返す。**
+   * 一部の宛先が届かなくても `sendMail` は例外を投げない。
+   * 「送った」だけを記録すると、**退職者の Admin アカウントが残っていて不達**
+   * といった状況で、**記録上は成功に見えるのに誰も気づいていない**状態になる。
+   */
+  async sendSecurityAlert(
+    recipients: string[],
+    subject: string,
+    body: string,
+  ): Promise<{ delivered: number; rejected: number }> {
+    this.ensureEnabled();
+
+    const info = await this.transporter!.sendMail({
+      from: this.sender,
+      to: this.sender,
+      bcc: recipients,
+      subject,
+      text: body,
+    });
+
+    // 差出人自身（to）が accepted に入るため、宛先として渡した分だけを数える
+    const wanted = new Set(recipients.map((r) => r.toLowerCase()));
+    const countOf = (list: unknown): number =>
+      Array.isArray(list)
+        ? list.filter((a) =>
+            wanted.has(String((a as any)?.address ?? a).toLowerCase()),
+          ).length
+        : 0;
+
+    const delivered = countOf(info?.accepted);
+    const rejected = countOf(info?.rejected);
+
+    if (rejected > 0) {
+      this.logger.warn(
+        `Security alert email: ${delivered} delivered, ${rejected} rejected ` +
+          `(rejected addresses are likely stale admin accounts)`,
+      );
+    } else {
+      this.logger.log(`Security alert email sent to ${delivered} admin(s)`);
+    }
+
+    return { delivered, rejected };
   }
 
   async sendInvitationEmail(

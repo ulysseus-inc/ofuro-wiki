@@ -8,6 +8,7 @@ process.env.LOG_STORAGE_PATH = tmpDir;
 process.env.LOG_RETENTION_DAYS = '90';
 
 import { LogFileService } from '../../../src/modules/logging/log-file.service';
+import { readWhenContains } from '../../helpers/wait-for';
 
 /** 指定日数前の日付のログファイルを作る */
 function makeLogFile(kind: string, daysAgo: number): string {
@@ -37,19 +38,22 @@ describe('LogFileService (#90)', () => {
 
     const today = new Date().toISOString().slice(0, 10);
     const file = path.join(tmpDir, `access-${today}.log`);
-    await new Promise((r) => setTimeout(r, 50));
-    expect(fs.readFileSync(file, 'utf-8')).toBe('line-1\nline-2\n');
+    // 分割して書かれる可能性があるため、最後の行が現れるまで待つ
+    expect(await readWhenContains(file, 'line-2')).toBe('line-1\nline-2\n');
   });
 
   it('種別ごとに別のファイルへ書く', async () => {
     service.write('access', 'a');
     service.write('app', 'b');
     service.onModuleDestroy();
-    await new Promise((r) => setTimeout(r, 50));
 
     const today = new Date().toISOString().slice(0, 10);
-    expect(fs.existsSync(path.join(tmpDir, `access-${today}.log`))).toBe(true);
-    expect(fs.existsSync(path.join(tmpDir, `app-${today}.log`))).toBe(true);
+    expect(
+      await readWhenContains(path.join(tmpDir, `access-${today}.log`), 'a'),
+    ).toBe('a\n');
+    expect(
+      await readWhenContains(path.join(tmpDir, `app-${today}.log`), 'b'),
+    ).toBe('b\n');
   });
 
   // 「90日保持しています」と言える状態にするのが目的（docs/logging.md 5章）
@@ -172,12 +176,12 @@ describe('LogFileService (#90)', () => {
       // 圧縮後に書いた内容が、当日のファイルへ入ること
       service.write('access', 'after-rotation');
       service.onModuleDestroy();
-      await new Promise((r) => setTimeout(r, 50));
 
       const today = new Date().toISOString().slice(0, 10);
       const todayFile = path.join(tmpDir, `access-${today}.log`);
-      expect(fs.existsSync(todayFile)).toBe(true);
-      expect(fs.readFileSync(todayFile, 'utf-8')).toContain('after-rotation');
+      expect(await readWhenContains(todayFile, 'after-rotation')).toContain(
+        'after-rotation',
+      );
     });
 
     it('削除時も掴んだままのストリームを閉じる', () => {

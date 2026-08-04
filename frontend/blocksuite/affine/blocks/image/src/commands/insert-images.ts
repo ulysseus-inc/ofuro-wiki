@@ -1,4 +1,7 @@
-import { getImageFilesFromLocal } from '@blocksuite/affine-shared/utils';
+import {
+  getImageFilesFromLocal,
+  notifyFileOpenFailed,
+} from '@blocksuite/affine-shared/utils';
 import type { Command } from '@blocksuite/std';
 import type { BlockModel } from '@blocksuite/store';
 
@@ -24,7 +27,15 @@ export const insertImagesCommand: Command<
 
   return next({
     insertedImageIds: getImageFilesFromLocal()
-      .then(files => addSiblingImageBlocks(std, files, targetModel, placement))
+      // ファイル選択の失敗をここで受け止める。呼び出し元は insertedImageIds を
+      // await するため、未処理の rejection にすると「押しても何も起きない」状態になる
+      .catch((err: unknown) => {
+        notifyFileOpenFailed(std, err);
+        return null;
+      })
+      .then(files =>
+        files ? addSiblingImageBlocks(std, files, targetModel, placement) : []
+      )
       .then(result => {
         if (
           result.length &&

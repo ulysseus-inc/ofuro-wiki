@@ -10,6 +10,7 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { LoggingModule } from './modules/logging/logging.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { SecurityModule } from './modules/security/security.module';
 import { AccessLogMiddleware } from './modules/logging/access-log.middleware';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
@@ -77,6 +78,8 @@ const staticImports = [
     ScheduleModule.forRoot(),
     LoggingModule,
     AuditModule,
+    // #117: 不審なログイン試行の検知と通知（docs/intrusion-detection.md）
+    SecurityModule,
     // Rate limiting — 300 requests per minute per IP (self-hosted: generous limit)
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }]),
     GraphQLModule.forRoot<ApolloDriverConfig>({

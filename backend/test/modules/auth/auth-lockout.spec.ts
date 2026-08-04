@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../../../src/modules/auth/auth.service';
+import { AttackCounterService } from '../../../src/modules/security/attack-counter.service';
 import type { PrismaService } from '../../../src/prisma.service';
 
 /**
@@ -51,7 +52,7 @@ describe('AuthService — ログイン試行回数制限とロックアウト (#
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never, { record: jest.fn() } as never);
+    } as never, { record: jest.fn() } as never, new AttackCounterService());
   });
 
   const signInWrong = (ip = '203.0.113.1') =>
@@ -180,7 +181,7 @@ describe('AuthService — アカウント作成の回数制限 (#93)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never, { record: jest.fn() } as never);
+    } as never, { record: jest.fn() } as never, new AttackCounterService());
   });
 
   it('同一IPからは1時間に10件までしか作成できない', async () => {

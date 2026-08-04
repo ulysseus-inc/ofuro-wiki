@@ -1468,18 +1468,28 @@ test.describe('インポート × Undo の安全性', () => {
     const dialog = page.locator('[data-testid="import-dialog"]');
     await expect(dialog).toBeVisible({ timeout: 10_000 });
 
-    // Chromium は File System Access API(showOpenFilePicker) を使うため Playwright の
-    // filechooser では捕捉できない。無効化して <input type=file> フォールバックに倒す。
-    await page.evaluate(() => {
-      // @ts-expect-error テスト用にネイティブピッカーを無効化
-      window.showOpenFilePicker = undefined;
-    });
+    // ファイル選択は <input type=file> に一本化してある（Issue #86 / docs/import.md）。
+    // 以前は File System Access API を使う経路があり、Playwright の filechooser で
+    // 捕捉できないため、テスト側で showOpenFilePicker を無効化していた。
+    // その結果「本番で実際に使われる経路だけがテストされない」状態になり、
+    // WSL 上のファイルを選ぶと失敗する不具合を検知できなかった。
+    // 細工を外したので、以下は本番と同じ経路を通る。
 
     // Markdown インポート項目をクリック → ファイル選択を差し込む
     const [chooser] = await Promise.all([
       page.waitForEvent('filechooser'),
       page.locator('[data-testid="editor-option-menu-import-markdown-files"]').first().click(),
     ]);
+
+    // accept に拡張子が含まれること。MIME だけだと、.md に MIME を登録していない OS
+    // （Windows が典型）でファイル選択ダイアログに .md が一件も表示されない。
+    // ファイル入力は選択完了時に DOM から取り除かれるため、ここで検査する。
+    const acceptAttr = await page
+      .locator('input.affine-upload-input')
+      .first()
+      .getAttribute('accept');
+    expect(acceptAttr, `accept に拡張子が無い: ${acceptAttr}`).toContain('.md');
+
     await chooser.setFiles({
       name: 'regression-import.md',
       mimeType: 'text/markdown',
@@ -1507,6 +1517,69 @@ test.describe('インポート × Undo の安全性', () => {
     await expect(page.locator(`text=${marker}`)).toBeVisible({ timeout: 10_000 });
     // 「ページが開けない」系のエラー表示が出ていないこと
     await expect(page.locator('text=Page root not found')).toHaveCount(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8.5 ファイル選択ダイアログ経由の画像アップロード
+//
+// 既存の画像テスト（13章）はクリップボード貼り付け経由で、ファイル選択を通らない。
+// ファイル選択は `openFilesWith` に一本化してあり（Issue #86 / docs/import.md）、
+// インポートと画像アップロードが同じ経路を共有するため、こちらも押さえておく。
+// ---------------------------------------------------------------------------
+test.describe('画像アップロード（ファイル選択経由）', () => {
+  test('スラッシュメニューの画像から選んだファイルが挿入される', async ({ sharedPage: page }) => {
+    // 4×4 の赤い PNG
+    const TEST_PNG = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEElEQVR4nGP4z8AARwzEcQCukw/x0F8jngAAAABJRU5ErkJggg==',
+      'base64'
+    );
+
+    if (!page.url().includes('/workspace/')) {
+      await signInViaAPI(page);
+    }
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+    await expect(page.locator('[data-block-is-title]')).toBeVisible({ timeout: 10_000 });
+
+    // 本文にフォーカスしてスラッシュメニューを開く
+    const paragraph = page.locator('[data-block-id] .inline-editor').first();
+    await paragraph.click();
+    await page.keyboard.press('/');
+    await page.waitForTimeout(1_000);
+
+    // 絞り込まずに項目を直接指す。日本語UIでは英語名（image）で絞り込めないため
+    // （画像の項目に searchAlias が配線されていない）。
+    // affine-slash-menu 要素自体は hidden 判定になるので、項目の文言で待つ。
+    const imageItem = page.locator('text=画像を挿入する。').first();
+    await expect(imageItem).toBeVisible({ timeout: 5_000 });
+
+    // 画像の項目をクリック → ファイル選択ダイアログが開く
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      imageItem.click(),
+    ]);
+
+    // 画像の accept にも拡張子が入っていること（MIME だけでは OS によって選べない）
+    const acceptAttr = await page
+      .locator('input.affine-upload-input')
+      .first()
+      .getAttribute('accept');
+    expect(acceptAttr, `accept に拡張子が無い: ${acceptAttr}`).toContain('.png');
+
+    await chooser.setFiles({
+      name: 'e2e-picker-image.png',
+      mimeType: 'image/png',
+      buffer: TEST_PNG,
+    });
+
+    // 画像ブロックが挿入され、実際に表示されること
+    await expect(page.locator('img[src^="blob:"], img[src^="data:"]').first()).toBeVisible({
+      timeout: 30_000,
+    });
   });
 });
 

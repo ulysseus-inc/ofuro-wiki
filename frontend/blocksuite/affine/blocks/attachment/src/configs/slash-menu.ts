@@ -1,4 +1,7 @@
-import { openSingleFileWith } from '@blocksuite/affine-shared/utils';
+import {
+  notifyFileOpenFailed,
+  openSingleFileWith,
+} from '@blocksuite/affine-shared/utils';
 import {
   translateGroupStr,
   translateSlashItem,
@@ -28,7 +31,14 @@ export const attachmentSlashMenuConfig: SlashMenuConfig = {
           model.store.schema.flavourSchemaMap.has('affine:attachment'),
         action: ({ std, model }) => {
           (async () => {
-            const file = await openSingleFileWith();
+            let file: File | null;
+            try {
+              file = await openSingleFileWith();
+            } catch (err) {
+              // console だけだと利用者には失敗が見えない
+              notifyFileOpenFailed(std, err);
+              return;
+            }
             if (!file) return;
 
             await addSiblingAttachmentBlocks(std, [file], model);
@@ -51,7 +61,14 @@ export const attachmentSlashMenuConfig: SlashMenuConfig = {
           model.store.schema.flavourSchemaMap.has('affine:attachment'),
         action: ({ std, model }) => {
           (async () => {
-            const file = await openSingleFileWith();
+            let file: File | null;
+            try {
+              file = await openSingleFileWith();
+            } catch (err) {
+              // console だけだと利用者には失敗が見えない
+              notifyFileOpenFailed(std, err);
+              return;
+            }
             if (!file) return;
 
             await addSiblingAttachmentBlocks(std, [file], model);

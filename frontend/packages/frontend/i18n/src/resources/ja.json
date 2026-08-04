@@ -244,6 +244,8 @@
   "com.affine.admin.audit.action.backup.create": "バックアップ作成",
   "com.affine.admin.audit.action.backup.delete": "バックアップ削除",
   "com.affine.admin.audit.action.audit.cleanup": "監査ログの自動削除",
+  "com.affine.admin.audit.action.security.alert": "不審なログイン試行の検知",
+  "com.affine.admin.audit.action.security.alert.resolved": "不審なログイン試行の終息",
   "com.affine.admin.nav.restore": "リストア",
   "com.affine.admin.server.subtitle": "サーバー全体の設定を行います",
   "com.affine.admin.server.general": "一般",

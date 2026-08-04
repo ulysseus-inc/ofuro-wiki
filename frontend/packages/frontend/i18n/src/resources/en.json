@@ -248,6 +248,8 @@
   "com.affine.admin.audit.action.backup.create": "Backup created",
   "com.affine.admin.audit.action.backup.delete": "Backup deleted",
   "com.affine.admin.audit.action.audit.cleanup": "Audit log cleanup",
+  "com.affine.admin.audit.action.security.alert": "Suspicious sign-in activity detected",
+  "com.affine.admin.audit.action.security.alert.resolved": "Suspicious sign-in activity resolved",
   "com.affine.admin.nav.restore": "Restore",
   "com.affine.admin.server.subtitle": "Configure server-wide settings",
   "com.affine.admin.server.general": "General",

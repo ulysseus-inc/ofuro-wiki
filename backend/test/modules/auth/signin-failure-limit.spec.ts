@@ -1,6 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { AuthService } from '../../../src/modules/auth/auth.service';
+import { AttackCounterService } from '../../../src/modules/security/attack-counter.service';
 import type { PrismaService } from '../../../src/prisma.service';
 
 /**
@@ -41,7 +42,7 @@ describe('AuthService — サインイン失敗の回数制限 (#93)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never, { record: jest.fn() } as never);
+    } as never, { record: jest.fn() } as never, new AttackCounterService());
   });
 
   const wrong = (ip = IP) => service.signIn(user.email, 'wrong-password', ip);
@@ -135,7 +136,7 @@ describe('AuthService — 自動作成時の失敗記録クリア (#93)', () => 
     };
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never, { record: jest.fn() } as never);
+    } as never, { record: jest.fn() } as never, new AttackCounterService());
   });
 
   it('未登録アドレスへの失敗が残っていても、作成成功後はクリアされる', async () => {

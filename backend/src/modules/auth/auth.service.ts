@@ -17,6 +17,7 @@ import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { validatePasswordStrength } from '../../common/password.util';
 import { deriveUserName } from '../../common/user-name.util';
 import { isAdminEmail } from '../../common/admin-email';
+import { AttackCounterService } from '../security/attack-counter.service';
 
 export interface JwtPayload {
   sub: string;
@@ -98,6 +99,8 @@ export class AuthService {
     // #90: 認証は失敗時に例外を投げるため、Interceptor では拾えない。
     // ここで明示的に記録する（docs/logging.md 2.7）。
     private audit: AuditService,
+    // #117: 存在しないアドレスへの試行を数える（検知条件D）
+    private attackCounter: AttackCounterService,
   ) {}
 
   /** パスワードポリシー検証（サインアップ・変更時の共通チェック）。 */
@@ -207,6 +210,14 @@ export class AuthService {
     );
 
     if (recent.length >= SIGNIN_MAX_FAILURES) {
+      // #117 検知条件C: **この 429 こそ総当たり攻撃で最も多く出る。**
+      //
+      // ⚠️ ここはパスワード照合の前であり、監査ログにも残らない
+      // （auth.signin.failed は照合まで進んだ場合にしか記録されない）。
+      // 数えないと、攻撃者が速度を落とすだけで条件Cを完全に回避できる
+      // （ガードの制限 60回/5分 に達しないため、そちらの 429 も出ない）。
+      this.attackCounter.recordThrottled(ip);
+
       this.logger.warn(
         `Sign-in rate limit exceeded: ${email} ip=${ip ?? 'unknown'} ` +
           `(${recent.length} failures in the last ${SIGNIN_FAILURE_WINDOW_MS / 60000} min)`,
@@ -257,6 +268,15 @@ export class AuthService {
       // 総当たり・アカウント列挙はここに現れる（#117 の主要な検知材料）。
       // 記録しないと、存在しないアドレスへの大量試行が痕跡ゼロになる。
       const reason = user ? 'no_password' : 'unknown_email';
+
+      // #117 検知条件D: 存在しないアドレスへの試行を数える。
+      //
+      // ⚠️ **重複抑止の外で数える。** 直下の抑止キーは `IP + 理由` であり
+      // アドレスを含まないため、1つの IP からの列挙は監査ログ上ほぼ消える。
+      // ここで全件数えることで、記録量を増やさずに列挙を検知できる
+      // （docs/intrusion-detection.md 2.2）。
+      if (!user) this.attackCounter.recordUnknownEmail(ip);
+
       if (!signinFailureWindow.shouldSkip(`${ip ?? '-'}:${reason}`)) {
         await this.audit.record({
           action: 'auth.signin.failed',

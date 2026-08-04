@@ -1,12 +1,45 @@
-import { ExecutionContext, Injectable } from '@nestjs/common';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { ExecutionContext, Inject, Injectable } from '@nestjs/common';
+import {
+  ThrottlerGuard,
+  type ThrottlerLimitDetail,
+} from '@nestjs/throttler';
 import { GqlExecutionContext } from '@nestjs/graphql';
+import { AttackCounterService } from '../../modules/security/attack-counter.service';
 
 /** #93: メールアドレス単位でも数えるエンドポイント（サインイン系） */
 const EMAIL_SCOPED_PATHS = ['/api/auth/sign-in'];
 
 @Injectable()
 export class GqlThrottlerGuard extends ThrottlerGuard {
+  /**
+   * #117: 拒否した回数を数えるためだけに使う。
+   * ガード本体の判定には一切関与しない（数えられなくても拒否は続ける）。
+   */
+  @Inject(AttackCounterService)
+  private readonly attackCounter!: AttackCounterService;
+
+  /**
+   * #117: レート制限で弾いた回数を数える（検知条件C）。
+   *
+   * **429 はアクセスログにステータスコードとして残るだけで、集計できない。**
+   * 監査ログに1件ずつ書くと攻撃中に大量発生して DB が膨らむため、
+   * メモリ上のカウンタに計上する（docs/intrusion-detection.md 2.1）。
+   *
+   * ⚠️ ここで例外を出してはいけない。計上に失敗しても**拒否は必ず行う**。
+   */
+  protected async throwThrottlingException(
+    context: ExecutionContext,
+    throttlerLimitDetail: ThrottlerLimitDetail,
+  ): Promise<void> {
+    try {
+      const { req } = this.getRequestResponse(context);
+      this.attackCounter?.recordThrottled((req as any)?.ip);
+    } catch {
+      // 数えられなくても拒否は続ける
+    }
+    return super.throwThrottlingException(context, throttlerLimitDetail);
+  }
+
   getRequestResponse(context: ExecutionContext) {
     const contextType = context.getType<string>();
 

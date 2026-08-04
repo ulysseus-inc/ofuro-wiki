@@ -7,11 +7,14 @@ process.env.LOG_STORAGE_PATH = tmpDir;
 
 import { LogFileService } from '../../../src/modules/logging/log-file.service';
 import { FileLogger } from '../../../src/modules/logging/file-logger';
+import { readWhenContains } from '../../helpers/wait-for';
 
 describe('FileLogger の値の整形 (#90)', () => {
-  const read = () => {
+  // ⚠️ ログファイルはテストをまたいで追記される。「空でないこと」で待つと
+  // 前のテストが書いた内容を読んでしまうため、必ず期待する文字列で待つ
+  const read = (needle: string) => {
     const today = new Date().toISOString().slice(0, 10);
-    return fs.readFileSync(path.join(tmpDir, `app-${today}.log`), 'utf-8');
+    return readWhenContains(path.join(tmpDir, `app-${today}.log`), needle);
   };
 
   // JSON.stringify は循環参照で例外を投げる。printMessages は write() の
@@ -28,8 +31,7 @@ describe('FileLogger の値の整形 (#90)', () => {
     expect(() => logger.log(circular)).not.toThrow();
 
     service.onModuleDestroy();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(read()).toContain('ワークスペース');
+    expect(await read('ワークスペース')).toContain('ワークスペース');
   });
 
   // JSON.stringify(new Error('x')) は '{}' になり、メッセージが消える
@@ -41,8 +43,7 @@ describe('FileLogger の値の整形 (#90)', () => {
     logger.log(new Error('接続できませんでした'));
 
     service.onModuleDestroy();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(read()).toContain('接続できませんでした');
+    expect(await read('接続できませんでした')).toContain('接続できませんでした');
   });
 });
 
@@ -54,12 +55,11 @@ describe('FileLogger のスタックトレース (#90)', () => {
 
     logger.error('何かが壊れました', 'Error: boom\n    at somewhere.ts:42:7');
     service.onModuleDestroy();
-    await new Promise((r) => setTimeout(r, 50));
 
     const today = new Date().toISOString().slice(0, 10);
-    const content = fs.readFileSync(
+    const content = await readWhenContains(
       path.join(tmpDir, `app-${today}.log`),
-      'utf-8',
+      'at somewhere.ts:42:7',
     );
     expect(content).toContain('何かが壊れました');
     // 障害調査で最も必要な情報。落とすと原因が追えない

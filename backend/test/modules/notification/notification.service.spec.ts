@@ -1,4 +1,5 @@
 import { NotificationService } from '../../../src/modules/notification/notification.service';
+import { flushAsync, waitForCall } from '../../helpers/wait-for';
 
 describe('NotificationService', () => {
   let service: NotificationService;
@@ -65,8 +66,8 @@ describe('NotificationService', () => {
         data: expect.objectContaining({ type: 'Comment' }),
       });
 
-      // Wait for async email sending
-      await new Promise((r) => setTimeout(r, 50));
+      // 撃ちっぱなしのメール送信を待つ（固定スリープは負荷で不安定になる / #139）
+      await waitForCall(mockMailService.sendCommentNotificationEmail, 'メールが送信されなかった');
 
       expect(mockMailService.sendCommentNotificationEmail).toHaveBeenCalledWith({
         recipientEmail: 'target@example.com',
@@ -89,7 +90,8 @@ describe('NotificationService', () => {
         });
 
       await service.createCommentNotification('actor-1', 'target-1', 'ws-1', mockDoc);
-      await new Promise((r) => setTimeout(r, 50));
+      // 否定形なので呼び出しは待てない。保留中の非同期処理を流しきってから確認する
+      await flushAsync();
 
       expect(mockMailService.sendCommentNotificationEmail).not.toHaveBeenCalled();
     });
@@ -117,7 +119,7 @@ describe('NotificationService', () => {
         data: expect.objectContaining({ type: 'Mention' }),
       });
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForCall(mockMailService.sendMentionNotificationEmail, 'メールが送信されなかった');
 
       expect(mockMailService.sendMentionNotificationEmail).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -150,7 +152,7 @@ describe('NotificationService', () => {
         data: expect.objectContaining({ type: 'CommentMention' }),
       });
 
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForCall(mockMailService.sendMentionNotificationEmail, 'メールが送信されなかった');
 
       expect(mockMailService.sendMentionNotificationEmail).toHaveBeenCalled();
     });
@@ -167,7 +169,8 @@ describe('NotificationService', () => {
       });
 
       await service.createCommentNotification('actor-1', 'target-1', 'ws-1', mockDoc);
-      await new Promise((r) => setTimeout(r, 50));
+      // 否定形なので呼び出しは待てない。保留中の非同期処理を流しきってから確認する
+      await flushAsync();
 
       expect(mockMailService.sendCommentNotificationEmail).not.toHaveBeenCalled();
     });
@@ -189,7 +192,7 @@ describe('NotificationService', () => {
       });
 
       await service.createCommentNotification('actor-1', 'target-1', 'ws-1', mockDoc);
-      await new Promise((r) => setTimeout(r, 50));
+      await waitForCall(mockMailService.sendCommentNotificationEmail, 'メールが送信されなかった');
 
       expect(mockMailService.sendCommentNotificationEmail).toHaveBeenCalledWith(
         expect.objectContaining({

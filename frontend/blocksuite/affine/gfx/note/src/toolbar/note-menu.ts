@@ -7,6 +7,7 @@ import { TelemetryProvider } from '@blocksuite/affine-shared/services';
 import type { NoteChildrenFlavour } from '@blocksuite/affine-shared/types';
 import {
   getImageFilesFromLocal,
+  notifyFileOpenFailed,
   openSingleFileWith,
 } from '@blocksuite/affine-shared/utils';
 import { EdgelessToolbarToolMixin } from '@blocksuite/affine-widget-edgeless-toolbar';
@@ -56,13 +57,25 @@ export class EdgelessNoteMenu extends EdgelessToolbarToolMixin(LitElement) {
 
   private async _addImages() {
     this._imageLoading = true;
-    const imageFiles = await getImageFilesFromLocal();
-    const ids = await addImages(this.edgeless.std, imageFiles, {
-      maxWidth: MAX_IMAGE_WIDTH,
-    });
-    this._imageLoading = false;
-    this.gfx.tool.setTool(DefaultTool);
-    this.gfx.selection.set({ elements: ids });
+    // 失敗しても必ず戻す。戻さないと読み込み中の表示が消えなくなる
+    try {
+      let imageFiles: File[];
+      try {
+        imageFiles = await getImageFilesFromLocal();
+      } catch (err) {
+        // ファイル選択の失敗だけをここで扱う。後続の追加処理の失敗を
+        // 「ファイルを開けませんでした」と誤って伝えないため
+        notifyFileOpenFailed(this.edgeless.std, err);
+        return;
+      }
+      const ids = await addImages(this.edgeless.std, imageFiles, {
+        maxWidth: MAX_IMAGE_WIDTH,
+      });
+      this.gfx.tool.setTool(DefaultTool);
+      this.gfx.selection.set({ elements: ids });
+    } finally {
+      this._imageLoading = false;
+    }
   }
 
   private _onHandleLinkButtonClick() {
@@ -139,7 +152,13 @@ export class EdgelessNoteMenu extends EdgelessToolbarToolMixin(LitElement) {
               .activeMode=${'background'}
               .tooltip=${'File'}
               @click=${async () => {
-                const file = await openSingleFileWith();
+                let file: File | null;
+                try {
+                  file = await openSingleFileWith();
+                } catch (err) {
+                  notifyFileOpenFailed(this.edgeless.std, err);
+                  return;
+                }
                 if (!file) return;
                 await addAttachments(this.edgeless.std, [file]);
                 this.gfx.tool.setTool(DefaultTool);

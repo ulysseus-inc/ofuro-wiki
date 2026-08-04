@@ -1,5 +1,6 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthService } from '../../../src/modules/auth/auth.service';
+import { AttackCounterService } from '../../../src/modules/security/attack-counter.service';
 import { PrismaService } from '../../../src/prisma.service';
 
 /**
@@ -28,6 +29,7 @@ describe('サインインの競合 (#90 の作業中に発見)', () => {
       prisma as unknown as PrismaService,
       { sign: jest.fn().mockReturnValue('token') } as never,
       { record: jest.fn() } as never,
+      new AttackCounterService(),
     );
   });
 

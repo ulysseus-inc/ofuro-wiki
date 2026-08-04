@@ -9,7 +9,6 @@ import {
 } from '@ofuro/core/modules/dialogs';
 import { ExplorerIconService } from '@ofuro/core/modules/explorer-icon/services/explorer-icon';
 import { OrganizeService } from '@ofuro/core/modules/organize';
-import { UrlService } from '@ofuro/core/modules/url';
 import {
   getAFFiNEWorkspaceSchema,
   type WorkspaceMetadata,
@@ -623,7 +622,6 @@ const ErrorStatus = ({
   onRetry: () => void;
 }) => {
   const t = useI18n();
-  const urlService = useService(UrlService);
   return (
     <>
       <div className={style.importModalTitle}>
@@ -632,15 +630,12 @@ const ErrorStatus = ({
       <p className={style.importStatusContent}>
         {error || 'Unknown error occurred'}
       </p>
+      {/*
+        AFFiNE 由来の「フィードバック」ボタン（Discord へ誘導）は削除した。
+        セルフホスト製品であり、問い合わせ先は導入した組織の管理者であるため。
+        BUILD_CONFIG.discordUrl は空文字のままで、押しても無反応だった（Issue #86）。
+      */}
       <div className={style.importModalButtonContainer}>
-        <Button
-          onClick={() => {
-            urlService.openPopupWindow(BUILD_CONFIG.discordUrl);
-          }}
-          variant="secondary"
-        >
-          {t['Feedback']()}
-        </Button>
         <Button onClick={onRetry} variant="primary">
           {t['Retry']()}
         </Button>

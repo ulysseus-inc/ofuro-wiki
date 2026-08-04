@@ -52,8 +52,27 @@ export class ImportDoc extends WithDisposable(LitElement) {
     this._onMouseMove = this._onMouseMove.bind(this);
   }
 
+  /**
+   * ファイル選択を行い、失敗したら理由を onFail に流す。
+   *
+   * `openFilesWith` はキャンセルでは投げず、選択自体が失敗したときだけ投げる。
+   * 握りつぶすと「押しても何も起きない」状態になり、利用者は原因を知る術がない
+   * （Issue #86）。この画面には既にエラー通知の口があるので、そこへ流す。
+   */
+  private async _pickFiles(
+    open: () => Promise<File[] | null>
+  ): Promise<File[] | null> {
+    try {
+      return await open();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this._onFail(`Failed to open the file picker: ${message}`);
+      return null;
+    }
+  }
+
   private async _importHtml() {
-    const files = await openFilesWith('Html');
+    const files = await this._pickFiles(() => openFilesWith('Html'));
     if (!files) return;
     const pageIds: string[] = [];
     for (const file of files) {
@@ -82,7 +101,7 @@ export class ImportDoc extends WithDisposable(LitElement) {
   }
 
   private async _importMarkDown() {
-    const files = await openFilesWith('Markdown');
+    const files = await this._pickFiles(() => openFilesWith('Markdown'));
     if (!files) return;
     const pageIds: string[] = [];
     for (const file of files) {
@@ -111,7 +130,10 @@ export class ImportDoc extends WithDisposable(LitElement) {
   }
 
   private async _importNotion() {
-    const file = await openSingleFileWith('Zip');
+    const files = await this._pickFiles(() =>
+      openSingleFileWith('Zip').then(file => (file ? [file] : null))
+    );
+    const file = files?.[0];
     if (!file) return;
     const needLoading = file.size > SHOW_LOADING_SIZE;
     if (needLoading) {

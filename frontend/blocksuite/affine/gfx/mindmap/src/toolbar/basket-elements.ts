@@ -17,7 +17,10 @@ import {
   FeatureFlagService,
   TelemetryProvider,
 } from '@blocksuite/affine-shared/services';
-import { openSingleFileWith } from '@blocksuite/affine-shared/utils';
+import {
+  notifyFileOpenFailed,
+  openSingleFileWith,
+} from '@blocksuite/affine-shared/utils';
 import { Bound, type IVec } from '@blocksuite/global/gfx';
 import type { BlockComponent } from '@blocksuite/std';
 import type { TemplateResult } from 'lit';
@@ -160,7 +163,8 @@ export const mediaRender: DraggableTool['render'] = async (bound, edgeless) => {
   try {
     file = await openSingleFileWith();
   } catch (e) {
-    console.error(e);
+    // console だけだと利用者には「押しても何も起きない」ようにしか見えない
+    notifyFileOpenFailed(edgeless.std, e);
     return null;
   }
   if (!file) return null;

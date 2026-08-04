@@ -1,30 +1,15 @@
-// Polyfill for `showOpenFilePicker` API
-// See https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/wicg-file-system-access/index.d.ts
-// See also https://caniuse.com/?search=showOpenFilePicker
 import { BlockSuiteError, ErrorCode } from '@blocksuite/global/exceptions';
+import type { BlockStdScope } from '@blocksuite/std';
 
-interface OpenFilePickerOptions {
-  types?:
-    | {
-        description?: string | undefined;
-        accept: Record<string, string | string[]>;
-      }[]
-    | undefined;
-  excludeAcceptAllOption?: boolean | undefined;
-  multiple?: boolean | undefined;
-}
+import { NotificationProvider } from '../../services/notification-service.js';
 
-declare global {
-  interface Window {
-    // Window API: showOpenFilePicker
-    showOpenFilePicker?: (
-      options?: OpenFilePickerOptions
-    ) => Promise<FileSystemFileHandle[]>;
-  }
+interface FileTypeSpec {
+  description: string;
+  accept: Record<string, string[]>;
 }
 
 // See [Common MIME types](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types)
-const FileTypes: NonNullable<OpenFilePickerOptions['types']> = [
+const FileTypes: FileTypeSpec[] = [
   {
     description: 'Images',
     accept: {
@@ -121,77 +106,100 @@ type AcceptTypes =
   | 'Docx'
   | 'MindMap';
 
+/**
+ * `<input type="file">` の `accept` に渡す値を組み立てる。
+ *
+ * **MIME だけでは不十分。** `.md` のように OS へ MIME が登録されていない拡張子は、
+ * MIME だけを指定するとファイル選択ダイアログに一件も表示されない（Windows が典型）。
+ * MIME と拡張子の両方を並べる。
+ */
+export function acceptAttrFor(acceptType: AcceptTypes): string {
+  if (acceptType === 'Any') return '';
+
+  const fileType = FileTypes.find(i => i.description === acceptType);
+  if (!fileType)
+    throw new BlockSuiteError(
+      ErrorCode.DefaultRuntimeError,
+      `Unexpected acceptType "${acceptType}"`
+    );
+
+  // 例: 'text/markdown,.md,.markdown'
+  return [
+    ...Object.keys(fileType.accept),
+    ...Object.values(fileType.accept).flat(),
+  ].join(',');
+}
+
+/**
+ * ファイル選択ダイアログを開き、選ばれたファイルを返す。
+ *
+ * - ファイルを選んだ → `File[]`
+ * - キャンセルした   → `null`
+ * - 選択自体が失敗   → **例外を投げる**（呼び出し側で理由を表示するため）
+ *
+ * File System Access API（`showOpenFilePicker`）は使わない。
+ * インポートは中身を一度読むだけでハンドルを保持しないため利点が無い一方、
+ * UNC パス（`\\wsl.localhost\...` 等）のファイルを選ぶと失敗する（Issue #86）。
+ * 詳細は docs/import.md を参照。
+ */
 export async function openFilesWith(
   acceptType: AcceptTypes = 'Any',
   multiple: boolean = true
 ): Promise<File[] | null> {
-  // Feature detection. The API needs to be supported
-  // and the app not run in an iframe.
-  const supportsFileSystemAccess =
-    'showOpenFilePicker' in window &&
-    (() => {
-      try {
-        return window.self === window.top;
-      } catch {
-        return false;
-      }
-    })();
+  const accept = acceptAttrFor(acceptType);
 
-  // If the File System Access API is supported…
-  if (supportsFileSystemAccess && window.showOpenFilePicker) {
-    try {
-      const fileType = FileTypes.find(i => i.description === acceptType);
-      if (acceptType !== 'Any' && !fileType)
-        throw new BlockSuiteError(
-          ErrorCode.DefaultRuntimeError,
-          `Unexpected acceptType "${acceptType}"`
-        );
-      const pickerOpts = {
-        types: fileType ? [fileType] : undefined,
-        multiple,
-      } satisfies OpenFilePickerOptions;
-      // Show the file picker, optionally allowing multiple files.
-      const handles = await window.showOpenFilePicker(pickerOpts);
-
-      return await Promise.all(handles.map(handle => handle.getFile()));
-    } catch (err) {
-      console.error(err);
-      return null;
-    }
-  }
-
-  // Fallback if the File System Access API is not supported.
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     // Append a new `<input type="file" multiple? />` and hide it.
     const input = document.createElement('input');
     input.classList.add('affine-upload-input');
     input.style.display = 'none';
     input.type = 'file';
     input.multiple = multiple;
+    if (accept) input.accept = accept;
 
-    if (acceptType !== 'Any') {
-      // For example, `accept="image/*"` or `accept="video/*,audio/*"`.
-      input.accept = Object.keys(
-        FileTypes.find(i => i.description === acceptType)?.accept ?? ''
-      ).join(',');
-    }
     document.body.append(input);
+
     // The `change` event fires when the user interacts with the dialog.
     input.addEventListener('change', () => {
-      // Remove the `<input type="file" multiple? />` again from the DOM.
       input.remove();
-
       resolve(input.files ? Array.from(input.files) : null);
     });
     // The `cancel` event fires when the user cancels the dialog.
-    input.addEventListener('cancel', () => resolve(null));
+    input.addEventListener('cancel', () => {
+      input.remove();
+      resolve(null);
+    });
+
     // Show the picker.
-    if ('showPicker' in HTMLInputElement.prototype) {
-      input.showPicker();
-    } else {
-      input.click();
+    // ユーザー操作を伴わずに呼ばれた場合はブラウザが拒否して例外を投げる。
+    // 握りつぶすと Promise が解決されず画面が固まるため、そのまま伝える。
+    try {
+      if ('showPicker' in HTMLInputElement.prototype) {
+        input.showPicker();
+      } else {
+        input.click();
+      }
+    } catch (err) {
+      input.remove();
+      reject(err);
     }
   });
+}
+
+/**
+ * ファイル選択の失敗を利用者に見える形にする。
+ *
+ * `openFilesWith` はキャンセルでは投げず、**選択自体が失敗したときだけ**投げる。
+ * 握りつぶすと「エラーが起きているのに画面には出ない」状態に戻ってしまう
+ * （Issue #86 で実際に利用者を誤解させた）。自前のエラー表示を持たない
+ * 呼び出し元はこれを使う。
+ */
+export function notifyFileOpenFailed(std: BlockStdScope, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error('Failed to open the file picker', error);
+  std
+    .getOptional(NotificationProvider)
+    ?.toast(`Failed to open the file picker: ${message}`);
 }
 
 export async function openSingleFileWith(

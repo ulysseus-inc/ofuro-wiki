@@ -1,4 +1,5 @@
 import { AuthService } from '../../../src/modules/auth/auth.service';
+import { AttackCounterService } from '../../../src/modules/security/attack-counter.service';
 import type { PrismaService } from '../../../src/prisma.service';
 
 /**
@@ -28,7 +29,7 @@ describe('AuthService — ADMIN_EMAIL の付与 (#77)', () => {
 
     service = new AuthService(prisma as unknown as PrismaService, {
       sign: jest.fn().mockReturnValue('signed-token'),
-    } as never, { record: jest.fn() } as never);
+    } as never, { record: jest.fn() } as never, new AttackCounterService());
   });
 
   afterEach(() => {
