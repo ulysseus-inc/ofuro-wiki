@@ -13,6 +13,7 @@ import { validatePasswordStrength } from '../../common/password.util';
 import { AuditService } from '../audit/audit.service';
 import { ParsedCsvRow } from './user-csv.util';
 import { CsvUserRowResult } from './admin.model';
+import { normalizeEmail } from '../../common/email.util';
 
 // メールアドレスの簡易検証。RFC 準拠の完全な判定は行わない
 // （厳密にやるほど正当なアドレスを弾く危険が増すため、明らかな誤りだけを弾く）。
@@ -70,7 +71,8 @@ export class AdminService {
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     return this.prisma.user.create({
       data: {
-        email,
+        // #120: 保存値を揃える（照合は citext が担う）
+        email: normalizeEmail(email),
         passwordHash,
         name: deriveUserName(email, name),
         emailVerified: true,

@@ -17,6 +17,7 @@ import { BCRYPT_ROUNDS } from '../../common/security.constants';
 import { validatePasswordStrength } from '../../common/password.util';
 import { deriveUserName } from '../../common/user-name.util';
 import { isAdminEmail } from '../../common/admin-email';
+import { normalizeEmail } from '../../common/email.util';
 import { AttackCounterService } from '../security/attack-counter.service';
 
 export interface JwtPayload {
@@ -187,7 +188,8 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
     const user = await this.prisma.user.create({
       data: {
-        email,
+        // #120: 保存値を揃える（照合は citext が担う）
+        email: normalizeEmail(email),
         passwordHash,
         // 名前未指定時は email のローカル部を既定表示名にする。
         name: deriveUserName(email, name),
@@ -723,7 +725,8 @@ export class AuthService {
 
     const created = await this.prisma.user.create({
       data: {
-        email,
+        // #120: 保存値を揃える（照合は citext が担う）
+        email: normalizeEmail(email),
         // SSO 利用者はパスワードを持たない（パスワード認証では入れない）
         passwordHash: null,
         name: deriveUserName(email, name),

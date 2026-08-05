@@ -10,7 +10,9 @@ datasource db {
 
 model User {
   id                     String    @id @default(uuid()) @db.Uuid
-  email                  String    @unique @db.VarChar(255)
+  // #120: 大文字小文字を区別しない（citext）。
+  // アプリ側の正規化だけでは入口を1つ足し忘れれば穴が残るため、DB の型で強制する。
+  email                  String    @unique @db.Citext
   name                   String?   @db.VarChar(255)
   avatarUrl              String?   @map("avatar_url")
   passwordHash           String?   @map("password_hash")
@@ -196,7 +198,8 @@ model Invitation {
   id          String    @id @default(uuid()) @db.Uuid
   workspaceId String    @map("workspace_id") @db.Uuid
   inviterId   String    @map("inviter_id") @db.Uuid
-  email       String?   @db.VarChar(255)
+  // #120: users.email と同じ扱いに揃える（#148 で宛先を照合するため）
+  email       String?   @db.Citext
   role        String    @default("member") @db.VarChar(50)
   expireTime  DateTime? @map("expire_time") @db.Timestamptz()
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz()
