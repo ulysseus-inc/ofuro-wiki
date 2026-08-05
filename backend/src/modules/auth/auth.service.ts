@@ -153,7 +153,18 @@ export class AuthService {
     }
   }
 
-  async signUp(email: string, password: string, name?: string, ip?: string) {
+  /**
+   * パスワードによるアカウント作成。
+   *
+   * @param viaSignin サインイン経由の自動作成か（`signInOrSignUp` から呼ばれた場合）
+   */
+  async signUp(
+    email: string,
+    password: string,
+    name?: string,
+    ip?: string,
+    viaSignin = false,
+  ) {
     if (!(await this.isRegistrationOpen())) {
       throw new ForbiddenException('Registration is closed');
     }
@@ -188,6 +199,41 @@ export class AuthService {
     if (isAdmin) {
       this.logger.log(`Admin role granted on sign-up: ${email}`);
     }
+
+    // #90: **アカウントが増えたことを必ず残す。**
+    //
+    // ⚠️ この経路は REST（/api/auth/sign-up・/api/auth/sign-in）から呼ばれるため、
+    // GraphQL の mutation 名で引く Interceptor では拾えない。**ここで明示的に記録する。**
+    //
+    // SSO の自動作成には同じ記録があるのに、こちらには入っていなかった。
+    // サインアップを開放した公開サーバーでは**誰でもアカウントを作れる**のに、
+    // 「いつの間にか増えたアカウント」の痕跡がゼロだった（2026-08-05・公開本番で発覚）。
+    //
+    // 自動作成が有効だと、**サインインを1回試みるだけでアカウントが増える**。
+    // どちらの入口から来たかを残さないと、意図した登録か判別できない。
+    await this.audit.record({
+      action: 'user.create',
+      actor: { id: user.id, email: user.email, name: user.name },
+      targetType: 'user',
+      targetId: user.id,
+      targetName: user.email,
+      ip,
+      detail: {
+        meta: {
+          method: 'password',
+          // サインイン経由の自動作成（AUTH_SIGNIN_AUTOCREATE）か、
+          // サインアップ画面からの明示的な登録か
+          autoCreated: viaSignin,
+          isAdmin,
+        },
+      },
+    });
+    await this.audit.record({
+      action: 'auth.signin',
+      actor: { id: user.id, email: user.email, name: user.name },
+      ip,
+      detail: { meta: { method: 'password', firstSignin: true } },
+    });
 
     return this.generateTokenResponse(user);
   }
@@ -456,7 +502,8 @@ export class AuthService {
       // 自動作成の経路でも、サインインが成立した以上は失敗の記録を消す
       // （signIn 側と挙動を揃える。未登録時の失敗が新規アカウントに残らないように）
       try {
-        const created = await this.signUp(email, password, undefined, ip);
+        // 第5引数: サインイン経由の自動作成であることを監査ログに残す
+        const created = await this.signUp(email, password, undefined, ip, true);
         this.clearSigninFailures(email, ip);
         return created;
       } catch (e: any) {

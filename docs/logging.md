@@ -148,7 +148,7 @@ model AuditLog {
 | `auth.signout.all` | ✅ | ✅ | — | AuthController |
 | `admin.denied` | ✅ | — | — | AdminGuard（1分に1回） |
 | `workspace.denied` | ✅ | — | — | WorkspaceMemberGuard（1分に1回） |
-| `user.create` | ✅ | ✅ | ✅ | Interceptor / AuthService（SSO 自動作成） |
+| `user.create` | ✅ | ✅ | ✅ | Interceptor（Admin 作成）/ AuthService（**サインアップ・SSO**）※ |
 | `user.delete` | ✅ | ✅ | ✅ | AdminService（**消す前に取得**） |
 | `user.import` | ✅ | — | — | AdminService（`detail` に成功・失敗件数） |
 | `user.admin.change` | ✅ | ✅ | — | Interceptor |
@@ -178,6 +178,21 @@ model AuditLog {
 | `audit.cleanup` | — | — | — | AuditService（`system`） |
 | `security.alert` | — | ✅※ | ✅※ | IntrusionDetectionService（`system`） |
 | `security.alert.resolved` | — | ✅※ | ✅※ | 同上 |
+
+※ `user.create` は**作成経路が3つあり、記録の実装場所が分かれている**。
+`detail.meta.method`（`password` / `sso`）と `autoCreated` で区別する。
+
+| 経路 | 記録する場所 |
+|---|---|
+| Admin が管理画面から作成 | Interceptor（GraphQL mutation） |
+| パスワードのサインアップ | **AuthService に明示** |
+| SSO の自動作成 | **AuthService に明示** |
+
+⚠️ **REST（`/api/auth/sign-up`・`/api/auth/sign-in`）は Interceptor では拾えない。**
+GraphQL の mutation 名で引いているため。実際にサインアップ経路の記録が抜けており、
+**サインアップを開放した公開サーバーで、誰でもアカウントを作れるのに痕跡がゼロ**だった
+（2026-08-05 発覚）。`test/modules/audit/account-creation-recorded.spec.ts` で
+全経路を横断して固定している。
 
 ※ `auth.signin.failed` の実行者は**入力されたメールアドレス**（存在しない場合もそのまま残す）。
 ※ `user.password.reset.token` は `@Public()` のため実行者を特定できず、**対象＝実行者**として記録する。
