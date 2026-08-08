@@ -5,6 +5,11 @@ import {
   Int,
   registerEnumType,
 } from '@nestjs/graphql';
+// #97: 権限まわりの型（docs/doc-permission.md 8章）
+import {
+  DocRoleEnum,
+  PaginatedGrantedDocUserType,
+} from '../permission/permission.model';
 
 export enum Permission {
   Owner = 'Owner',
@@ -189,30 +194,6 @@ class DocPermissionsType {
   @Field() Doc_Comments_Resolve: boolean;
 }
 
-export function buildDocPermissions(role: string): DocPermissionsType {
-  const isOwner = role === 'owner';
-  const isAdmin = isOwner || role === 'admin';
-  const isWriter = isAdmin || role === 'member' || role === 'write';
-  return {
-    Doc_Copy: true,
-    Doc_Delete: isWriter,
-    Doc_Duplicate: true,
-    Doc_Properties_Read: true,
-    Doc_Properties_Update: isWriter,
-    Doc_Publish: isAdmin,
-    Doc_Read: true,
-    Doc_Restore: isWriter,
-    Doc_TransferOwner: isOwner,
-    Doc_Trash: isWriter,
-    Doc_Update: isWriter,
-    Doc_Users_Manage: isAdmin,
-    Doc_Users_Read: true,
-    Doc_Comments_Create: isWriter,
-    Doc_Comments_Delete: isAdmin,
-    Doc_Comments_Read: true,
-    Doc_Comments_Resolve: isWriter,
-  };
-}
 
 @ObjectType('DocType')
 export class DocType {
@@ -231,8 +212,13 @@ export class DocType {
   @Field()
   public: boolean;
 
-  @Field()
+  // #97: 値は DocTypeResolver が解決する（Doc_Users_Read が要る）。
+  // ⚠️ String にするとフロントの契約（DocRole 列挙）とずれる
+  @Field(() => DocRoleEnum)
   defaultRole: string;
+
+  @Field(() => PaginatedGrantedDocUserType)
+  grantedUsersList: PaginatedGrantedDocUserType;
 
   @Field({ nullable: true })
   createdAt?: Date;

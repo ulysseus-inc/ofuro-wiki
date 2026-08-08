@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+import { PermissionService } from '../permission/permission.service';
 
 // ─── Types matching the resolver's input/output ─────────────
 
@@ -99,11 +100,18 @@ function col(field: string): string {
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    // #97: 検索は「検索前に絞る」。取ってから捨てるとページングが壊れる
+    private permission: PermissionService,
+    private prisma: PrismaService) {}
 
   // ─── Frontend-compatible search with DSL ────────────────────
 
-  async searchWithDSL(workspaceId: string, input: SearchInput): Promise<SearchResultObject> {
+  async searchWithDSL(
+    workspaceId: string,
+    input: SearchInput,
+    userId: string,
+  ): Promise<SearchResultObject> {
     const limit = input.options.pagination?.limit ?? 20;
     const skip = input.options.pagination?.skip ?? 0;
     const requestedFields = input.options.fields ?? [];
@@ -111,15 +119,22 @@ export class SearchService {
 
     // Build WHERE clause from query DSL
     const { where, params } = this.buildWhereClause(input.query, [workspaceId]);
-    const fullWhere = `workspace_id = $1::uuid AND (${where})`;
+    // #97: ⚠️ 読める doc に「検索前」に絞る。取ってから捨てるとページングが壊れる
+    const perm = await this.permission.readableDocFilter(
+      workspaceId,
+      userId,
+      params.length + 1,
+    );
+    params.push(...perm.params);
+    const fullWhere = `workspace_id = $1::uuid AND (${where}) AND ${perm.sql}`;
 
     // Build SELECT list
     const selectFields = this.buildSelectFields(requestedFields, highlights);
 
     const sql = `SELECT ${selectFields}
-      FROM search_index
+      FROM search_index${perm.join}
       WHERE ${fullWhere}
-      ORDER BY pgroonga_score(tableoid, ctid) DESC
+      ORDER BY pgroonga_score(search_index.tableoid, search_index.ctid) DESC
       LIMIT ${limit + 1}
       OFFSET ${skip}`;
 
@@ -145,7 +160,11 @@ export class SearchService {
 
   // ─── Frontend-compatible aggregate with DSL ─────────────────
 
-  async aggregateWithDSL(workspaceId: string, input: AggregateInput): Promise<AggregateResultObject> {
+  async aggregateWithDSL(
+    workspaceId: string,
+    input: AggregateInput,
+    userId: string,
+  ): Promise<AggregateResultObject> {
     const groupField = col(input.field);
     const limit = input.options.pagination?.limit ?? 20;
     const skip = input.options.pagination?.skip ?? 0;
@@ -155,13 +174,20 @@ export class SearchService {
 
     // Build WHERE clause
     const { where, params } = this.buildWhereClause(input.query, [workspaceId]);
-    const fullWhere = `workspace_id = $1::uuid AND (${where})`;
+    // #97: ⚠️ 件数の集計そのものが存在を漏らす。ここも検索前に絞る
+    const perm = await this.permission.readableDocFilter(
+      workspaceId,
+      userId,
+      params.length + 1,
+    );
+    params.push(...perm.params);
+    const fullWhere = `workspace_id = $1::uuid AND (${where}) AND ${perm.sql}`;
 
     // Step 1: Get grouped keys with scores
     const groupSql = `SELECT ${groupField} as group_key,
         COUNT(*) as cnt,
-        MAX(pgroonga_score(tableoid, ctid)) as max_score
-      FROM search_index
+        MAX(pgroonga_score(search_index.tableoid, search_index.ctid)) as max_score
+      FROM search_index${perm.join}
       WHERE ${fullWhere}
       GROUP BY ${groupField}
       ORDER BY max_score DESC
@@ -186,10 +212,14 @@ export class SearchService {
       // 文字列リテラル埋め込みではなくバインドパラメータで渡す。列側は ::text に
       // キャストして uuid/text 等の型不一致を避ける。
       const keyParamIndex = params.length + 1;
+      // ⚠️ `fullWhere` は権限の条件（dp.role / dm.default_role）を含む。
+      // 結合を忘れると `missing FROM-clause entry for table "dp"` で
+      // **通常のメンバーだけ集約検索が 500 になる**（Admin と WS 所有者は
+      // 条件が `true` になるため気づけない）
       const hitsSql = `SELECT ${hitsSelectFields}
-        FROM search_index
+        FROM search_index${perm.join}
         WHERE ${fullWhere} AND ${groupField}::text = $${keyParamIndex}
-        ORDER BY pgroonga_score(tableoid, ctid) DESC
+        ORDER BY pgroonga_score(search_index.tableoid, search_index.ctid) DESC
         LIMIT ${hitsLimit}`;
 
       const hitsRows = await this.prisma.$queryRawUnsafe<any[]>(
@@ -224,9 +254,13 @@ export class SearchService {
   async searchDocsKeyword(
     workspaceId: string,
     keyword: string,
-    limit?: number,
+    limit: number | undefined,
+    userId: string,
   ): Promise<any[]> {
     const actualLimit = limit ?? 20;
+
+    // #97: ⚠️ タイトルと抜粋が出るため、ここも検索前に絞る
+    const perm = await this.permission.readableDocFilter(workspaceId, userId, 4);
 
     const results = await this.prisma.$queryRawUnsafe<any[]>(
       `SELECT DISTINCT ON (doc_id)
@@ -236,14 +270,16 @@ export class SearchService {
         pgroonga_snippet_html(content, ARRAY[$1::text]) AS highlight,
         created_at,
         updated_at
-      FROM search_index
+      FROM search_index${perm.join}
       WHERE workspace_id = $2::uuid
         AND (content &@~ $1::text OR title &@~ $1::text)
-      ORDER BY doc_id, pgroonga_score(tableoid, ctid) DESC
+        AND ${perm.sql}
+      ORDER BY doc_id, pgroonga_score(search_index.tableoid, search_index.ctid) DESC
       LIMIT $3`,
       keyword,
       workspaceId,
       actualLimit,
+      ...perm.params,
     );
 
     return results.map((r) => ({
@@ -377,7 +413,7 @@ export class SearchService {
     for (const h of highlights) {
       const c = col(h.field);
       // We'll handle highlights in the row mapper instead
-      highlightSelectExprs.push(`pgroonga_score(tableoid, ctid) AS score`);
+      highlightSelectExprs.push(`pgroonga_score(search_index.tableoid, search_index.ctid) AS score`);
     }
 
     if (highlightSelectExprs.length > 0) {

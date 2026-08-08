@@ -333,3 +333,79 @@ describe('記録一覧（マトリクス）の整合 (#90)', () => {
     expect(missing).toEqual([]);
   });
 });
+
+/**
+ * #97: ドキュメント単位の権限変更が監査ログに残ること
+ * （docs/doc-permission.md 9章）。
+ *
+ * ⚠️ **「誰がいつ、誰に何を見せるようにしたか」が追えないと、
+ * 情報漏洩の調査ができない。**
+ */
+describe('ドキュメント権限の監査ログ (#97)', () => {
+  const {
+    flattenArgs,
+    safeMeta,
+    targetIdOf,
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+  } = require('../../../src/modules/audit/audit.interceptor');
+
+  /**
+   * ⚠️ #97 の権限操作は `input: { ... }` 形式で届く。
+   * 平らにしないと `args.docId` が引けず、**対象が空の監査ログ**になる。
+   * 「記録している」のに「何に対する操作か分からない」記録は調査に使えない。
+   */
+  it('input の中身を平らにする', () => {
+    expect(
+      flattenArgs({ input: { workspaceId: 'ws-1', docId: 'doc-1' } }),
+    ).toEqual({ workspaceId: 'ws-1', docId: 'doc-1' });
+  });
+
+  it('input が無い呼び出しはそのまま', () => {
+    expect(flattenArgs({ workspaceId: 'ws-1' })).toEqual({ workspaceId: 'ws-1' });
+  });
+
+  it.each([
+    'doc.permission.grant',
+    'doc.permission.revoke',
+    'doc.permission.role',
+    'doc.permission.default',
+  ])('%s の対象は doc である', (action) => {
+    const args = flattenArgs({ input: { workspaceId: 'ws-1', docId: 'doc-1' } });
+    // ⚠️ workspaceId が入り込むと「どの doc の権限を変えたか」が消える
+    expect(targetIdOf(action, args)).toBe('doc-1');
+  });
+
+  /** 誰に配ったかが残らないと、漏洩の範囲が特定できない。 */
+  it('配った相手とロールが記録に残る', () => {
+    const args = flattenArgs({
+      input: {
+        workspaceId: 'ws-1',
+        docId: 'doc-1',
+        userIds: ['u-1', 'u-2'],
+        role: 'Reader',
+      },
+    });
+    const meta = safeMeta(args);
+    expect(meta.userIds).toEqual(['u-1', 'u-2']);
+    expect(meta.role).toBe('Reader');
+  });
+
+  /** 4つの操作が実際に対応表へ載っていること（載せ忘れは黙って無記録になる）。 */
+  it('4つの操作が MUTATION_ACTIONS にある', () => {
+    const source = require('fs').readFileSync(
+      require('path').join(
+        __dirname,
+        '../../../src/modules/audit/audit.interceptor.ts',
+      ),
+      'utf-8',
+    );
+    for (const [field, action] of [
+      ['grantDocUserRoles', 'doc.permission.grant'],
+      ['revokeDocUserRoles', 'doc.permission.revoke'],
+      ['updateDocUserRole', 'doc.permission.role'],
+      ['updateDocDefaultRole', 'doc.permission.default'],
+    ]) {
+      expect(source).toContain(`${field}: '${action}'`);
+    }
+  });
+});

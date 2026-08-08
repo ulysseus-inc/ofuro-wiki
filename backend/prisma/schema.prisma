@@ -145,7 +145,10 @@ model DocMeta {
   title       String?
   mode        String   @default("page") @db.VarChar(20)
   public      Boolean  @default(false)
-  defaultRole String   @default("reader") @map("default_role") @db.VarChar(50)
+  // #97: NULL = 未設定（ワークスペースのロールが効く）。
+  // ⚠️ 既定値を入れてはいけない。入れると全 doc が「設定済み」になり、
+  // 所有者まで Reader に降格する（docs/doc-permission.md 4.2）
+  defaultRole String?  @map("default_role") @db.VarChar(50)
   createdById String?  @map("created_by") @db.Uuid
   updatedById String?  @map("updated_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()

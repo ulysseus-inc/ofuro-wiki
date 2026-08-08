@@ -21,7 +21,8 @@ interface DocMetaJson {
   title: string | null;
   mode: string;
   public: boolean;
-  defaultRole: string;
+  // #97: NULL = 未設定（ワークスペースのロールが効く）
+  defaultRole: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -296,7 +297,14 @@ export class BackupService {
           title: meta?.title ?? null,
           mode: meta?.mode ?? 'page',
           public: meta?.public ?? false,
-          defaultRole: meta?.defaultRole ?? 'reader',
+          // ⚠️ **'reader' で埋めないこと。** 埋めると復元した全 doc が
+          // 「設定済み」になり、所有者まで Reader に降格する（#97）。
+          //
+          // ⚠️ **無いときだけでは足りない。** 移行前
+          // （20260807000000_doc_default_role_nullable より前）に取った
+          // バックアップは、**全 doc に旧 DB 既定値 'reader' が入っている**。
+          // そのまま復元すると、マイグレーションで消した状態が復活する
+          defaultRole: normalizeRestoredDefaultRole(meta?.defaultRole),
           createdById: userId,
           updatedById: userId,
         },
@@ -363,4 +371,22 @@ export class BackupService {
       return blob; // Return original if update fails
     }
   }
+}
+
+/**
+ * 復元する `defaultRole` を正規化する。
+ *
+ * ⚠️ 移行前のバックアップには**旧 DB 既定値 `'reader'` が全 doc に入っている**。
+ * これは「利用者が Reader を選んだ」ではなく「未設定」を意味するため、
+ * NULL へ倒す。区別する術は無く、倒さないと**復元しただけで所有者が
+ * 自分の doc を編集できなくなる**（#97 / docs/doc-permission.md 4.2）。
+ *
+ * 移行後に本当に Reader を設定した doc も NULL になるが、
+ * **権限が緩む方向ではなく、利用者が設定し直せる**ため、こちらへ倒す。
+ */
+export function normalizeRestoredDefaultRole(
+  value: string | null | undefined,
+): string | null {
+  if (!value) return null;
+  return value.toLowerCase() === 'reader' ? null : value;
 }

@@ -14,6 +14,8 @@ import { SyncService } from './sync.service';
 import { AwarenessService } from './awareness.service';
 import { IndexerService } from '../search/indexer.service';
 import { PrismaService } from '../../prisma.service';
+import { PermissionService } from '../permission/permission.service';
+import type { DocAction } from '../permission/doc-role';
 import { DocEditAggregator } from '../audit/doc-edit-aggregator';
 import { AuditService } from '../audit/audit.service';
 import { LogFileService } from '../logging/log-file.service';
@@ -113,6 +115,22 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private static readonly ACCESS_CACHE_TTL_MS = 5000;
   private static readonly ACCESS_CACHE_MAX = 10000;
 
+  /**
+   * #97: ドキュメント単位の判定のキャッシュ。
+   *
+   * ⚠️ `space:push-doc-update` は**打鍵のたびに飛ぶ**。毎回 DB を引けない。
+   *
+   * ワークスペース単位のキャッシュ（上）と**同じ寿命・同じ上限**にしてある。
+   * 権限を外してから最大 5 秒は編集が通りうるが、
+   * 「権限を外した瞬間に相手のタブが止まる」ことまでは求めない。
+   * **短い寿命で妥協し、複雑な無効化の仕組みを持たない**方が安全側に働く
+   * （無効化の実装漏れは、期限切れを待たない=永久に古い判定、を意味する）。
+   */
+  private readonly docAccessCache = new Map<
+    string,
+    { allowed: boolean; expiresAt: number }
+  >();
+
   /** Enter restore mode: disconnect all clients and reject new connections/pushes */
   async enterRestoreMode(): Promise<void> {
     this._restoreMode = true;
@@ -135,13 +153,20 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private jwtService: JwtService,
     private indexerService: IndexerService,
     private prisma: PrismaService,
+    // #97: ドキュメント単位の認可。判定はすべてここに委ねる
+    private permission: PermissionService,
     // #90: 編集は打鍵のたびに飛ぶため、15分ごとに1件へ集約して記録する
     private editAggregator: DocEditAggregator,
     // #90: WebSocket の接続・切断はアクセスログへ。engine.io のハンドシェイクは
     // Express を通らないため、ミドルウェアでは記録できない
     private logFile: LogFileService,
     private audit: AuditService,
-  ) {}
+  ) {
+    // #97: 権限が変わったら即座に判定キャッシュを捨てる（7章）
+    this.permission.onInvalidate((workspaceId, docId, userId) =>
+      this.invalidateDocAccess(workspaceId, docId, userId),
+    );
+  }
 
   async handleConnection(client: Socket) {
     // Reject connections during restore
@@ -357,6 +382,19 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return err('ACCESS_DENIED', 'Access denied to this space');
     }
 
+    // #97: ドキュメント単位の判定。判定は PermissionService に委ねる
+    if (
+      !(await this.canDoc(
+        data.spaceType,
+        data.spaceId,
+        data.docId,
+        conn?.userId,
+        'Doc_Read',
+      ))
+    ) {
+      return err('ACCESS_DENIED', 'Access denied to this doc');
+    }
+
     try {
       let stateVector: Uint8Array | undefined;
       if (data.stateVector) {
@@ -418,6 +456,22 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `space:push-doc-update rejected — user ${conn.userId ?? 'anonymous'} lacks write access to ${data.spaceType}:${data.spaceId}`,
       );
       return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
+    // #97: ドキュメント単位の判定
+    if (
+      !(await this.canDoc(
+        data.spaceType,
+        data.spaceId,
+        data.docId,
+        conn.userId,
+        'Doc_Update',
+      ))
+    ) {
+      this.logger.warn(
+        `space:push-doc-update rejected — user ${conn.userId ?? 'anonymous'} lacks Doc_Update on ${data.docId}`,
+      );
+      return err('ACCESS_DENIED', 'Access denied to this doc');
     }
 
     this.logger.debug(
@@ -497,11 +551,33 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return err('ACCESS_DENIED', 'Access denied to this space');
     }
 
+    // ⚠️ #97: **doc 単位の判定には身元が要る。**
+    // 公開ワークスペースは未認証でも `hasSpaceAccess` を通るため、
+    // ここまで来てしまう。そのまま絞ると**成功したのに0件**という
+    // 紛らわしい応答になるので、明示的に拒否する。
+    // 未認証の閲覧は `External`（公開共有トークン）の経路であり、
+    // まだ実装していない（docs/doc-permission.md 5章）。
+    if (data.spaceType === 'workspace' && !conn?.userId) {
+      return err('ACCESS_DENIED', 'Sign-in required to list documents');
+    }
+
     try {
       const timestamps = await this.syncService.getDocTimestamps(
         data.spaceId,
         data.timestamp,
       );
+
+      // #97: ⚠️ これはドキュメント一覧そのもの。読めない doc を落とす。
+      // 本文を返していなくても、**doc の存在と更新時刻**が漏れる。
+      const readable = await this.filterReadableDocs(
+        data.spaceType,
+        data.spaceId,
+        Object.keys(timestamps),
+        conn?.userId,
+      );
+      for (const docId of Object.keys(timestamps)) {
+        if (!readable.has(docId)) delete timestamps[docId];
+      }
       this.logger.debug(
         `space:load-doc-timestamps response: ${Object.keys(timestamps).length} docs`,
       );
@@ -535,6 +611,22 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         `space:delete-doc rejected — user ${conn.userId ?? 'anonymous'} lacks write access to ${data.spaceType}:${data.spaceId}`,
       );
       return err('ACCESS_DENIED', 'Access denied to this space');
+    }
+
+    // #97: ドキュメント単位の判定
+    if (
+      !(await this.canDoc(
+        data.spaceType,
+        data.spaceId,
+        data.docId,
+        conn.userId,
+        'Doc_Trash',
+      ))
+    ) {
+      this.logger.warn(
+        `space:delete-doc rejected — user ${conn.userId ?? 'anonymous'} lacks Doc_Trash on ${data.docId}`,
+      );
+      return err('ACCESS_DENIED', 'Access denied to this doc');
     }
 
     // #90: タイトルは**消す前にしか取れない**。docId だけ残しても
@@ -682,6 +774,14 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return err('ACCESS_DENIED', 'Access denied to this space');
     }
 
+    // #97: ⚠️ awareness は本文を流さないが、**誰がその doc を開いているか**が漏れる。
+    // 「役員が3人で何かを編集している」は、本文が読めなくても情報である
+    if (
+      !(await this.canDoc(spaceType, spaceId, docId, conn.userId, 'Doc_Read'))
+    ) {
+      return err('ACCESS_DENIED', 'Access denied to this doc');
+    }
+
     const room = awarenessRoom(spaceType, spaceId, docId);
     const key = `${spaceType}:${spaceId}:${docId}`;
 
@@ -723,7 +823,18 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
       awarenessUpdate: string;
     },
   ) {
+    const conn = this.connections.get(client.id);
+    if (!conn) return;
+
     const { spaceType, spaceId, docId, awarenessUpdate } = data;
+
+    // #97: カーソル位置・選択範囲を配信する。読めない doc へ流さない
+    if (
+      !(await this.canDoc(spaceType, spaceId, docId, conn.userId, 'Doc_Read'))
+    ) {
+      return;
+    }
+
     const room = awarenessRoom(spaceType, spaceId, docId);
 
     // Broadcast to all other clients in the awareness room
@@ -742,7 +853,18 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody()
     data: { spaceType: string; spaceId: string; docId: string },
   ) {
+    const conn = this.connections.get(client.id);
+    if (!conn) return;
+
     const { spaceType, spaceId, docId } = data;
+
+    // #97: 他の参加者に awareness の再送を促す＝**参加者一覧の取得**にあたる
+    if (
+      !(await this.canDoc(spaceType, spaceId, docId, conn.userId, 'Doc_Read'))
+    ) {
+      return;
+    }
+
     const room = awarenessRoom(spaceType, spaceId, docId);
 
     // Ask all other clients in the room to re-broadcast their awareness
@@ -795,6 +917,90 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     return authorized;
+  }
+
+  /**
+   * #97: 権限が変わったら、その doc の判定キャッシュを捨てる
+   * （docs/doc-permission.md 7章）。
+   *
+   * ⚠️ **寿命切れを待ってはいけない。** 待つと「権限を外したのに、
+   * 相手の開いているタブでは編集が続けられる」時間が生まれる。
+   *
+   * @param userId 省略時はその doc の全員分（既定ロールの変更）
+   */
+  private invalidateDocAccess(
+    workspaceId: string,
+    docId: string,
+    userId?: string,
+  ): void {
+    // キーは `${userId}:${spaceId}:${docId}:${action}`
+    const suffix = `:${workspaceId}:${docId}:`;
+    for (const key of this.docAccessCache.keys()) {
+      const matchesDoc = key.includes(suffix);
+      if (!matchesDoc) continue;
+      if (userId && !key.startsWith(`${userId}:`)) continue;
+      this.docAccessCache.delete(key);
+    }
+  }
+
+  /**
+   * #97: ドキュメント単位の可否（docs/doc-permission.md）。
+   *
+   * ⚠️ **ここに判定ロジックを書かないこと。** PermissionService に委ねる。
+   * このメソッドがやるのはキャッシュだけ。
+   */
+  private async canDoc(
+    spaceType: string,
+    spaceId: string,
+    docId: string,
+    userId: string | undefined,
+    action: DocAction,
+  ): Promise<boolean> {
+    // 個人スペースは doc 単位の権限を持たない（本人のものしかない）
+    if (spaceType !== 'workspace') return true;
+    if (!userId) return false;
+
+    const now = Date.now();
+    const key = `${userId}:${spaceId}:${docId}:${action}`;
+    const cached = this.docAccessCache.get(key);
+    if (cached && cached.expiresAt > now) return cached.allowed;
+
+    const allowed = await this.permission.can(spaceId, docId, userId, action);
+
+    if (this.docAccessCache.size >= SyncGateway.ACCESS_CACHE_MAX) {
+      for (const [k, v] of this.docAccessCache) {
+        if (v.expiresAt <= now) this.docAccessCache.delete(k);
+      }
+      if (this.docAccessCache.size >= SyncGateway.ACCESS_CACHE_MAX) {
+        this.docAccessCache.clear();
+      }
+    }
+    this.docAccessCache.set(key, {
+      allowed,
+      expiresAt: now + SyncGateway.ACCESS_CACHE_TTL_MS,
+    });
+    return allowed;
+  }
+
+  /**
+   * #97: 一覧から読めない doc を落とす。
+   *
+   * ⚠️ **1件ずつ canDoc を呼ばない。** doc が数千あると同じ回数だけ問い合わせる。
+   * PermissionService.filterReadable がまとめて引く。
+   */
+  private async filterReadableDocs(
+    spaceType: string,
+    spaceId: string,
+    docIds: string[],
+    userId: string | undefined,
+  ): Promise<Set<string>> {
+    // 個人スペースは doc 単位の権限を持たない
+    if (spaceType !== 'workspace') return new Set(docIds);
+    if (!userId) return new Set();
+
+    return new Set(
+      await this.permission.filterReadable(spaceId, docIds, userId),
+    );
   }
 
   /** ワークスペースへのアクセス可否を DB から判定する（キャッシュ無し実体）。 */

@@ -12,6 +12,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
 import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { PrismaService } from '../../prisma.service';
+import { PermissionService } from '../permission/permission.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   markdownToYjsUpdate,
   upsertWorkspaceRootDoc,
@@ -39,7 +41,10 @@ interface GetMarkdownBody {
 @Controller('api/internal/docs')
 @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class InternalDocController {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    // #97: ドキュメント単位の認可
+    private permission: PermissionService,
+    private prisma: PrismaService) {}
 
   /**
    * 対象 workspace が存在することを保証する。
@@ -71,10 +76,18 @@ export class InternalDocController {
   @Post('upsert')
   @HttpCode(HttpStatus.OK)
   @WorkspaceRole('member')
-  async upsertDoc(@Body() body: UpsertDocBody) {
+  async upsertDoc(
+    @Body() body: UpsertDocBody,
+    @CurrentUser() user: { id: string },
+  ) {
     const { workspaceId, docId, title, markdown } = body;
     if (!workspaceId || !docId || !title) {
       throw new BadRequestException('workspaceId, docId, title は必須です');
+    }
+
+    // #97: ドキュメント単位の判定
+    if (!(await this.permission.canUpdate(workspaceId, docId, user.id))) {
+      throw new NotFoundException('Document not found');
     }
 
     // workspace の存在を検証する。不在のまま docSnapshot を upsert すると
@@ -180,10 +193,23 @@ export class InternalDocController {
   @Post('get-markdown')
   @HttpCode(HttpStatus.OK)
   @WorkspaceRole('reader')
-  async getMarkdown(@Body() body: GetMarkdownBody) {
+  async getMarkdown(
+    @Body() body: GetMarkdownBody,
+    @CurrentUser() user: { id: string },
+  ) {
     const { workspaceId, docId } = body;
     if (!workspaceId || !docId) {
       throw new BadRequestException('workspaceId, docId は必須です');
+    }
+
+    // #97: ⚠️ **この経路は外部RAG/検索ツールが本文を取り込むために使う。**
+    // ここを塞がないと、権限で隠したドキュメントが**外部の索引に載り、
+    // AI の回答として権限外の人に返る**。
+    // 「AI 機能が権限を無視して全文を読む」最悪の形を防ぐ（仕様書 6.4）。
+    //
+    // 取り込み側のアカウントに権限が無ければ索引されない。これは正しい挙動である。
+    if (!(await this.permission.canRead(workspaceId, docId, user.id))) {
+      throw new NotFoundException('ドキュメントが見つかりません');
     }
 
     // workspace 不在の文脈を明示する（snapshot 不在とは区別したエラーメッセージ）。

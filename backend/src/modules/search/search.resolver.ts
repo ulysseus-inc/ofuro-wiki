@@ -14,6 +14,7 @@ import {
 } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { SearchService } from './search.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { IndexerService } from './indexer.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
@@ -369,24 +370,33 @@ export class SearchResolver {
   async search(
     @Parent() workspace: WorkspaceType,
     @Args('input', { type: () => SearchInput }) input: SearchInput,
+    @CurrentUser() user: { id: string },
   ): Promise<SearchResultObjectType> {
-    return this.searchService.searchWithDSL(workspace.id, input);
+    // #97: 認可は SearchService 側（検索前フィルタ）で行う
+    return this.searchService.searchWithDSL(workspace.id, input, user.id);
   }
 
   @ResolveField(() => AggregateResultObjectType, { name: 'aggregate' })
   async aggregate(
     @Parent() workspace: WorkspaceType,
     @Args('input', { type: () => AggregateInput }) input: AggregateInput,
+    @CurrentUser() user: { id: string },
   ): Promise<AggregateResultObjectType> {
-    return this.searchService.aggregateWithDSL(workspace.id, input);
+    return this.searchService.aggregateWithDSL(workspace.id, input, user.id);
   }
 
   @ResolveField(() => [SearchDocObjectType], { name: 'searchDocs' })
   async searchDocs(
     @Parent() workspace: WorkspaceType,
     @Args('input', { type: () => SearchDocsInput }) input: SearchDocsInput,
+    @CurrentUser() user: { id: string },
   ): Promise<SearchDocObjectType[]> {
-    return this.searchService.searchDocsKeyword(workspace.id, input.keyword, input.limit);
+    return this.searchService.searchDocsKeyword(
+      workspace.id,
+      input.keyword,
+      input.limit,
+      user.id,
+    );
   }
 
   @Mutation(() => Boolean)

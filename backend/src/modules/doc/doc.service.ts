@@ -91,4 +91,59 @@ export class DocService {
     });
     return true;
   }
+
+  /**
+   * #97: ドキュメントの既定ロールを変える（docs/doc-permission.md 8章）。
+   *
+   * ⚠️ **これは doc の設定であって、個人の設定ではない。**
+   * 変えると、個別の設定を持たない**全員**の判定が変わる。
+   */
+  async updateDocDefaultRole(
+    workspaceId: string,
+    docId: string,
+    role: string,
+  ) {
+    await this.prisma.docMeta.upsert({
+      where: { workspaceId_docId: { workspaceId, docId } },
+      create: { workspaceId, docId, defaultRole: role },
+      update: { defaultRole: role },
+    });
+    return true;
+  }
+
+  /**
+   * #97: 個別の権限を持つ利用者の一覧（8章 `grantedUsersList`）。
+   *
+   * ⚠️ **既定ロールで読めている人はここに出ない。** 出るのは
+   * 「明示的に設定された人」だけである。画面で「この人しか見られない」と
+   * 誤読させないよう、既定ロールと併せて示すこと。
+   */
+  async listDocGrantedUsers(
+    workspaceId: string,
+    docId: string,
+    skip: number,
+    take: number,
+  ) {
+    const where = { workspaceId, docId };
+    const [rows, totalCount] = await Promise.all([
+      this.prisma.docPermission.findMany({
+        where,
+        orderBy: { userId: 'asc' },
+        skip,
+        take,
+      }),
+      this.prisma.docPermission.count({ where }),
+    ]);
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: rows.map((r) => r.userId) } },
+      select: { id: true, name: true, email: true, avatarUrl: true },
+    });
+    const userOf = new Map(users.map((u) => [u.id, u]));
+
+    return {
+      rows: rows.map((r) => ({ role: r.role, user: userOf.get(r.userId) })),
+      totalCount,
+    };
+  }
 }

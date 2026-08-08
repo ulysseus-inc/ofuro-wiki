@@ -172,6 +172,10 @@ model AuditLog {
 | `doc.delete` | ✅ | ✅ | ✅ | SyncGateway（**消す前に取得**） |
 | `doc.restore` | ✅ | ✅ | — | Interceptor |
 | `doc.publish` / `doc.unpublish` | ✅ | ✅ | — | Interceptor |
+| `doc.permission.grant` | ✅ | ✅ | — | Interceptor |
+| `doc.permission.revoke` | ✅ | ✅ | — | Interceptor |
+| `doc.permission.role` | ✅ | ✅ | — | Interceptor |
+| `doc.permission.default` | ✅ | ✅ | — | Interceptor |
 | `setting.update` | ✅ | ✅ | — | Interceptor（対象＝設定キー） |
 | `sso.config.update` | ✅ | ✅ | — | Interceptor |
 | `backup.create` / `backup.delete` | ✅ | ✅ | — | Interceptor |

@@ -7,6 +7,8 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
 import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { PrismaService } from '../../prisma.service';
+import { PermissionService } from '../permission/permission.service';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @Controller('api/workspaces/:workspaceId/docs')
 export class DocController {
@@ -14,6 +16,8 @@ export class DocController {
     private docService: DocService,
     private docHistoryService: DocHistoryService,
     private prisma: PrismaService,
+    // #97: 判定はすべて PermissionService に委ねる
+    private permission: PermissionService,
   ) {}
 
   @Get(':docId')
@@ -22,8 +26,15 @@ export class DocController {
   async getDoc(
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
+    @CurrentUser() user: { id: string },
     @Res() res: Response,
   ) {
+    // #97: ⚠️ 読めない doc は「無い」ものとして 404 を返す。
+    // 403 だと「存在するが権限が無い」ことが伝わり、存在を漏らす
+    if (!(await this.permission.canRead(workspaceId, docId, user.id))) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
     const snapshot = await this.docService.getDocSnapshot(workspaceId, docId);
     if (!snapshot) {
       return res.status(404).json({ message: 'Document not found' });
@@ -39,8 +50,14 @@ export class DocController {
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
     @Param('timestamp') timestamp: string,
+    @CurrentUser() user: { id: string },
     @Res() res: Response,
   ) {
+    // #97: 版も本文である。現在の doc が読めないなら過去も読ませない
+    if (!(await this.permission.canRead(workspaceId, docId, user.id))) {
+      throw new NotFoundException('History not found');
+    }
+
     const ts = new Date(decodeURIComponent(timestamp));
     const history = await this.docHistoryService.getHistoryByTimestamp(
       workspaceId,
@@ -60,8 +77,14 @@ export class DocController {
   async getDocPreview(
     @Param('workspaceId') workspaceId: string,
     @Param('docId') docId: string,
+    @CurrentUser() user: { id: string },
     @Res() res: Response,
   ) {
+    // #97: OGP は本文の冒頭を出す。読めないなら出さない
+    if (!(await this.permission.canRead(workspaceId, docId, user.id))) {
+      return res.status(404).send(this.buildOgpHtml('Not Found', ''));
+    }
+
     const snapshot = await this.docService.getDocSnapshot(workspaceId, docId);
     if (!snapshot) {
       return res.status(404).send(this.buildOgpHtml('Not Found', ''));

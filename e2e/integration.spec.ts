@@ -727,8 +727,56 @@ test.describe('バックエンド API', () => {
     expect(manual!.name).toContain('マニュアル');
 
     // Reader は編集不可（Doc_Update=false）＝バックエンド強制の読み取り専用。
-    const perm = await graphqlQuery(
-      page,
+    //
+    // ⚠️ **非 Admin のユーザーで測ること。** 画面のログインユーザー
+    // （e2e-test）は **サーバー全体 Admin** であり、判定をバイパスして
+    // 全許可になる（docs/doc-permission.md 4.2 の①）。それは仕様どおりで、
+    // Admin で測ると「読み取り専用」を確かめたことにならない。
+    //
+    // ⚠️ 以前は permissions がワークスペースのロールから機械的に
+    // 組み立てられていたため、Admin でも `reader → 編集不可` が返り、
+    // **表示と実際にできることが食い違ったまま通っていた**（#97 で是正）。
+    const API = 'http://localhost:3010';
+    const READER = {
+      email: 'e2e-manual-reader@ofuro-wiki.local',
+      password: 'E2eManualReader123!',
+    };
+
+    let auth = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(READER),
+    });
+    if (auth.status === 401 || auth.status === 404) {
+      auth = await fetch(`${API}/api/auth/sign-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(READER),
+      });
+    }
+    expect(auth.ok).toBe(true);
+    const cookie = (auth.headers.getSetCookie?.() ?? [])
+      .map(c => c.split(';')[0])
+      .join('; ');
+
+    const ask = async (query: string) => {
+      const res = await fetch(`${API}/graphql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ query }),
+      });
+      return res.json();
+    };
+
+    // workspaces 取得でマニュアルWSへ Reader として遅延参加する
+    const mine = await ask('{ workspaces { id } }');
+    expect(mine.errors).toBeUndefined();
+    const joined = (mine.data?.workspaces ?? []).some(
+      (w: { id: string }) => w.id === manual!.id
+    );
+    expect(joined).toBe(true);
+
+    const perm = await ask(
       `query {
         workspace(id: "${manual!.id}") {
           doc(docId: "${manual!.id}") {
@@ -1706,6 +1754,538 @@ test.describe('アクセス制御（ワークスペース越境防止）', () =>
       expect(q.data?.workspace?.id).toBe(wsId);
     } finally {
       await gql(outsiderCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9.5 ページ単位の権限（#97 / docs/doc-permission.md）
+// ---------------------------------------------------------------------------
+/**
+ * ⚠️ **ここが確かめているのは Read Authorization だけである。**
+ *
+ * 「本文を読んでよいか」は下記ですべて塞がっている。しかし
+ * **「存在を知ってよいか」（Discovery Authorization）は未完である。**
+ *
+ * 画面のドキュメント一覧はここで叩いている `workspaceDocs` を見ておらず、
+ * ワークスペース共有の Yjs 目次（`rootYDoc.meta.pages`）から作られる。
+ * そのため**権限外ページのタイトルは、いまも全メンバーに同期されている。**
+ *
+ * **このテストが全部通っても、存在は隠せていない。**
+ * 手動確認で見つかった（API 経由のテストだけでは原理的に出ない）。
+ * docs/doc-permission.md の「認可は2種類ある」を参照。
+ */
+test.describe('ページ単位の権限', () => {
+  // ⚠️ 検証は開発環境と別のポートでも走らせる（利用中の環境を止めないため）
+  const API = process.env.API_URL ?? 'http://localhost:3010';
+
+  // ⚠️ **Admin を使わないこと。** サーバー全体 Admin は判定をバイパスするため
+  // （仕様書 4.2 の①）、Admin で試すと**塞げていなくてもテストが通る**。
+  const OWNER = {
+    email: 'e2e-perm-owner@ofuro-wiki.local',
+    password: 'E2ePermOwner123!',
+  };
+  const MEMBER = {
+    email: 'e2e-perm-member@ofuro-wiki.local',
+    password: 'E2ePermMember123!',
+  };
+
+  async function authCookie(email: string, password: string): Promise<string> {
+    let res = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.status === 401 || res.status === 404) {
+      res = await fetch(`${API}/api/auth/sign-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    }
+    if (!res.ok) {
+      throw new Error(`auth failed for ${email}: ${res.status} ${await res.text()}`);
+    }
+    const cookies = res.headers.getSetCookie?.() ?? [];
+    return cookies.map((c) => c.split(';')[0]).join('; ');
+  }
+
+  async function gql(cookie: string, query: string, variables?: Record<string, any>) {
+    const res = await fetch(`${API}/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ query, variables }),
+    });
+    return res.json();
+  }
+
+  async function upsertDoc(
+    cookie: string,
+    workspaceId: string,
+    docId: string,
+    title: string,
+    markdown: string,
+  ) {
+    const res = await fetch(`${API}/api/internal/docs/upsert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ workspaceId, docId, title, markdown }),
+    });
+    if (!res.ok) throw new Error(`upsert failed: ${res.status} ${await res.text()}`);
+  }
+
+  const OPEN_DOC = 'perm-open-doc';
+  const SECRET_DOC = 'perm-secret-doc';
+  // 検索で本文が漏れないことを見るため、他に出てこない語を入れる
+  const SECRET_WORD = 'yakuinsenyou';
+
+  test('権限外のメンバーからは、あらゆる経路で見えない', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
+
+    const created = await gql(
+      ownerCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'doc-permission-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      // --- メンバーを招待して参加させる
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [MEMBER.email] },
+      );
+      const inviteId = invited.data?.inviteMembers?.[0]?.inviteId;
+      expect(inviteId).toBeTruthy();
+
+      const accepted = await gql(
+        memberCookie,
+        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+        { w: wsId, i: inviteId },
+      );
+      expect(accepted.errors).toBeUndefined();
+
+      // --- ドキュメントを2つ作る
+      await upsertDoc(ownerCookie, wsId, OPEN_DOC, '誰でも読めるページ', 'ふつうの本文');
+      await upsertDoc(
+        ownerCookie,
+        wsId,
+        SECRET_DOC,
+        '役員限定ページ',
+        `機密の本文 ${SECRET_WORD}`,
+      );
+
+      // ⚠️ 内部APIの upsert は検索索引を作らない。索引を作ってから検索を見る。
+      // これを忘れると**検索の検査が空振りして、素通りで通る**
+      await gql(
+        ownerCookie,
+        `mutation ($w: String!) { reindexWorkspace(workspaceId: $w) }`,
+        { w: wsId },
+      );
+
+      // --- ポジティブコントロール: 制限をかける前は、メンバーから見える
+      const before = await gql(
+        memberCookie,
+        `query ($w: String!) { workspaceDocs(workspaceId: $w) { docId } }`,
+        { w: wsId },
+      );
+      const beforeIds = (before.data?.workspaceDocs ?? []).map((d: any) => d.docId);
+      expect(beforeIds).toContain(SECRET_DOC);
+
+      // --- 既定ロールを None にして締める
+      const closed = await gql(
+        ownerCookie,
+        `mutation ($i: UpdateDocDefaultRoleInput!) { updateDocDefaultRole(input: $i) }`,
+        { i: { workspaceId: wsId, docId: SECRET_DOC, role: 'None' } },
+      );
+      expect(closed.errors).toBeUndefined();
+      expect(closed.data?.updateDocDefaultRole).toBe(true);
+
+      // --- 1) 一覧に出ない（タイトルと件数だけでも存在が漏れる）
+      const list = await gql(
+        memberCookie,
+        `query ($w: String!) { workspaceDocs(workspaceId: $w) { docId } }`,
+        { w: wsId },
+      );
+      const listIds = (list.data?.workspaceDocs ?? []).map((d: any) => d.docId);
+      expect(listIds).toContain(OPEN_DOC);
+      expect(listIds).not.toContain(SECRET_DOC);
+
+      // --- 2) 単体で引いても「無い」（403 ではなく null。存在を伝えない）
+      const one = await gql(
+        memberCookie,
+        `query ($w: String!, $d: String!) {
+          workspace(id: $w) { doc(docId: $d) { id title } }
+        }`,
+        { w: wsId, d: SECRET_DOC },
+      );
+      expect(one.data?.workspace?.doc ?? null).toBeNull();
+
+      // --- 3) REST でも 404（403 だと「あるが読めない」ことが伝わる）
+      const rest = await fetch(`${API}/api/workspaces/${wsId}/docs/${SECRET_DOC}`, {
+        headers: { Cookie: memberCookie },
+      });
+      expect(rest.status).toBe(404);
+
+      // --- 4) 外部RAG の取り込み口。ここが抜けると AI の回答として本文が返る
+      const md = await fetch(`${API}/api/internal/docs/get-markdown`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
+        body: JSON.stringify({ workspaceId: wsId, docId: SECRET_DOC }),
+      });
+      expect(md.status).toBe(404);
+
+      // --- 5) 検索に出ない（**最も危険**。結果には本文の抜粋が出る）
+      const searched = await gql(
+        memberCookie,
+        `query ($w: String!, $i: SearchDocsInput!) {
+          workspace(id: $w) { searchDocs(input: $i) { docId } }
+        }`,
+        { w: wsId, i: { keyword: SECRET_WORD } },
+      );
+      const hits = (searched.data?.workspace?.searchDocs ?? []).map((d: any) => d.docId);
+      expect(hits).not.toContain(SECRET_DOC);
+
+      // 所有者からは検索で見つかること（検索そのものが壊れていないことの確認）
+      const ownerSearched = await gql(
+        ownerCookie,
+        `query ($w: String!, $i: SearchDocsInput!) {
+          workspace(id: $w) { searchDocs(input: $i) { docId } }
+        }`,
+        { w: wsId, i: { keyword: SECRET_WORD } },
+      );
+      const ownerHits = (ownerSearched.data?.workspace?.searchDocs ?? []).map(
+        (d: any) => d.docId,
+      );
+      expect(ownerHits).toContain(SECRET_DOC);
+
+      // --- 5b) 集約検索も動くこと
+      //
+      // ⚠️ **通常のメンバーでしか壊れない経路がある。** 権限の条件は
+      // Admin と WS 所有者では `true` に畳まれるため、その2者で試すと
+      // 結合漏れに気づけない。**必ずメンバーで叩く。**
+      const aggInput = {
+        table: 'block',
+        query: { type: 'match', field: 'content', match: SECRET_WORD },
+        field: 'docId',
+        options: {
+          hits: { fields: ['docId'], pagination: { limit: 3 } },
+          pagination: { limit: 5 },
+        },
+      };
+      const agg = await gql(
+        memberCookie,
+        `query ($w: String!, $i: AggregateInput!) {
+          workspace(id: $w) { aggregate(input: $i) { buckets { key count } } }
+        }`,
+        { w: wsId, i: aggInput },
+      );
+      // 500 になっていないこと（壊れた検索は空を返すので素通りしやすい）
+      expect(agg.errors).toBeUndefined();
+      const aggKeys = (agg.data?.workspace?.aggregate?.buckets ?? []).map(
+        (b: any) => b.key,
+      );
+      expect(aggKeys).not.toContain(SECRET_DOC);
+
+      // --- 6) 書き込みも通らない
+      const write = await fetch(`${API}/api/internal/docs/upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: memberCookie },
+        body: JSON.stringify({
+          workspaceId: wsId,
+          docId: SECRET_DOC,
+          title: '書き換え',
+          markdown: 'x',
+        }),
+      });
+      expect([403, 404]).toContain(write.status);
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  test('個別に権限を配ると読めるようになり、外すとまた見えなくなる', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
+
+    const created = await gql(
+      ownerCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'doc-permission-grant-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [MEMBER.email] },
+      );
+      await gql(
+        memberCookie,
+        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+        { w: wsId, i: invited.data?.inviteMembers?.[0]?.inviteId },
+      );
+
+      const me = await gql(memberCookie, `query { currentUser { id } }`);
+      const memberId = me.data?.currentUser?.id;
+      expect(memberId).toBeTruthy();
+
+      await upsertDoc(ownerCookie, wsId, SECRET_DOC, '役員限定ページ', '機密の本文');
+      await gql(
+        ownerCookie,
+        `mutation ($i: UpdateDocDefaultRoleInput!) { updateDocDefaultRole(input: $i) }`,
+        { i: { workspaceId: wsId, docId: SECRET_DOC, role: 'None' } },
+      );
+
+      const readable = async () => {
+        const r = await gql(
+          memberCookie,
+          `query ($w: String!, $d: String!) {
+            workspace(id: $w) { doc(docId: $d) { id permissions { Doc_Read Doc_Update } } }
+          }`,
+          { w: wsId, d: SECRET_DOC },
+        );
+        return r.data?.workspace?.doc ?? null;
+      };
+
+      expect(await readable()).toBeNull();
+
+      // --- Reader として個別に配る
+      const granted = await gql(
+        ownerCookie,
+        `mutation ($i: GrantDocUserRolesInput!) { grantDocUserRoles(input: $i) }`,
+        {
+          i: {
+            workspaceId: wsId,
+            docId: SECRET_DOC,
+            userIds: [memberId],
+            role: 'Reader',
+          },
+        },
+      );
+      expect(granted.errors).toBeUndefined();
+
+      const afterGrant = await readable();
+      expect(afterGrant).not.toBeNull();
+      // ⚠️ 読めるが書けないこと。画面はこの値でボタンの出し分けをする
+      expect(afterGrant.permissions.Doc_Read).toBe(true);
+      expect(afterGrant.permissions.Doc_Update).toBe(false);
+
+      // --- 権限の情報を見られなくても、doc そのものは壊れないこと
+      //
+      // ⚠️ `grantedUsersList` は GraphQL の**非 null** 項目。ここで例外を
+      // 投げると**非 null 伝播で `workspace.doc` ごと null になり**、
+      // Doc_Users_Read を持たない Editor / Reader は title も permissions も
+      // 失って画面が全操作不可になる。**見せないだけ（空）にする。**
+      const sharePanel = await gql(
+        memberCookie,
+        `query ($w: String!, $d: String!, $p: PaginationInput!) {
+          workspace(id: $w) {
+            doc(docId: $d) {
+              id
+              title
+              defaultRole
+              permissions { Doc_Read }
+              grantedUsersList(pagination: $p) { totalCount }
+            }
+          }
+        }`,
+        { w: wsId, d: SECRET_DOC, p: { first: 10 } },
+      );
+      expect(sharePanel.errors).toBeUndefined();
+      const panelDoc = sharePanel.data?.workspace?.doc;
+      expect(panelDoc).not.toBeNull();
+      expect(panelDoc.permissions.Doc_Read).toBe(true);
+      // 権限者の一覧だけが空になる
+      expect(panelDoc.grantedUsersList.totalCount).toBe(0);
+
+      // --- 外すと、また見えなくなる
+      const revoked = await gql(
+        ownerCookie,
+        `mutation ($i: RevokeDocUserRoleInput!) { revokeDocUserRoles(input: $i) }`,
+        { i: { workspaceId: wsId, docId: SECRET_DOC, userId: memberId } },
+      );
+      expect(revoked.errors).toBeUndefined();
+      expect(await readable()).toBeNull();
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  test('doc Manager でも自分より強いロールは配れない', async () => {
+    // ⚠️ **`Doc_Users_Manage` の有無だけでは足りない。** これを持つのは
+    // Owner と Manager だが、Manager が `Owner` を配れると
+    // **自分を Owner に昇格でき**（Doc_TransferOwner / Doc_Delete を得る）、
+    // 権限機構が意味を失う。
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
+
+    const created = await gql(
+      ownerCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'doc-permission-manager-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+
+    try {
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [MEMBER.email] },
+      );
+      await gql(
+        memberCookie,
+        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+        { w: wsId, i: invited.data?.inviteMembers?.[0]?.inviteId },
+      );
+      const meId = (await gql(memberCookie, `query { currentUser { id } }`)).data
+        ?.currentUser?.id;
+
+      await upsertDoc(ownerCookie, wsId, SECRET_DOC, '役員限定ページ', '機密の本文');
+
+      // メンバーを doc Manager にする（Doc_Users_Manage を持つ）
+      const granted = await gql(
+        ownerCookie,
+        `mutation ($i: GrantDocUserRolesInput!) { grantDocUserRoles(input: $i) }`,
+        {
+          i: {
+            workspaceId: wsId,
+            docId: SECRET_DOC,
+            userIds: [meId],
+            role: 'Manager',
+          },
+        },
+      );
+      expect(granted.errors).toBeUndefined();
+
+      // Manager として正当な付与（同じ強さ）は通ること
+      const sameLevel = await gql(
+        memberCookie,
+        `mutation ($i: GrantDocUserRolesInput!) { grantDocUserRoles(input: $i) }`,
+        {
+          i: {
+            workspaceId: wsId,
+            docId: SECRET_DOC,
+            userIds: [meId],
+            role: 'Manager',
+          },
+        },
+      );
+      expect(sameLevel.errors).toBeUndefined();
+
+      // ⚠️ 自分を Owner に上げる経路は2つある。両方塞がっていること
+      const escalations = [
+        [
+          `mutation ($i: GrantDocUserRolesInput!) { grantDocUserRoles(input: $i) }`,
+          { workspaceId: wsId, docId: SECRET_DOC, userIds: [meId], role: 'Owner' },
+        ],
+        [
+          `mutation ($i: UpdateDocUserRoleInput!) { updateDocUserRole(input: $i) }`,
+          { workspaceId: wsId, docId: SECRET_DOC, userId: meId, role: 'Owner' },
+        ],
+      ] as const;
+
+      for (const [mutation, input] of escalations) {
+        const res = await gql(memberCookie, mutation, { i: input });
+        expect(res.errors?.length ?? 0).toBeGreaterThan(0);
+      }
+
+      // 実際に昇格していないこと（エラーの有無だけでは足りない）
+      const after = await gql(
+        memberCookie,
+        `query ($w: String!, $d: String!) {
+          workspace(id: $w) {
+            doc(docId: $d) { permissions { Doc_Delete Doc_TransferOwner } }
+          }
+        }`,
+        { w: wsId, d: SECRET_DOC },
+      );
+      const perm = after.data?.workspace?.doc?.permissions;
+      expect(perm.Doc_Delete).toBe(false);
+      expect(perm.Doc_TransferOwner).toBe(false);
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  test('権限のない者は権限を配れない', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
+
+    const created = await gql(
+      ownerCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'doc-permission-escalation-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+
+    try {
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [MEMBER.email] },
+      );
+      await gql(
+        memberCookie,
+        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+        { w: wsId, i: invited.data?.inviteMembers?.[0]?.inviteId },
+      );
+      const me = await gql(memberCookie, `query { currentUser { id } }`);
+      const memberId = me.data?.currentUser?.id;
+
+      await upsertDoc(ownerCookie, wsId, SECRET_DOC, '役員限定ページ', '機密の本文');
+      await gql(
+        ownerCookie,
+        `mutation ($i: UpdateDocDefaultRoleInput!) { updateDocDefaultRole(input: $i) }`,
+        { i: { workspaceId: wsId, docId: SECRET_DOC, role: 'None' } },
+      );
+
+      // ⚠️ 自分に権限を配れてしまったら、権限機構そのものが無意味になる
+      const escalate = await gql(
+        memberCookie,
+        `mutation ($i: GrantDocUserRolesInput!) { grantDocUserRoles(input: $i) }`,
+        {
+          i: {
+            workspaceId: wsId,
+            docId: SECRET_DOC,
+            userIds: [memberId],
+            role: 'Owner',
+          },
+        },
+      );
+      expect(escalate.errors?.length ?? 0).toBeGreaterThan(0);
+
+      // 実際に読めないままであること（エラーの有無だけでは足りない）
+      const after = await gql(
+        memberCookie,
+        `query ($w: String!, $d: String!) { workspace(id: $w) { doc(docId: $d) { id } } }`,
+        { w: wsId, d: SECRET_DOC },
+      );
+      expect(after.data?.workspace?.doc ?? null).toBeNull();
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
         id: wsId,
       });
     }

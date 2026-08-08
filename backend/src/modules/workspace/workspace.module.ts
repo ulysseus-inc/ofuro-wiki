@@ -8,7 +8,12 @@ import { ManualWorkspaceModule } from '../manual-workspace/manual-workspace.modu
 
 @Module({
   imports: [MailModule, ManualWorkspaceModule],
-  providers: [WorkspaceResolver, WorkspaceService, PrismaService, DocHistoryService],
+  providers: [
+    WorkspaceResolver,
+    WorkspaceService,
+    PrismaService,
+    DocHistoryService,
+  ],
   exports: [WorkspaceService],
 })
 export class WorkspaceModule {}

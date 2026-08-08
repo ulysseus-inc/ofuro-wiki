@@ -65,6 +65,14 @@ const MUTATION_ACTIONS: Record<string, string> = {
   recoverDoc: 'doc.restore',
   publishPage: 'doc.publish',
   revokePublicPage: 'doc.unpublish',
+  // ドキュメント単位の権限（#97 / docs/doc-permission.md 9章）
+  //
+  // 「誰がいつ、誰に何を見せるようにしたか」が追えないと、
+  // 情報漏洩の調査ができない。
+  grantDocUserRoles: 'doc.permission.grant',
+  revokeDocUserRoles: 'doc.permission.revoke',
+  updateDocUserRole: 'doc.permission.role',
+  updateDocDefaultRole: 'doc.permission.default',
   // 本人による変更
   changeMyPassword: 'user.password.change',
 };
@@ -90,7 +98,7 @@ export class AuditInterceptor implements NestInterceptor {
     }
 
     const req = gql.getContext().req;
-    const args = gql.getArgs<Record<string, any>>();
+    const args = flattenArgs(gql.getArgs<Record<string, any>>());
 
     return next.handle().pipe(
       // 成功時のみ記録する。失敗の記録は Guard / AuthService が担う
@@ -135,6 +143,25 @@ export class AuditInterceptor implements NestInterceptor {
  *
  * **対象種別ごとに、見るべき引数名を明示する。**
  */
+/**
+ * `input: { ... }` を平らにする。
+ *
+ * ⚠️ **入れ子のままだと `args.docId` が引けず、対象が空の監査ログになる。**
+ * 「記録している」のに「何に対する操作か分からない」記録ができあがり、
+ * 仕様書に ✅ と書いてあっても調査には使えない。
+ * #97 の権限操作はすべて `input` 形式である。
+ */
+export function flattenArgs(
+  args: Record<string, any> | undefined,
+): Record<string, any> {
+  if (!args) return {};
+  const { input, ...rest } = args;
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    return { ...rest, ...input };
+  }
+  return args;
+}
+
 export function targetIdOf(
   action: string,
   args: Record<string, any> | undefined,

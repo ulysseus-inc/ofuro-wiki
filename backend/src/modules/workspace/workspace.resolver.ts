@@ -18,7 +18,6 @@ import {
   DocType,
   WorkspaceDocHistoryType,
   buildPermissions,
-  buildDocPermissions,
 } from './workspace.model';
 import { DocHistoryService } from '../doc/doc-history.service';
 import { ManualWorkspaceService } from '../manual-workspace/manual-workspace.service';
@@ -30,6 +29,8 @@ import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator'
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PrismaService } from '../../prisma.service';
+import { PermissionService } from '../permission/permission.service';
+import { DOC_ACTIONS, roleCan } from '../permission/doc-role';
 
 function statusToEnum(status: string): string {
   switch (status) {
@@ -128,6 +129,9 @@ function buildWorkspaceResponse(workspace: any, role: string, userId: string) {
 @UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class WorkspaceResolver {
   constructor(
+    // #97: ドキュメント単位の認可。判定はすべてここに委ねる
+    private permission: PermissionService,
+    
     private workspaceService: WorkspaceService,
     private prisma: PrismaService,
     private docHistoryService: DocHistoryService,
@@ -215,10 +219,16 @@ export class WorkspaceResolver {
   @ResolveField(() => [WorkspaceDocHistoryType])
   async histories(
     @Parent() workspace: WorkspaceType,
+    @CurrentUser() user: { id: string },
     @Args('guid', { type: () => String }) guid: string,
     @Args('take', { type: () => Int, nullable: true }) take?: number,
     @Args('before', { type: () => Date, nullable: true }) before?: Date,
   ) {
+    // #97: 版の一覧は「誰がいつ編集したか」を返す。読めない doc では出さない
+    if (!(await this.permission.canRead(workspace.id, guid, user.id))) {
+      return [];
+    }
+
     const items = await this.docHistoryService.listHistory(workspace.id, guid, {
       take,
       before,
@@ -236,7 +246,13 @@ export class WorkspaceResolver {
   async doc(
     @Parent() workspace: WorkspaceType,
     @Args('docId', { type: () => String }) docId: string,
+    @CurrentUser() user: { id: string },
   ) {
+    // #97: ⚠️ タイトルを返すため、読めない doc は「無い」ものとして扱う。
+    // null を返せば存在自体が伝わらない（仕様書 6.8）
+    const role = await this.permission.getDocRole(workspace.id, docId, user.id);
+    if (role === null || !roleCan(role, 'Doc_Read')) return null;
+
     const meta = await this.prisma.docMeta.findUnique({
       where: {
         workspaceId_docId: { workspaceId: workspace.id, docId },
@@ -250,13 +266,20 @@ export class WorkspaceResolver {
       summary: null,
       mode: meta?.mode ?? 'page',
       public: meta?.public ?? false,
-      defaultRole: meta?.defaultRole ?? 'manager',
+      // #97: ⚠️ ここで固定値を返さない。設定が無ければ「ワークスペースの
+      // ロールが効く」のが実際の挙動であり、DocTypeResolver が解決する
+      defaultRole: meta?.defaultRole ?? null,
       createdAt: meta?.createdAt ?? null,
       updatedAt: meta?.updatedAt ?? null,
       creatorId: meta?.createdById ?? null,
       lastUpdaterId: meta?.updatedById ?? null,
       workspaceId: workspace.id,
-      permissions: buildDocPermissions((workspace as any)._dbRole || 'owner'),
+      // #97: ⚠️ 画面はこの値で表示・非表示を決める。
+      // ワークスペースのロールではなく**実効ロール**から作る。
+      // ここがずれると「編集できないのに編集ボタンが出る」ことになる
+      permissions: Object.fromEntries(
+        DOC_ACTIONS.map((a) => [a, roleCan(role, a)]),
+      ),
     };
   }
 

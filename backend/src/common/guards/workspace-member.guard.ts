@@ -130,9 +130,17 @@ export class WorkspaceMemberGuard implements CanActivate {
     if (type === 'graphql') {
       const gqlCtx = GqlExecutionContext.create(context);
       const args = gqlCtx.getArgs<Record<string, any>>();
+      // ⚠️ **`input: { workspaceId }` 形式の mutation がある。**
+      // 平の引数しか見ないと workspaceId を見つけられず、
+      // 「workspaceId is required」で**正当な呼び出しまで拒否する**
+      // （#97 の権限操作がすべて弾かれていた。E2E で検出）。
+      const fromInput =
+        args?.input && typeof args.input === 'object'
+          ? args.input[argName]
+          : undefined;
       return {
         req: gqlCtx.getContext().req,
-        workspaceId: args?.[argName],
+        workspaceId: args?.[argName] ?? fromInput,
       };
     }
 

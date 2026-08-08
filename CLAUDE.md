@@ -139,6 +139,7 @@ DB: PostgreSQL or SQLite
 
 | ドキュメント | 内容 |
 |-------------|------|
+| [`docs/doc-permission.md`](docs/doc-permission.md) | ページ単位の権限（#97）。ワークスペース単位との違い、権限マトリクス、経路の網羅、#66 保護フラグとの区別 |
 | [`docs/logging.md`](docs/logging.md) | ログ設計（監査ログ・アクセスログ・アプリケーションログの区分、保存先、保持期間、書いてはいけないもの） |
 | [`docs/frontend-analysis.md`](docs/frontend-analysis.md) | AFFiNE フロントエンド構造の詳細分析、モジュール別の残す/削除判定、通信プロトコル仕様（GraphQL・Socket.IO・REST）、ルート構成、4フェーズの削除計画 |
 

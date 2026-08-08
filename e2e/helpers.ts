@@ -182,8 +182,27 @@ export async function waitForWorkspaceInitialized(page: Page) {
   await ready.first().waitFor({ state: 'visible', timeout: 60_000 });
 }
 
-/** GraphQL クエリを実行して結果を返す */
+/**
+ * GraphQL クエリを実行して結果を返す。
+ *
+ * ⚠️ **ブラウザ内から相対URLで叩くため、ページが実オリジンに居ることが前提。**
+ * 直前のテストの画面遷移が完了していないと、その瞬間だけ `about:blank` になり
+ * `Failed to parse URL from /graphql` で落ちる。**テストの中身とは無関係に
+ * 落ちるうえ、直列実行なので後続が全部巻き添えになる。**
+ * ここで実オリジンに居ることを待ってから投げる。
+ */
 export async function graphqlQuery(page: Page, query: string, variables?: Record<string, any>) {
+  const baseUrl = process.env.BASE_URL ?? 'http://localhost:8080';
+  await page
+    .waitForFunction(() => location.protocol.startsWith('http'), null, {
+      timeout: 15_000,
+    })
+    .catch(async () => {
+      // 遷移が来ないまま about:blank に留まっている場合は、自分で開く
+      await page.goto(baseUrl);
+    });
+  await page.waitForLoadState('domcontentloaded');
+
   return page.evaluate(async ({ q, v }: { q: string; v?: Record<string, any> }) => {
     const body: any = { query: q };
     if (v) body.variables = v;
