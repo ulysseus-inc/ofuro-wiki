@@ -78,7 +78,6 @@ describe('docker-compose が環境変数を渡している', () => {
     'POSTGRES_USER',
     'POSTGRES_PASSWORD',
     'POSTGRES_DB',
-    'LOG_LEVEL', // 既定で十分。必要になったら追加する
     'npm_package_version',
     // #87: ⚠️ **意図的に渡さない。** イメージのビルド時に
     // ARG VERSION → ENV APP_VERSION として焼き込まれており、
@@ -119,5 +118,101 @@ describe('docker-compose が環境変数を渡している', () => {
     ]) {
       expect({ key: k, passed: keys.has(k) }).toEqual({ key: k, passed: true });
     }
+  });
+});
+
+/**
+ * `.env.example` が、利用者が設定できる変数を漏れなく載せていること。
+ *
+ * ⚠️ **compose の検査だけでは足りなかった。** compose が `${VAR}` で受け取る
+ * のに `.env.example` に記載が無い変数があり（`LOG_RETENTION_DAYS` /
+ * `DEFAULT_LANGUAGE`）、**セルフホストする人が存在を知る手段が無かった**。
+ *
+ * `.env.example` は「コピーして .env を作る」出発点であり、
+ * **ここに無い設定は事実上使われない。**
+ */
+describe('.env.example が設定可能な変数を網羅する', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const root = path.join(__dirname, '../..');
+
+  const composeText = (): string =>
+    fs.readFileSync(path.join(root, '..', 'docker-compose.yml'), 'utf-8');
+
+  const exampleKeys = (): Set<string> => {
+    const text = fs.readFileSync(path.join(root, '.env.example'), 'utf-8');
+    // コメントアウトされた行（# VAR=...）も「記載あり」とみなす
+    return new Set(
+      [...text.matchAll(/^#?\s*([A-Z_][A-Z0-9_]*)=/gm)].map((m) => m[1]),
+    );
+  };
+
+  /**
+   * compose が `.env` から受け取る変数（`${VAR}` / `${VAR:-既定}`）。
+   * 固定値で書いているもの（`LOG_STORAGE_PATH: /data/logs`）は
+   * `.env` から変えられないため対象外。
+   */
+  const fromDotenv = (): Set<string> =>
+    new Set(
+      [...composeText().matchAll(/\$\{([A-Z_][A-Z0-9_]*)(?::-[^}]*)?\}/g)].map(
+        (m) => m[1],
+      ),
+    );
+
+  /** `.env` に書くものではないもの。 */
+  const NOT_IN_EXAMPLE = new Set([
+    'POSTGRES_DB', // 既定で足りる
+    'POSTGRES_USER', // 同上
+    'BACKUP_HOST_PATH', // ホスト側のパス。compose の既定で足りる
+    'APP_IMAGE', // イメージ運用（デモ等）でのみ使う
+    'POSTGRES_IMAGE', // 同上
+  ]);
+
+  it('compose が .env から受け取る変数がすべて載っている', () => {
+    const listed = exampleKeys();
+    const missing = [...fromDotenv()]
+      .filter((k) => !NOT_IN_EXAMPLE.has(k))
+      .filter((k) => !listed.has(k))
+      .sort();
+
+    expect({
+      記載漏れ: missing,
+      説明: '.env.example に無い設定は、利用者が存在を知れない',
+    }).toEqual({ 記載漏れ: [], 説明: expect.any(String) });
+  });
+
+  /** 実装が `process.env.X` として読む変数。 */
+  const usedByApp = (): Set<string> => {
+    const found = new Set<string>();
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith('.ts')) {
+          const text: string = fs.readFileSync(full, 'utf-8');
+          for (const m of text.matchAll(/process\.env\.([A-Z_][A-Z0-9_]*)/g)) {
+            found.add(m[1]);
+          }
+        }
+      }
+    };
+    walk(path.join(root, 'src'));
+    return found;
+  };
+
+  /** 逆方向。実装が読まなくなった変数が残っていないか。 */
+  it('実装が読まない変数が残っていない', () => {
+    const used = usedByApp();
+    const composeProvided = composeText();
+    const stale = [...exampleKeys()]
+      .filter((k) => !used.has(k))
+      // compose 側で使うもの（POSTGRES_PASSWORD 等）は実装が読まなくてよい
+      .filter((k) => !composeProvided.includes(k))
+      .sort();
+
+    expect({
+      死んだ記載: stale,
+      説明: '使われなくなった変数は .env.example から消す',
+    }).toEqual({ 死んだ記載: [], 説明: expect.any(String) });
   });
 });

@@ -1,3 +1,8 @@
+// ⚠️ **必ず最初に置くこと。** Node のスレッドプールは「最初に使われた時点」で
+// 確定するため、bcrypt 等が読み込まれた後では設定が静かに無視される。
+// 順序は test/common/threadpool.spec.ts が守っている。
+import { THREAD_POOL_SIZE } from './bootstrap/threadpool';
+
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -158,6 +163,9 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3010;
   await app.listen(port);
   logger.log(`ofuro-wiki backend running on port ${port}`);
+  // 効いていないと「始業時にログインが遅い」という形でしか現れないため、
+  // 起動時に値を出しておく（docs/maintainer-guide.md「同時ログインが遅い」）
+  logger.log(`スレッドプール: ${THREAD_POOL_SIZE}（同時に処理できる照合数）`);
   logger.log(`GraphQL Playground: http://localhost:${port}/graphql`);
 }
 bootstrap();

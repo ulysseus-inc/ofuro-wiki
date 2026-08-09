@@ -35,6 +35,13 @@ services:
       # #90: ログの保存先と保持日数（docs/logging.md）
       LOG_STORAGE_PATH: /data/logs
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-90}
+      # ⚠️ 障害調査で最も使う設定。compose が渡さないと .env に書いても届かない
+      LOG_LEVEL: ${LOG_LEVEL:-log}
+      # ⚠️ 通常は空のまま。アプリが CPU コア数から自動で決める
+      # （src/bootstrap/threadpool.ts）。空文字なら自動判定が働く。
+      # 実測して値を固定したい場合だけ .env で指定する。
+      # compose 経由でも渡せないと、Docker では上書き手段が無くなる
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-}
       NODE_ENV: production
       # #10: メール内リンク等に使用するベースURL
       BASE_URL: ${BASE_URL}
