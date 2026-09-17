@@ -40,6 +40,22 @@ interface ServerEvents {
     compressed?: boolean;
   };
 
+  /**
+   * #151 stage 3 (PR2): the workspace's discovery revision moved.
+   *
+   * WARNING: this carries no listing data on purpose. Putting documents in
+   * here would mean deciding who may see what at broadcast time - the very
+   * thing the server ledger exists to centralise. The client re-reads the
+   * revision and fetches only if its cache is behind.
+   *
+   * Duplicates are harmless: the receiver just compares revisions, so this
+   * does not need exactly-once delivery.
+   */
+  'space:discovery-changed': {
+    spaceId: string;
+    reason: string;
+  };
+
   'space:collect-awareness': {
     spaceType: string;
     spaceId: string;

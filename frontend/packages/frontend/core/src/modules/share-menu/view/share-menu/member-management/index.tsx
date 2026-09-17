@@ -46,19 +46,19 @@ export const MembersRow = ({ onClick }: { onClick: () => void }) => {
     switch (grantedUserCount) {
       case 2:
         return t['com.affine.share-menu.member-management.member-count-2']({
-          member1: topThreeMembers[0].name,
-          member2: topThreeMembers[1].name,
+          member1: topThreeMembers[0].name ?? '',
+          member2: topThreeMembers[1].name ?? '',
         });
       case 3:
         return t['com.affine.share-menu.member-management.member-count-3']({
-          member1: topThreeMembers[0].name,
-          member2: topThreeMembers[1].name,
-          member3: topThreeMembers[2].name,
+          member1: topThreeMembers[0].name ?? '',
+          member2: topThreeMembers[1].name ?? '',
+          member3: topThreeMembers[2].name ?? '',
         });
       default:
         return t['com.affine.share-menu.member-management.member-count-more']({
-          member1: topThreeMembers[0].name,
-          member2: topThreeMembers[1].name,
+          member1: topThreeMembers[0].name ?? '',
+          member2: topThreeMembers[1].name ?? '',
           memberCount: (grantedUserCount - 2).toString(),
         });
     }
@@ -126,10 +126,13 @@ export const MembersRow = ({ onClick }: { onClick: () => void }) => {
           <div className={styles.memberContainerStyle}>
             <Avatar
               url={docOwner.user.avatarUrl || ''}
-              name={docOwner.user.name}
+              name={docOwner.user.name ?? undefined}
               size={24}
             />
-            <span title={docOwner.user.name} className={styles.memberNameStyle}>
+            <span
+              title={docOwner.user.name ?? undefined}
+              className={styles.memberNameStyle}
+            >
               {docOwner.user.name}
             </span>
           </div>

@@ -11,7 +11,7 @@ import { ErrorBoundary } from 'react-error-boundary';
 
 import { CloudSvg } from '../cloud-svg';
 import { CopyLinkButton } from './copy-link-button';
-import { MembersPermission, PublicDoc } from './general-access';
+import { MembersPermission } from './general-access';
 import * as styles from './index.css';
 import { InviteInput } from './invite-member-editor';
 import { MembersRow } from './member-management';
@@ -67,8 +67,6 @@ export const AFFiNESharePage = (
 
   const canManageUsers = useGuard('Doc_Users_Manage', docService.doc.id);
 
-  const canPublish = useGuard('Doc_Publish', docService.doc.id);
-
   useEffect(() => {
     shareInfoService.shareInfo.revalidate();
   }, [shareInfoService]);
@@ -105,7 +103,13 @@ export const AFFiNESharePage = (
           hittingPaywall={!!props.hittingPaywall}
           disabled={!canManageUsers}
         />
-        <PublicDoc disabled={!canPublish} />
+        {/*
+          #131: ⚠️ **「リンクを持っている全員」（公開リンク）の行は出さない。**
+          公開リンクは仕様上**未実装**（docs/doc-sharing.md §2・§8）で、
+          バックエンドはページの `public` を読み取りの許可に使っていない。
+          出すと「読み取り専用」と表示されるのに**誰もリンクで読めない**
+          （2026-09-11 実測）。部品ごと削除した
+        */}
       </div>
       <Divider className={styles.divider} />
       <CopyLinkButton workspaceId={workspaceId} />

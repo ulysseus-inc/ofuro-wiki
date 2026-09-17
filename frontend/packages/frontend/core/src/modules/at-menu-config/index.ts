@@ -5,8 +5,7 @@ import { WorkspaceDialogService } from '../dialogs';
 import { DocScope, DocsService } from '../doc';
 import { DocDisplayMetaService } from '../doc-display-meta';
 import { JournalService } from '../journal';
-import { GuardService, MemberSearchService } from '../permissions';
-import { DocGrantedUsersService } from '../permissions/services/doc-granted-users';
+import { MemberSearchService } from '../permissions';
 import { SearchMenuService } from '../search-menu/services';
 import { WorkspaceScope } from '../workspace';
 import { AtMenuConfigService } from './services';
@@ -23,7 +22,5 @@ export function configAtMenuConfigModule(framework: Framework) {
       SearchMenuService,
       WorkspaceServerService,
       MemberSearchService,
-      GuardService,
-      DocGrantedUsersService,
     ]);
 }

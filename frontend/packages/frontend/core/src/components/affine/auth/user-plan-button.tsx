@@ -1,5 +1,4 @@
 import { Tooltip } from '@ofuro/component/ui/tooltip';
-import { SubscriptionPlan } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import { useLiveData, useService } from '@toeverything/infra';
 import { type SyntheticEvent, useEffect } from 'react';
@@ -43,13 +42,15 @@ export const UserPlanButton = ({
     return;
   }
 
-  const planLabel = isBeliever ? 'Believer' : (plan ?? SubscriptionPlan.Free);
+  // #210: 以前は @ofuro/graphql の列挙 SubscriptionPlan。スキーマに無いため生成物から消えた。
+  // この部品は Payment 機能が無いと描画されない（ofuro-wiki では出ない）
+  const planLabel = isBeliever ? 'Believer' : (plan ?? 'Free');
 
   return (
     <Tooltip content={t['com.affine.payment.tag-tooltips']()} side="top">
       <div
         data-is-believer={isBeliever ? 'true' : undefined}
-        data-is-pro={plan === SubscriptionPlan.Pro ? 'true' : undefined}
+        data-is-pro={plan === 'Pro' ? 'true' : undefined}
         className={styles.userPlanButton}
         onClick={onClick}
         data-event-props="$.settingsPanel.profileAndBadge.viewPlans"

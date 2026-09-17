@@ -129,7 +129,7 @@ export const EditorJournalPanel = () => {
   const [selectedDate, setSelectedDate] = useState(() => {
     return journalDate ?? routeDate ?? dayjs();
   });
-  const [calendarCursor, setCalendarCursor] = useState(selectedDate);
+  const [, setCalendarCursor] = useState(selectedDate);
   const docRecords = useLiveData(useService(DocsService).list.docs$);
   const allJournalDates = useLiveData(journalService.allJournalDates$);
 

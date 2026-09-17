@@ -2,8 +2,15 @@ name: CI
 
 # #122: PR のたびに静的解析とテストを実行する。
 #
-# 対象は backend のみ。フロントエンドは型検査が成立していないため対象外
-# （TS6305 で型が any に落ちる。詳細と方針は #125）。
+# backend は型検査とテスト。
+# frontend は型エラーの**件数が増えていないか**を検査する（#125）。
+# 既知の未修正が 111 件あるためゼロは条件にできない。ゼロにすると
+# CI が常に赤になり、誰も見なくなる。まず「増やさない」ことを守る。
+# あわせて、送るクエリ（index.ts）が .gql から生成したものと一致するかを見る（#207）。
+#
+# ⚠️ frontend の型検査は `tsc --build` で行う。`tsc --noEmit` は
+# TS6305 で依存の型が any に落ち、**検査になっていない**（#125）。
+#
 # E2E は DB・フロント・バックエンドの起動が必要で実行に6分以上かかるため、
 # ローカル実行の運用を継続する。
 
@@ -53,3 +60,44 @@ jobs:
       - name: Unit tests
         working-directory: backend
         run: npm test -- --ci
+
+  frontend:
+    name: frontend (型エラーの増加検知)
+    runs-on: ubuntu-latest
+    # クリーンビルドで約3分（ローカル実測）。依存の導入とCIの遅さを見込む
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # package.json の packageManager (yarn@4.12.0) を有効にする
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        working-directory: frontend
+        # postinstall が husky を呼ぶため無効化する（CI にフックは要らない）
+        env:
+          HUSKY: '0'
+        run: yarn install --immutable
+
+      # #207: 送るクエリ（index.ts）が .gql から生成したものと一致するか。
+      # .gql がバックエンドのスキーマと合わなければ codegen が落ちる。
+      # 数秒で終わるため、型検査より先に回す
+      - name: GraphQL codegen (index.ts が .gql と一致するか)
+        working-directory: frontend
+        run: yarn graphql:check
+
+      # ⚠️ tsc --noEmit ではなく tsc --build を使う。
+      # noEmit だと TS6305 で依存の型が any に落ち、検査にならない（#125）
+      - name: Type check (件数が増えていないか)
+        working-directory: frontend
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+        run: yarn typecheck:ci

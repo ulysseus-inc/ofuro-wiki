@@ -1,12 +1,9 @@
 import { Tabs, Tooltip, useConfirmModal } from '@ofuro/component';
 import { Button } from '@ofuro/component/ui/button';
 import { Menu } from '@ofuro/component/ui/menu';
-import { ServerService } from '@ofuro/core/modules/cloud';
-import { WorkspaceDialogService } from '@ofuro/core/modules/dialogs';
 import { WorkspacePermissionService } from '@ofuro/core/modules/permissions';
 import { ShareInfoService } from '@ofuro/core/modules/share-doc';
 import type { WorkspaceMetadata } from '@ofuro/core/modules/workspace';
-import { ServerDeploymentType, SubscriptionPlan } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import type { Store } from '@blocksuite/affine/store';
 import { LockIcon, PublishIcon } from '@blocksuite/icons/rc';
@@ -17,7 +14,6 @@ import {
   type Ref,
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react';
 
@@ -49,19 +45,12 @@ export const ShareMenuContent = (props: ShareMenuProps) => {
   const t = useI18n();
   const [currentTab, setCurrentTab] = useState(ShareMenuTab.Share);
 
-  const serverService = useService(ServerService);
-  const isSelfhosted = useLiveData(
-    serverService.server.config$.selector(
-      c => c.type === ServerDeploymentType.Selfhosted
-    )
-  );
   // Quota/paywall check removed - self-hosted wiki has no billing restrictions
   const hittingPaywall = false;
 
   const permissionService = useService(WorkspacePermissionService);
   const isOwner = useLiveData(permissionService.permission.isOwner$);
 
-  const workspaceDialogService = useService(WorkspaceDialogService);
 
   const onValueChange = useCallback((value: string) => {
     setCurrentTab(value as ShareMenuTab);

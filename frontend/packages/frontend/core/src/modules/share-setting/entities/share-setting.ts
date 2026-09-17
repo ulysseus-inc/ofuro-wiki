@@ -69,30 +69,6 @@ export class WorkspaceShareSetting extends Entity {
     await this.isLoading$.waitFor(isLoading => !isLoading, signal);
   }
 
-  async setEnableUrlPreview(enableUrlPreview: EnableUrlPreview) {
-    await this.store.updateWorkspaceEnableUrlPreview(
-      this.workspaceService.workspace.id,
-      enableUrlPreview
-    );
-    await this.waitForRevalidation();
-  }
-
-  async setEnableSharing(enableSharing: EnableSharing) {
-    await this.store.updateWorkspaceEnableSharing(
-      this.workspaceService.workspace.id,
-      enableSharing
-    );
-    await this.waitForRevalidation();
-  }
-
-  async setEnableAi(enableAi: EnableAi) {
-    await this.store.updateWorkspaceEnableAi(
-      this.workspaceService.workspace.id,
-      enableAi
-    );
-    await this.waitForRevalidation();
-  }
-
   override dispose(): void {
     this.revalidate.unsubscribe();
   }

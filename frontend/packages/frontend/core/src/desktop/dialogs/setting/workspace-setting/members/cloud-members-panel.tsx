@@ -61,6 +61,8 @@ export const CloudWorkspaceMembersPanel = ({
     serverService.server.features$.map(f => f?.payment)
   );
   const membersService = useService(WorkspaceMembersService);
+  // #221: 見出しの人数。一覧を読み込むと入る（それまでは undefined）
+  const memberCount = useLiveData(membersService.members.memberCount$);
   const permissionService = useService(WorkspacePermissionService);
 
   const isOwner = useLiveData(permissionService.permission.isOwner$);
@@ -128,7 +130,8 @@ export const CloudWorkspaceMembersPanel = ({
       }
       const results = await membersService.inviteMembers(uniqueEmails);
       const unSuccessInvites = results.reduce<string[]>((acc, result) => {
-        if (!result.sentSuccess) {
+        // #210: スキーマでは email は null を許す
+        if (!result.sentSuccess && result.email) {
           acc.push(result.email);
         }
         return acc;
@@ -201,12 +204,14 @@ export const CloudWorkspaceMembersPanel = ({
     workspaceQuota,
   ]);
 
+  // #221: 実際の人数だけを出す（ofuro-wiki に席数の上限は無い）。以前は仮の値
+  // （workspaceQuota: 0 人・上限 Infinity）から作っていて、常に「メンバー (0/Infinity)」だった
   const title = useMemo(() => {
-    if (isTeam) {
-      return `${t['Members']()} (${workspaceQuota?.memberCount})`;
+    if (memberCount === undefined) {
+      return t['Members']();
     }
-    return `${t['Members']()} (${workspaceQuota?.memberCount}/${workspaceQuota?.memberLimit})`;
-  }, [isTeam, t, workspaceQuota?.memberCount, workspaceQuota?.memberLimit]);
+    return `${t['Members']()} (${memberCount})`;
+  }, [memberCount, t]);
 
   if (workspaceQuota === null) {
     if (isLoading) {

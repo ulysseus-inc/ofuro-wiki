@@ -1,0 +1,3 @@
+mutation adminDeleteBackup($id: String!) {
+  adminDeleteBackup(id: $id)
+}

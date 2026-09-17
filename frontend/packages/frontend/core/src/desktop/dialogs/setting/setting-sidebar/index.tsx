@@ -1,7 +1,5 @@
 import { Scrollable } from '@ofuro/component';
 import { Avatar } from '@ofuro/component/ui/avatar';
-import { UserPlanButton } from '@ofuro/core/components/affine/auth/user-plan-button';
-import { useCatchEventCallback } from '@ofuro/core/components/hooks/use-catch-event-hook';
 import { AuthService } from '@ofuro/core/modules/cloud';
 import { GlobalDialogService } from '@ofuro/core/modules/dialogs';
 import type { SettingTab } from '@ofuro/core/modules/dialogs/constant';
@@ -35,7 +33,6 @@ export type UserInfoProps = {
 
 export const UserInfo = ({
   onAccountSettingClick,
-  onTabChange,
   active,
 }: UserInfoProps) => {
   const account = useLiveData(useService(AuthService).session.account$);

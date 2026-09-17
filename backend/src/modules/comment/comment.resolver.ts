@@ -5,7 +5,7 @@ import {
   ResolveField,
   Parent,
 } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { ForbiddenException, UseGuards } from '@nestjs/common';
 import GraphQLUpload from 'graphql-upload/GraphQLUpload.mjs';
 import type { FileUpload } from 'graphql-upload/processRequest.mjs';
 import { WorkspaceType } from '../workspace/workspace.model';
@@ -27,6 +27,9 @@ import { NotificationService } from '../notification/notification.service';
 import { BlobService } from '../blob/blob.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+/** 相手がページを読めない。フロントの ErrorNames と同じ名前（大文字なのでエラー名として返る） */
+const MENTION_DENIED = 'MENTION_USER_DOC_ACCESS_DENIED';
 
 @Resolver(() => WorkspaceType)
 @UseGuards(JwtAuthGuard)
@@ -73,20 +76,13 @@ export class CommentMutationResolver {
   ) {
     const comment = await this.commentService.createComment(user.id, input);
 
-    // Send mention notifications
-    if (input.mentions?.length) {
-      for (const targetUserId of input.mentions) {
-        if (targetUserId !== user.id) {
-          await this.notificationService.createCommentMentionNotification(
-            user.id,
-            targetUserId,
-            input.workspaceId,
-            { id: input.docId, title: input.docTitle, mode: input.docMode },
-          );
-        }
-      }
-    }
-
+    await this.notifyMentions(
+      user.id,
+      input.workspaceId,
+      input.docId,
+      input.docMode,
+      input.mentions,
+    );
     return comment;
   }
 
@@ -121,31 +117,33 @@ export class CommentMutationResolver {
   ) {
     const reply = await this.commentService.createReply(user.id, input);
 
-    // Notify the parent comment author
     const commentInfo = await this.commentService.getCommentInfo(input.commentId);
-    if (commentInfo && commentInfo.userId !== user.id) {
+    if (!commentInfo) {
+      return reply;
+    }
+    const { workspaceId, docId, userId: authorId } = commentInfo;
+
+    // 親コメントの作者へ。#223: ページを読めなくなっていたら送らない
+    const notifyAuthor =
+      authorId !== user.id &&
+      (await this.commentService.canReceive(workspaceId, docId, authorId));
+    if (notifyAuthor) {
+      const title = await this.commentService.docTitle(workspaceId, docId);
       await this.notificationService.createCommentNotification(
         user.id,
-        commentInfo.userId,
-        commentInfo.workspaceId,
-        { id: commentInfo.docId, title: input.docTitle, mode: input.docMode },
+        authorId,
+        workspaceId,
+        { id: docId, title, mode: input.docMode },
       );
     }
 
-    // Send mention notifications
-    if (input.mentions?.length) {
-      for (const targetUserId of input.mentions) {
-        if (targetUserId !== user.id) {
-          await this.notificationService.createCommentMentionNotification(
-            user.id,
-            targetUserId,
-            commentInfo?.workspaceId ?? '',
-            { id: commentInfo?.docId ?? '', title: input.docTitle, mode: input.docMode },
-          );
-        }
-      }
-    }
-
+    await this.notifyMentions(
+      user.id,
+      workspaceId,
+      docId,
+      input.docMode,
+      input.mentions,
+    );
     return reply;
   }
 
@@ -188,18 +186,66 @@ export class CommentMutationResolver {
   ) {
     if (input.userId === user.id) return true;
 
+    // #223: 同じ WS のメンバーで、ページを読める人の間だけ（docs/mention-notification.md）
+    const { workspaceId, doc } = input;
+    await this.commentService.assertReadable(workspaceId, doc.id, user.id);
+    const canReceive = await this.commentService.canReceive(
+      workspaceId,
+      doc.id,
+      input.userId,
+    );
+    if (!canReceive) {
+      // 画面が「このメンバーは通知されません」と出す
+      throw new ForbiddenException(MENTION_DENIED);
+    }
+
     await this.notificationService.createMentionNotification(
       user.id,
       input.userId,
-      input.workspaceId,
+      workspaceId,
       {
-        id: input.doc.id,
-        title: input.doc.title,
-        mode: input.doc.mode,
-        blockId: input.doc.blockId,
-        elementId: input.doc.elementId,
+        id: doc.id,
+        title: await this.commentService.docTitle(workspaceId, doc.id),
+        mode: doc.mode,
+        blockId: doc.blockId,
+        elementId: doc.elementId,
       },
     );
     return true;
+  }
+
+  /**
+   * コメント内のメンションを送る。#223: 読める相手にだけ、台帳の題で。
+   *
+   * 読めない相手は黙って外す。コメントは保存済みなので、拒否しても取り消せない。
+   */
+  private async notifyMentions(
+    actorId: string,
+    workspaceId: string,
+    docId: string,
+    docMode: string,
+    mentions?: string[],
+  ) {
+    if (!mentions?.length) {
+      return;
+    }
+
+    const title = await this.commentService.docTitle(workspaceId, docId);
+    for (const targetId of mentions) {
+      if (targetId === actorId) {
+        continue;
+      }
+      if (
+        !(await this.commentService.canReceive(workspaceId, docId, targetId))
+      ) {
+        continue;
+      }
+      await this.notificationService.createCommentMentionNotification(
+        actorId,
+        targetId,
+        workspaceId,
+        { id: docId, title, mode: docMode },
+      );
+    }
   }
 }

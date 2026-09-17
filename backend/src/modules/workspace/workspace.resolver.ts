@@ -7,7 +7,7 @@ import {
   Parent,
   Int,
 } from '@nestjs/graphql';
-import { UseGuards, NotFoundException } from '@nestjs/common';
+import { UseGuards, NotFoundException, Logger } from '@nestjs/common';
 import {
   WorkspaceType,
   InviteUserType,
@@ -15,6 +15,7 @@ import {
   InviteLinkType,
   Permission,
   WorkspaceInviteLinkExpireTime,
+  WorkspaceMemberStatus,
   DocType,
   WorkspaceDocHistoryType,
   buildPermissions,
@@ -30,16 +31,27 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PrismaService } from '../../prisma.service';
 import { PermissionService } from '../permission/permission.service';
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 import { DOC_ACTIONS, roleCan } from '../permission/doc-role';
 
-function statusToEnum(status: string): string {
+const memberStatusLogger = new Logger('WorkspaceMemberStatus');
+
+/**
+ * DB のメンバーの状態を、GraphQL の列挙 `WorkspaceMemberStatus` に変換する。
+ *
+ * ⚠️ #210: **列挙に無い値を返さないこと。** 返すと GraphQL が変換できず、メンバー一覧が丸ごと失敗する。
+ * 以前は知らない値の頭文字を大文字にして返していた（`rejected` → `Rejected`）。
+ * 知らない値は `Pending` にする（参加済みと誤って見せない）。
+ */
+function statusToEnum(status: string): WorkspaceMemberStatus {
   switch (status) {
     case 'accepted':
-      return 'Accepted';
+      return WorkspaceMemberStatus.Accepted;
     case 'pending':
-      return 'Pending';
+      return WorkspaceMemberStatus.Pending;
     default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
+      memberStatusLogger.warn(`Unknown member status "${status}"; returned as Pending`);
+      return WorkspaceMemberStatus.Pending;
   }
 }
 
@@ -136,6 +148,7 @@ export class WorkspaceResolver {
     private prisma: PrismaService,
     private docHistoryService: DocHistoryService,
     private manualWorkspaceService: ManualWorkspaceService,
+    private discovery: DiscoveryRevisionService,
   ) {}
 
   @Query(() => [WorkspaceType])
@@ -420,6 +433,8 @@ export class WorkspaceResolver {
       where: { workspaceId_userId: { workspaceId, userId } },
       data: { status: 'accepted' },
     });
+    // ⚠️ #151: 参加が確定して「何が見えるか」が変わる
+    await this.discovery.bump(workspaceId, 'permission-workspace');
     return true;
   }
 

@@ -14,7 +14,7 @@ import { useLiveData, useServices } from '@toeverything/infra';
 import { useEffect, useMemo } from 'react';
 
 import { AuthService, ServerService } from '../../../../modules/cloud';
-import type { SettingSidebarItem, SettingState } from '../types';
+import type { SettingSidebarItem } from '../types';
 import { AboutAffine } from './about';
 import { AppearanceSettings } from './appearance';
 import { EditorSettings } from './editor';
@@ -103,12 +103,10 @@ export const useGeneralSettingList = (): GeneralSettingList => {
 
 interface GeneralSettingProps {
   activeTab: SettingTab;
-  onChangeSettingState: (settingState: SettingState) => void;
 }
 
 export const GeneralSetting = ({
   activeTab,
-  onChangeSettingState,
 }: GeneralSettingProps) => {
   switch (activeTab) {
     case 'shortcuts':

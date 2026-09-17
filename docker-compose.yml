@@ -42,6 +42,10 @@ services:
       # 実測して値を固定したい場合だけ .env で指定する。
       # compose 経由でも渡せないと、Docker では上書き手段が無くなる
       UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-}
+      # #151: 起動時に Yjs の目次から doc_meta を補完する処理を止める非常口。
+      # ⚠️ off にすると、ブラウザで作った過去のページが一覧に出ない。
+      # 補完が原因で起動が重いと判明したときだけ off にする
+      DISCOVERY_BACKFILL: ${DISCOVERY_BACKFILL:-on}
       NODE_ENV: production
       # #10: メール内リンク等に使用するベースURL
       BASE_URL: ${BASE_URL}

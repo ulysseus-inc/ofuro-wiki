@@ -1,4 +1,4 @@
-import type { GetWorkspacePageByIdQuery, PublicDocMode } from '@ofuro/graphql';
+import type { GetWorkspacePageByIdQuery } from '@ofuro/graphql';
 import {
   catchErrorInto,
   effect,
@@ -55,26 +55,5 @@ export class ShareInfo extends Entity {
   waitForRevalidation(signal?: AbortSignal) {
     this.revalidate();
     return this.isRevalidating$.waitFor(v => v === false, signal);
-  }
-
-  async enableShare(mode: PublicDocMode) {
-    await this.store.enableSharePage(
-      this.workspaceService.workspace.id,
-      this.docService.doc.id,
-      mode
-    );
-    await this.waitForRevalidation();
-  }
-
-  async changeShare(mode: PublicDocMode) {
-    await this.enableShare(mode);
-  }
-
-  async disableShare() {
-    await this.store.disableSharePage(
-      this.workspaceService.workspace.id,
-      this.docService.doc.id
-    );
-    await this.waitForRevalidation();
   }
 }

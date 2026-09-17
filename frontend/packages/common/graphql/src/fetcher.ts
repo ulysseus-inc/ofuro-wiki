@@ -220,9 +220,30 @@ export const gqlFetcherFactory = (
           if (result.errors && result.errors.length > 0) {
             // throw the first error is enough
             const firstError = result.errors[0];
-            throw new GraphQLError(firstError.message, firstError);
+            // ⚠️ **HTTP status を必ず載せる。**
+            // バックエンドの GraphQL エラーは extensions.code は持つが
+            // **status は持たない**（実測）。呼び出し側が
+            // 「権限が無い」と「サーバーが落ちている」を区別できず、
+            // **権限剥奪後もキャッシュを見せ続ける**ことになる（#151）
+            throw new GraphQLError(firstError.message, {
+              ...firstError,
+              extensions: {
+                ...firstError.extensions,
+                // ⚠️ **既存の status を潰さないこと。**
+                // GraphQL エラーは HTTP 200 で返るため、上書きすると
+                // サーバーが載せた 429 等が 200 になり、
+                // 呼び出し側の判定（例: レート制限）が壊れる
+                status: (firstError.extensions as any)?.status ?? res.status,
+              },
+            } as any);
           } else {
-            throw new GraphQLError('Empty GraphQL error body');
+            // ⚠️ GraphQL の errors が無いまま 4xx/5xx が返る経路
+            //（プロキシや認証ミドルウェアが JSON を返す等）。
+            // **HTTP status を載せないと、呼び出し側が
+            // 「権限が無い」と「サーバーが落ちている」を区別できない**（#151）
+            throw new GraphQLError('Empty GraphQL error body', {
+              extensions: { status: res.status },
+            } as any);
           }
         } else if (result.data) {
           // we have to cast here because the type of result.data is a union type
@@ -230,8 +251,10 @@ export const gqlFetcherFactory = (
         }
       }
 
+      // JSON ですらない応答（プロキシの HTML 等）。status を載せておく
       throw new GraphQLError(
-        'GraphQL query responds unexpected result, query ' + options.query.op
+        'GraphQL query responds unexpected result, query ' + options.query.op,
+        { extensions: { status: res.status } } as any
       );
     });
 

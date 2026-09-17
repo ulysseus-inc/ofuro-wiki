@@ -36,7 +36,13 @@ export class DocGrantedUsersStore extends Store {
       context: { signal },
     });
 
-    return res.workspace.doc.grantedUsersList;
+    // #210: 読めない doc は null が返る（#97）。以前は null を読んで TypeError で落ちていた。
+    // 同じく止めるが、理由が分かるようにする
+    const doc = res.workspace.doc;
+    if (!doc) {
+      throw new Error(`Doc ${docId} is not readable`);
+    }
+    return doc.grantedUsersList;
   }
 
   async grantDocUserRoles(input: GrantDocUserRolesInput) {

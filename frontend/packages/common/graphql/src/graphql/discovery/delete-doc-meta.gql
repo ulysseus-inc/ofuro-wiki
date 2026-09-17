@@ -1,0 +1,6 @@
+# #151 段階3: ページの削除を台帳へ反映する（create-doc-meta.gql を参照）。
+mutation deleteDocMeta($workspaceId: String!, $docId: String!) {
+  deleteDocMeta(workspaceId: $workspaceId, docId: $docId) {
+    status
+  }
+}

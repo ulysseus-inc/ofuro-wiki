@@ -31,6 +31,16 @@ export interface DocSyncDocState {
   synced: boolean;
   syncing: boolean;
   retrying: boolean;
+  /**
+   * #128: サーバーの状態を一通り受け取り終えたか。
+   * ⚠️ ピアが無い（＝サーバーを持たない）ときは true。
+   */
+  initialSyncDone: boolean;
+  /**
+   * #128: ⚠️ **この doc の存在を、どこかの同期ピアが把握しているか。**
+   * true なら中身はこれから届くので、まだ待つ。
+   */
+  known: boolean;
   errorMessage: string | null;
 }
 
@@ -113,6 +123,9 @@ export class DocSyncImpl implements DocSync {
         retrying: false,
         syncing: false,
         synced: true,
+        // ⚠️ サーバーが無いなら、待つものも無い（#128）
+        initialSyncDone: true,
+        known: false,
       });
     }
     return combineLatest(this.peers.map(peer => peer.docState$(docId))).pipe(
@@ -123,6 +136,12 @@ export class DocSyncImpl implements DocSync {
           retrying: allPeers.some(peer => peer.retrying),
           syncing: allPeers.some(peer => peer.syncing),
           synced: allPeers.every(peer => peer.synced),
+          // ⚠️ **全てのピアが受け取り終えるまで待つ**（#128）。
+          // 1つでも知らないピアが居れば、まだ言い切れない
+          initialSyncDone: allPeers.every(peer => peer.initialSyncDone),
+          // ⚠️ **1つでも把握しているピアが居れば待つ。**
+          // そこから中身が届く見込みがある
+          known: allPeers.some(peer => peer.known),
         };
       })
     );

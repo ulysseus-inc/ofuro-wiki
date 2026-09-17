@@ -19,6 +19,10 @@
     "ofuro": "r ofuro.ts",
     "dev": "yarn ofuro dev",
     "build": "yarn ofuro build",
+    "typecheck": "tsc --build packages/frontend/apps/web/tsconfig.json packages/frontend/apps/mobile/tsconfig.json",
+    "typecheck:clean": "tsc --build --clean packages/frontend/apps/web/tsconfig.json packages/frontend/apps/mobile/tsconfig.json",
+    "typecheck:ci": "node scripts/check-typecheck-baseline.mjs",
+    "graphql:check": "node scripts/check-graphql-codegen.mjs",
     "postinstall": "yarn ofuro init"
   },
   "devDependencies": {

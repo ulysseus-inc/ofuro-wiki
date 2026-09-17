@@ -141,11 +141,7 @@ export const AvatarAndName = () => {
   );
 };
 
-const StoragePanel = ({
-  onChangeSettingState,
-}: {
-  onChangeSettingState?: (settingState: SettingState) => void;
-}) => {
+const StoragePanel = () => {
   const t = useI18n();
 
   // ofuro-wiki: no plans page
@@ -230,7 +226,7 @@ export const AccountSetting = ({
               : t['com.affine.settings.password.action.set']()}
           </Button>
         </SettingRow>
-        <StoragePanel onChangeSettingState={onChangeSettingState} />
+        <StoragePanel />
         {serverFeatures?.copilot && (
           <AIUsagePanel onChangeSettingState={onChangeSettingState} />
         )}

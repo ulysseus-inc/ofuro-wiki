@@ -65,8 +65,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # #105: スマホ版も焼き込む。飛ばすと public-mobile が空になり、
+          # スマホからのアクセスに PC 版が返る（MobileRedirectMiddleware が黙って退く）
           build-args: |
-            SKIP_MOBILE=true
+            SKIP_MOBILE=false
             VERSION=${{ steps.ver.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

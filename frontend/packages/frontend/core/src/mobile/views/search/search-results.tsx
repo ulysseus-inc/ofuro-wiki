@@ -29,6 +29,8 @@ export const SearchResults = ({
   tags,
   error,
 }: SearchResultsProps) => {
+  const t = useI18n();
+
   return (
     <>
       <div className={styles.resTitle}>{title}</div>
@@ -42,7 +44,9 @@ export const SearchResults = ({
       {/* Doc Res */}
       {docs?.length ? (
         <div className={styles.resBlock} data-scroll>
-          <div className={styles.resBlockTitle}>Docs</div>
+          <div className={styles.resBlockTitle}>
+            {t['com.affine.m.all-docs.tab.docs']()}
+          </div>
           <div className={styles.resBlockScrollContent}>
             <div className={styles.scrollDocsContent}>
               {docs.map(doc => (

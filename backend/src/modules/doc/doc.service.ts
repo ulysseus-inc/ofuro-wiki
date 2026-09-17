@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
+// #151: Index に影響する変更のあとは必ず版数を上げる
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 
 @Injectable()
 export class DocService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private discovery: DiscoveryRevisionService,
+  ) {}
 
   async getDocMeta(workspaceId: string, docId: string) {
     return this.prisma.docMeta.findUnique({
@@ -28,7 +33,7 @@ export class DocService {
       updatedById?: string;
     },
   ) {
-    return this.prisma.docMeta.upsert({
+    const result = await this.prisma.docMeta.upsert({
       where: { workspaceId_docId: { workspaceId, docId } },
       create: {
         workspaceId,
@@ -40,21 +45,33 @@ export class DocService {
         updatedAt: new Date(),
       },
     });
+
+    // ⚠️ **版数は書き込んだ「あと」に上げる。**
+    // 先に上げると、その間に Snapshot を取ったクライアントが
+    // 「新しい版数 ＋ 古い一覧」を手元に固定し、以後サーバーと版数が
+    // 一致するため**永久に取り直さない**（版数の仕組みが無効になる）。
+    await this.discovery.bump(workspaceId, 'doc-update');
+    return result;
   }
 
   async publishPage(workspaceId: string, docId: string, mode?: string) {
-    return this.prisma.docMeta.upsert({
+    const result = await this.prisma.docMeta.upsert({
       where: { workspaceId_docId: { workspaceId, docId } },
       create: { workspaceId, docId, public: true, mode: mode || 'page' },
       update: { public: true, mode: mode || undefined },
     });
+    // ⚠️ #151: mode は Discovery Metadata に含まれる。上げないと一覧が古くなる
+    await this.discovery.bump(workspaceId, 'doc-update');
+    return result;
   }
 
   async revokePublicPage(workspaceId: string, docId: string) {
-    return this.prisma.docMeta.update({
+    const result = await this.prisma.docMeta.update({
       where: { workspaceId_docId: { workspaceId, docId } },
       data: { public: false },
     });
+    await this.discovery.bump(workspaceId, 'doc-update');
+    return result;
   }
 
   async getDocSnapshot(workspaceId: string, docId: string) {
@@ -78,6 +95,8 @@ export class DocService {
       create: { workspaceId, docId, userId, role },
       update: { role },
     });
+    // ⚠️ 誰に見えるかが変わる。**書き込んだあと**に上げる（上記の理由）
+    await this.discovery.bump(workspaceId, 'permission-doc');
     return true;
   }
 
@@ -89,6 +108,7 @@ export class DocService {
     await this.prisma.docPermission.deleteMany({
       where: { workspaceId, docId, userId },
     });
+    await this.discovery.bump(workspaceId, 'permission-doc');
     return true;
   }
 
@@ -108,6 +128,7 @@ export class DocService {
       create: { workspaceId, docId, defaultRole: role },
       update: { defaultRole: role },
     });
+    await this.discovery.bump(workspaceId, 'permission-doc');
     return true;
   }
 

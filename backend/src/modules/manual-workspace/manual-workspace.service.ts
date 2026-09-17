@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../prisma.service';
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 
 /**
  * #72 マニュアル専用ワークスペース（読み取り専用・自動配布）の共有ロジック。
@@ -31,7 +32,10 @@ export class ManualWorkspaceService {
     return `ffffffff-ffff-4fff-bfff-${h.slice(0, 12)}`;
   }
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private discovery: DiscoveryRevisionService,
+  ) {}
 
   /** システムアカウントを取得（無ければ作成）。ログイン不可（passwordHash=null）。 */
   async ensureSystemUser() {
@@ -83,5 +87,8 @@ export class ManualWorkspaceService {
         status: 'accepted',
       },
     });
+    // ⚠️ #151: 参加した瞬間に「何が見えるか」が変わる。
+    // 既に参加済みなら上で早期に戻るため、実際に増えたときだけ上がる
+    await this.discovery.bump(ws.id, 'permission-workspace');
   }
 }

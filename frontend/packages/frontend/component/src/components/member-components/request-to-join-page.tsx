@@ -32,7 +32,7 @@ export const RequestToJoinPage = ({
           <div className={styles.userWrapper}>
             <Avatar
               url={inviteInfo?.user.avatarUrl || ''}
-              name={inviteInfo?.user.name}
+              name={inviteInfo?.user.name ?? undefined}
               size={20}
             />
             <span className={styles.inviteName}>{inviteInfo?.user.name}</span>

@@ -34,6 +34,7 @@ import { configureNotificationModule } from './notification';
 import { configureOrganizeModule } from './organize';
 import { configurePDFModule } from './pdf';
 import { configurePeekViewModule } from './peek-view';
+import { configureDiscoveryModule } from './discovery';
 import { configurePermissionsModule } from './permissions';
 import { configureQuickSearchModule } from './quicksearch';
 import { configSearchMenuModule } from './search-menu';
@@ -67,6 +68,8 @@ export function configureCommonModules(framework: Framework) {
   configureTagModule(framework);
   configureCloudModule(framework);
   configurePermissionsModule(framework);
+  // #151: Discovery Index（存在を知ってよいドキュメント）
+  configureDiscoveryModule(framework);
   configureShareDocsModule(framework);
   configureShareSettingModule(framework);
   configurePDFModule(framework);

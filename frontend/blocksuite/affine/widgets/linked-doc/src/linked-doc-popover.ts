@@ -9,6 +9,7 @@ import {
   createKeydownObserver,
   getPopperPosition,
   getViewportElement,
+  isControlledKeyboardEvent,
 } from '@blocksuite/affine-shared/utils';
 import { SignalWatcher, WithDisposable } from '@blocksuite/global/lit';
 import { MoreHorizontalIcon } from '@blocksuite/icons/lit';
@@ -46,6 +47,54 @@ export class LinkedDocPopover extends SignalWatcher(
   private readonly _expanded = new Map<string, boolean>();
 
   private _menusItemsEffectCleanup: () => void = () => {};
+
+  /**
+   * #197: **文脈が壊れていれば閉じる。壊れていなければ絞り込み直す。**
+   * ⚠️ 判断は次のティックで行う（押した瞬間には結果が分からない）。
+   */
+  /** 描画待ちの購読。⚠️ 積み上げると閉じたあとも残る（1つだけ持つ） */
+  private _pendingRender: { unsubscribe: () => void } | null = null;
+  /** 文脈の確認待ち。⚠️ 閉じたあとに走ると、片付け済みの相手を触る */
+  private _pendingContextCheck: ReturnType<typeof setTimeout> | null = null;
+
+  /** 描画が終わってから絞り込み直す。⚠️ 購読は1つだけ持つ */
+  private readonly _updateAfterRender = () => {
+    this._pendingRender?.unsubscribe();
+    this._pendingRender = this.context.inlineEditor.slots.renderComplete.subscribe(
+      () => {
+        this._pendingRender?.unsubscribe();
+        this._pendingRender = null;
+        this._updateLinkedDocGroup().catch(console.error);
+      }
+    );
+  };
+
+  private readonly _closeIfContextLost = () => {
+    if (this._pendingContextCheck) clearTimeout(this._pendingContextCheck);
+    this._pendingContextCheck = setTimeout(() => {
+      this._pendingContextCheck = null;
+      // ⚠️ 片付け済みなら何もしない（閉じたあとに走り得る）
+      if (!this.isConnected) return;
+      const current = this.context.inlineEditor.getInlineRange();
+      const start = this.context.startRange;
+      const query = this._query;
+      if (
+        !current ||
+        !start ||
+        current.index < start.index ||
+        current.length > 0 ||
+        // ⚠️ **後ろへ飛び出した場合も閉じる**（Cmd+End など）。
+        // ⚠️ ここでは空白では閉じない——**ドキュメント名に空白は入る**。
+        // 行をまたいだこと（改行）を「入力の続きではない」の目印にする
+        query === null ||
+        query.includes('\n')
+      ) {
+        this.context.close();
+        return;
+      }
+      this._updateLinkedDocGroup().catch(console.error);
+    }, 0);
+  };
 
   private readonly _updateLinkedDocGroup = async () => {
     const query = this._query;
@@ -196,18 +245,38 @@ export class LinkedDocPopover extends SignalWatcher(
           event.stopPropagation();
           return;
         }
+
+        // #197: ⚠️ **修飾キーの組み合わせで、押された事実だけで閉じない。**
+        // IME の切り替え（Ctrl+Space / Alt+` など）もここへ来るため。
+        // 判断は「文脈が壊れたか」で行う。詳しくは
+        // `slash-menu-popover.ts` の同じ箇所の注記を参照。
+        if (isControlledKeyboardEvent(event)) {
+          const isOnlyCmd =
+            (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+          if (
+            (isOnlyCmd && ['p', 'n', 'v'].includes(event.key)) ||
+            ['Control', 'Meta', 'Alt', 'Shift'].includes(event.key)
+          ) {
+            next();
+            return;
+          }
+          this._closeIfContextLost();
+          return;
+        }
+
         next();
       },
-      onInput: isComposition => {
-        if (isComposition) {
-          this._updateLinkedDocGroup().catch(console.error);
-        } else {
-          const subscription =
-            this.context.inlineEditor.slots.renderComplete.subscribe(() => {
-              subscription.unsubscribe();
-              this._updateLinkedDocGroup().catch(console.error);
-            });
-        }
+      // #197: ⚠️ **いま読んで、描画後にもう一度読む。**
+      // IME の確定（`compositionend`）と、確定した文字が本文へ入る順序は
+      // ブラウザによって違う。片方だけにすると、順序が合わない環境で
+      // **日本語でドキュメントを探せない**。スラッシュメニューと同じ形
+      //（`slash-menu-popover.ts` の注記に詳しく書いた）。
+      onInput: () => {
+        // ⚠️ **即時の更新では閉じない。** 確定前は `_query` が null に
+        // なり得て、`_updateLinkedDocGroup` は **メニューを閉じる**。
+        // そのあと描画待ちの更新が届かず、直したはずの不具合に戻る
+        if (this._query) this._updateLinkedDocGroup().catch(console.error);
+        this._updateAfterRender();
       },
       onPaste: () => {
         setTimeout(() => {
@@ -222,11 +291,7 @@ export class LinkedDocPopover extends SignalWatcher(
         if (curRange.index < this.context.startRange.index) {
           this.context.close();
         }
-        const subscription =
-          this.context.inlineEditor.slots.renderComplete.subscribe(() => {
-            subscription.unsubscribe();
-            this._updateLinkedDocGroup().catch(console.error);
-          });
+        this._updateAfterRender();
       },
       onMove: step => {
         const itemLen = this._flattenActionList.length;
@@ -252,6 +317,14 @@ export class LinkedDocPopover extends SignalWatcher(
     super.disconnectedCallback();
     this._menusItemsEffectCleanup();
     this._updateLinkedDocGroupAbortController?.abort();
+    // #197: ⚠️ **待たせているものを必ず片付ける。**
+    // 残すと、片付け済みの相手を触りにいく
+    this._pendingRender?.unsubscribe();
+    this._pendingRender = null;
+    if (this._pendingContextCheck) {
+      clearTimeout(this._pendingContextCheck);
+      this._pendingContextCheck = null;
+    }
   }
 
   override render() {

@@ -1,10 +1,5 @@
 import { notify } from '@ofuro/component';
-import { UserFriendlyError } from '@ofuro/error';
-import {
-  type DocMode as GraphqlDocMode,
-  DocRole,
-  ErrorNames,
-} from '@ofuro/graphql';
+import { ErrorNames, UserFriendlyError } from '@ofuro/error';
 import { I18n, i18nTime } from '@ofuro/i18n';
 import track from '@ofuro/track';
 import type { DocMode } from '@blocksuite/affine/model';
@@ -36,10 +31,6 @@ import Fuse from 'fuse.js';
 import { html } from 'lit';
 import { styleMap } from 'lit/directives/style-map.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import {
-  createAbsolutePositionFromRelativePosition,
-  createRelativePositionFromTypeIndex,
-} from 'yjs';
 
 import { AuthService, type WorkspaceServerService } from '../../cloud';
 import type { WorkspaceDialogService } from '../../dialogs';
@@ -47,8 +38,7 @@ import type { DocsService } from '../../doc';
 import type { DocDisplayMetaService } from '../../doc-display-meta';
 import { type JournalService, suggestJournalDate } from '../../journal';
 import { NotificationService } from '../../notification';
-import type { GuardService, MemberSearchService } from '../../permissions';
-import type { DocGrantedUsersService } from '../../permissions/services/doc-granted-users';
+import type { MemberSearchService } from '../../permissions';
 import { highlighter } from '../../quicksearch/utils/highlighter';
 import type { SearchMenuService } from '../../search-menu/services';
 
@@ -70,9 +60,7 @@ export class AtMenuConfigService extends Service {
     private readonly docsService: DocsService,
     private readonly searchMenuService: SearchMenuService,
     private readonly workspaceServerService: WorkspaceServerService,
-    private readonly memberSearchService: MemberSearchService,
-    private readonly guardService: GuardService,
-    private readonly docGrantedUsersService: DocGrantedUsersService
+    private readonly memberSearchService: MemberSearchService
   ) {
     super();
   }
@@ -420,126 +408,32 @@ export class AtMenuConfigService extends Service {
 
           if (!sendNotification) return;
 
-          const relativePosition = createRelativePositionFromTypeIndex(
-            inlineEditor.yText,
-            inlineRange.index + 1
-          );
+          // #217: 通知済みの印（mention.notification）は書かない。バックエンドは ID でなく
+          // true を返し、BlockSuite の検査で捨てられて一度も書かれていなかった。読む側も無い
+          // （docs/mention-notification.md）
           notificationService
             .mentionUser(id, workspaceId, {
               id: docId,
               title: this.docDisplayMetaService.title$(docId).value,
               blockId: block.blockId,
-              mode: mode as GraphqlDocMode,
-            })
-            .then(notificationId => {
-              const doc = inlineEditor.yText.doc;
-              if (!doc) return;
-              const absolutePosition =
-                createAbsolutePositionFromRelativePosition(
-                  relativePosition,
-                  doc
-                );
-              if (!absolutePosition) return;
-              const index = absolutePosition.index;
-
-              const delta = inlineEditor.getDeltaByRangeIndex(index);
-              if (
-                !delta ||
-                delta.insert !== ' ' ||
-                !delta.attributes?.mention ||
-                delta.attributes.mention.notification ||
-                delta.attributes.mention.member !== id
-              )
-                return;
-
-              inlineEditor.formatText(
-                {
-                  index: index - 1,
-                  length: 1,
-                },
-                {
-                  mention: {
-                    member: id,
-                    notification: notificationId,
-                  },
-                }
-              );
+              mode: mode as DocMode,
             })
             .catch(error => {
               const err = UserFriendlyError.fromAny(error);
 
+              // #223: 相手がページを読めない。知らせるだけで、権限は変えない
+              // （閲覧権限を付けて送り直す「Invite」ボタンは消した）
               if (err.is(ErrorNames.MENTION_USER_DOC_ACCESS_DENIED)) {
                 track.doc.editor.atMenu.noAccessPrompted();
-
-                const canUserManage = this.guardService.can$(
-                  'Doc_Users_Manage',
-                  docId
-                ).signal.value;
-                if (canUserManage) {
-                  const username = name ?? 'Unknown';
-                  notify.error({
-                    title: I18n.t('com.affine.editor.at-menu.access-needed'),
-                    message: I18n[
-                      'com.affine.editor.at-menu.access-needed-message'
-                    ]({
-                      username,
-                    }),
-                    actions: [
-                      {
-                        key: 'invite',
-                        label: 'Invite',
-                        onClick: async () => {
-                          track.$.sharePanel.$.inviteUserDocRole({
-                            control: 'member list',
-                            role: 'reader',
-                          });
-
-                          try {
-                            await this.docGrantedUsersService.updateUserRole(
-                              id,
-                              DocRole.Reader
-                            );
-
-                            await notificationService.mentionUser(
-                              id,
-                              workspaceId,
-                              {
-                                id: docId,
-                                title:
-                                  this.docDisplayMetaService.title$(docId)
-                                    .value,
-                                blockId: block.blockId,
-                                mode: mode as GraphqlDocMode,
-                              }
-                            );
-
-                            notify.success({
-                              title: I18n.t(
-                                'com.affine.editor.at-menu.invited-and-notified'
-                              ),
-                            });
-                          } catch (error) {
-                            const err = UserFriendlyError.fromAny(error);
-                            notify.error({
-                              title: I18n[`error.${err.name}`](err.data),
-                            });
-                          }
-                        },
-                      },
-                    ],
-                  });
-                } else {
-                  notify.error({
-                    title: I18n.t(
-                      'com.affine.editor.at-menu.member-not-notified'
-                    ),
-                    message:
-                      I18n[
-                        'com.affine.editor.at-menu.member-not-notified-message'
-                      ](),
-                  });
-                }
-
+                notify.error({
+                  title: I18n.t(
+                    'com.affine.editor.at-menu.member-not-notified'
+                  ),
+                  message:
+                    I18n[
+                      'com.affine.editor.at-menu.member-not-notified-message'
+                    ](),
+                });
                 return;
               }
 
@@ -551,30 +445,12 @@ export class AtMenuConfigService extends Service {
       };
     };
 
-    const inviteItem: LinkedMenuItem = {
-      key: 'invite',
-      name: 'Invite...',
-      icon: UserIcon(),
-      action: () => {
-        close();
-
-        track.doc.editor.atMenu.mentionMember({
-          type: 'invite',
-        });
-
-        this.dialogService.open('setting', {
-          activeTab: 'workspace:members',
-        });
-      },
-    };
-
+    // #223: 「Invite…」は置かない。メンションの相手は WS のメンバーなので、招待は関係ない
     const items = computed<LinkedMenuItem[]>(() => {
       const members = this.memberSearchService.result$.signal.value;
       const currentUser =
         this.workspaceServerService.server?.scope.get(AuthService).session
           .account$.signal.value;
-      const canUserManage = this.guardService.can$('Workspace_Users_Manage')
-        .signal.value;
 
       if (query.length === 0) {
         return [
@@ -588,13 +464,13 @@ export class AtMenuConfigService extends Service {
                 ),
               ]
             : []),
+          // #220: 自分を除いてから先頭 2 人を取る（先に 2 人取ると、自分が入っていたとき 1 人しか出ない）
           ...members
-            .slice(0, 2)
             .filter(member => member.id !== currentUser?.id)
+            .slice(0, 2)
             .map(member =>
               getMenuItem(member.id, member.name, member.avatarUrl)
             ),
-          ...(canUserManage ? [inviteItem] : []),
         ];
       }
 
@@ -608,26 +484,23 @@ export class AtMenuConfigService extends Service {
       });
       const searchResults = fuse.search(query);
 
-      return [
-        ...searchResults.map(result => {
-          const member = result.item;
-          const displayName = this.highlightFuseTitle(
-            result.matches,
-            member.name ?? 'Unknown',
-            'name'
-          );
-          return {
-            ...getMenuItem(
-              member.id,
-              member.name,
-              member.avatarUrl,
-              member.id !== currentUser?.id
-            ),
-            name: html`${unsafeHTML(displayName)}`,
-          };
-        }),
-        ...(canUserManage ? [inviteItem] : []),
-      ];
+      return searchResults.map(result => {
+        const member = result.item;
+        const displayName = this.highlightFuseTitle(
+          result.matches,
+          member.name ?? 'Unknown',
+          'name'
+        );
+        return {
+          ...getMenuItem(
+            member.id,
+            member.name,
+            member.avatarUrl,
+            member.id !== currentUser?.id
+          ),
+          name: html`${unsafeHTML(displayName)}`,
+        };
+      });
     });
     const hidden = computed(() => {
       const members = this.memberSearchService.result$.signal.value;
@@ -635,9 +508,9 @@ export class AtMenuConfigService extends Service {
       return query.length > 0 && !loading && members.length === 0;
     });
 
-    if (query.length > 0) {
-      this.memberSearchService.search(query);
-    }
+    // #220: 文字が無くても読み込む（語が空なら全員が対象で、先頭から 8 人）。
+    // 以前は文字を打ったときだけ読み込み、@ だけでは自分と「Invite…」しか出なかった
+    this.memberSearchService.search(query);
 
     return {
       name: I18n.t('com.affine.editor.at-menu.mention-members'),

@@ -31,6 +31,21 @@ registerEnumType(WorkspaceInviteLinkExpireTime, {
   name: 'WorkspaceInviteLinkExpireTime',
 });
 
+/**
+ * #210: メンバー・招待の状態。フロントエンドが値として比べる（`status === WorkspaceMemberStatus.Accepted`）。
+ * 返すのは `Accepted` / `Pending`。それ以外はフロントエンドの分岐が参照しているため残す。
+ */
+export enum WorkspaceMemberStatus {
+  Accepted = 'Accepted',
+  AllocatingSeat = 'AllocatingSeat',
+  NeedMoreSeat = 'NeedMoreSeat',
+  NeedMoreSeatAndReview = 'NeedMoreSeatAndReview',
+  Pending = 'Pending',
+  UnderReview = 'UnderReview',
+}
+
+registerEnumType(WorkspaceMemberStatus, { name: 'WorkspaceMemberStatus' });
+
 @ObjectType('InviteUserType')
 export class InviteUserType {
   @Field(() => ID)
@@ -57,8 +72,8 @@ export class InviteUserType {
   @Field({ nullable: true })
   emailVerified?: boolean;
 
-  @Field({ nullable: true })
-  status?: string;
+  @Field(() => WorkspaceMemberStatus, { nullable: true })
+  status?: WorkspaceMemberStatus;
 
   @Field({ deprecationReason: 'Notification will be sent asynchronously' })
   sentSuccess: boolean;
@@ -102,8 +117,8 @@ export class InvitationType {
   @Field(() => WorkspaceUserType)
   invitee: WorkspaceUserType;
 
-  @Field({ nullable: true })
-  status?: string;
+  @Field(() => WorkspaceMemberStatus, { nullable: true })
+  status?: WorkspaceMemberStatus;
 }
 
 @ObjectType()

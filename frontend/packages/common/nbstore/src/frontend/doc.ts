@@ -76,6 +76,20 @@ export type DocFrontendDocState = {
    */
   syncRetrying: boolean;
   /**
+   * #128: サーバーの状態を一通り受け取り終えたか。
+   *
+   * ⚠️ **これが立つまで「中身が無い」と判定してはいけない。**
+   * docs/workspace-load-failure.md
+   */
+  initialSyncDone: boolean;
+  /**
+   * #128: この doc の存在を同期ピアが把握しているか。
+   *
+   * ⚠️ **true なら中身はこれから届く。** `initialSyncDone` だけで判定すると、
+   * 取りに行くジョブが走る前の窓で誤判定する。
+   */
+  known: boolean;
+  /**
    * the error message when syncing with remote peers
    */
   syncErrorMessage: string | null;
@@ -163,6 +177,8 @@ export class DocFrontend {
         synced: sync.synced,
         syncing: sync.syncing,
         syncRetrying: sync.retrying,
+        initialSyncDone: sync.initialSyncDone,
+        known: sync.known,
         syncErrorMessage: sync.errorMessage,
       }))
     );

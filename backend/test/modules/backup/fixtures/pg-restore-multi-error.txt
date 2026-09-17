@@ -1,0 +1,39 @@
+pg_restore: error: could not execute query: ERROR:  relation "t1" already exists
+Command was: CREATE TABLE public.t1 (
+    id integer NOT NULL,
+    v text
+);
+
+
+pg_restore: error: could not execute query: ERROR:  relation "t2" already exists
+Command was: CREATE TABLE public.t2 (
+    id integer NOT NULL,
+    v text
+);
+
+
+pg_restore: error: COPY failed for table "t1": ERROR:  duplicate key value violates unique constraint "t1_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY t1, line 1
+pg_restore: error: COPY failed for table "t2": ERROR:  duplicate key value violates unique constraint "t2_pkey"
+DETAIL:  Key (id)=(1) already exists.
+CONTEXT:  COPY t2, line 1
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "t1" are not allowed
+Command was: ALTER TABLE ONLY public.t1
+    ADD CONSTRAINT t1_pkey PRIMARY KEY (id);
+
+
+pg_restore: error: could not execute query: ERROR:  multiple primary keys for table "t2" are not allowed
+Command was: ALTER TABLE ONLY public.t2
+    ADD CONSTRAINT t2_pkey PRIMARY KEY (id);
+
+
+pg_restore: error: could not execute query: ERROR:  relation "i1" already exists
+Command was: CREATE INDEX i1 ON public.t1 USING btree (v);
+
+
+pg_restore: error: could not execute query: ERROR:  relation "i2" already exists
+Command was: CREATE INDEX i2 ON public.t2 USING btree (v);
+
+
+pg_restore: warning: errors ignored on restore: 8

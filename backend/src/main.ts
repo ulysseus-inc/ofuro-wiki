@@ -165,7 +165,9 @@ async function bootstrap() {
   logger.log(`ofuro-wiki backend running on port ${port}`);
   // 効いていないと「始業時にログインが遅い」という形でしか現れないため、
   // 起動時に値を出しておく（docs/maintainer-guide.md「同時ログインが遅い」）
-  logger.log(`スレッドプール: ${THREAD_POOL_SIZE}（同時に処理できる照合数）`);
+  logger.log(
+    `Thread pool size: ${THREAD_POOL_SIZE} (concurrent password verifications)`,
+  );
   logger.log(`GraphQL Playground: http://localhost:${port}/graphql`);
 }
 bootstrap();

@@ -61,6 +61,17 @@ export class IndexerFrontend {
     return this.sync.addPriority(docId, priority);
   }
 
+  /**
+   * #199: 索引すべきページの一覧（認可済み台帳）を渡す。
+   *
+   * ⚠️ これを渡すまで索引は始まらない。渡さないと `@` メニューが常に0件になる。
+   * 一覧から消えたページは、索引からも消える（削除・権限剥奪を区別しない）。
+   * 詳細は docs/client-indexer.md
+   */
+  setDocList(docs: Array<{ docId: string; title?: string }>) {
+    return this.sync.setDocList(docs);
+  }
+
   waitForCompleted(signal?: AbortSignal) {
     return this.sync.waitForCompleted(signal);
   }

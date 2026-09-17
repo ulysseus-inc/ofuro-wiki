@@ -274,12 +274,12 @@ const getMemberStatus = (member: Member): I18nString => {
           return 'Member';
         case Permission.Read:
           return 'Reader';
-        case Permission.Collaborator:
-          return 'Collaborator';
         default:
           return 'Member';
       }
   }
+  // #210: スキーマでは status は null を許す。バックエンドと同じく参加待ちとして扱う
+  return 'Pending';
 };
 
 export const MemberListFallback = ({

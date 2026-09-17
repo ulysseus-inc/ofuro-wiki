@@ -7,7 +7,7 @@ interface TrackFn {
 }
 
 const levels = ['page', 'segment', 'module', 'event'] as const;
-export function makeTracker(trackFn: TrackFn): CallableEventsChain {
+export function makeTracker(_trackFn: TrackFn): CallableEventsChain {
   function makeTrackerInner(level: number, info: Record<string, string>) {
     const proxy = new Proxy({} as Record<string, any>, {
       get(target, prop) {

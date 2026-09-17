@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DiscoveryModule } from '../discovery/discovery.module';
 
 import { PrismaService } from '../../prisma.service';
 import { ManualWorkspaceService } from './manual-workspace.service';
@@ -8,6 +9,7 @@ import { ManualWorkspaceService } from './manual-workspace.service';
  * Prisma のみに依存し、WorkspaceModule から安全に import できる（循環なし）。
  */
 @Module({
+  imports: [DiscoveryModule],
   providers: [ManualWorkspaceService, PrismaService],
   exports: [ManualWorkspaceService],
 })

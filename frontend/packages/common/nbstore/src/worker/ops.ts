@@ -44,6 +44,8 @@ interface GroupedWorkerOps {
     getDocTimestamp: [string, DocClock | null];
     deleteDoc: [string, void];
     subscribeDocUpdate: [void, { update: DocRecord; origin?: string }];
+    // #151 stage 3 (PR2): the server's discovery revision moved (docs 7.11)
+    subscribeDiscoveryChanged: [void, { reason: string }];
     waitForConnected: [void, void];
   };
 
@@ -109,6 +111,8 @@ interface GroupedWorkerOps {
     state: [void, IndexerSyncState];
     docState: [string, IndexerDocSyncState];
     addPriority: [{ docId: string; priority: number }, boolean];
+    /** #199: 索引すべきページの一覧（認可済み台帳）。docs/client-indexer.md */
+    setDocList: [Array<{ docId: string; title?: string }>, void];
     waitForCompleted: [void, void];
     waitForDocCompleted: [string, void];
     search: [

@@ -1,10 +1,5 @@
 import type { WorkspaceServerService } from '@ofuro/core/modules/cloud';
-import {
-  getWorkspaceConfigQuery,
-  setEnableAiMutation,
-  setEnableSharingMutation,
-  setEnableUrlPreviewMutation,
-} from '@ofuro/graphql';
+import { getWorkspaceConfigQuery } from '@ofuro/graphql';
 import { Store } from '@toeverything/infra';
 
 export class WorkspaceShareSettingStore extends Store {
@@ -26,65 +21,5 @@ export class WorkspaceShareSettingStore extends Store {
       },
     });
     return data.workspace;
-  }
-
-  async updateWorkspaceEnableAi(
-    workspaceId: string,
-    enableAi: boolean,
-    signal?: AbortSignal
-  ) {
-    if (!this.workspaceServerService.server) {
-      throw new Error('No Server');
-    }
-    await this.workspaceServerService.server.gql({
-      query: setEnableAiMutation,
-      variables: {
-        id: workspaceId,
-        enableAi,
-      },
-      context: {
-        signal,
-      },
-    });
-  }
-
-  async updateWorkspaceEnableSharing(
-    workspaceId: string,
-    enableSharing: boolean,
-    signal?: AbortSignal
-  ) {
-    if (!this.workspaceServerService.server) {
-      throw new Error('No Server');
-    }
-    await this.workspaceServerService.server.gql({
-      query: setEnableSharingMutation,
-      variables: {
-        id: workspaceId,
-        enableSharing,
-      },
-      context: {
-        signal,
-      },
-    });
-  }
-
-  async updateWorkspaceEnableUrlPreview(
-    workspaceId: string,
-    enableUrlPreview: boolean,
-    signal?: AbortSignal
-  ) {
-    if (!this.workspaceServerService.server) {
-      throw new Error('No Server');
-    }
-    await this.workspaceServerService.server.gql({
-      query: setEnableUrlPreviewMutation,
-      variables: {
-        id: workspaceId,
-        enableUrlPreview,
-      },
-      context: {
-        signal,
-      },
-    });
   }
 }

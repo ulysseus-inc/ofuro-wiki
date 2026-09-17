@@ -4,12 +4,14 @@ import {
   Store,
   yjsGetPath,
   yjsObserveDeep,
-  yjsObservePath,
 } from '@toeverything/infra';
 import { nanoid } from 'nanoid';
 import { map, switchMap } from 'rxjs';
 import { Array as YArray } from 'yjs';
 
+// ⚠️ バレル（modules/doc の index）から読まないこと。
+// 循環参照になり、初期化時に画面が真っ白になる（型検査には出ない）
+import type { DocsStore } from '../../doc/stores/docs';
 import type { WorkspaceService } from '../../workspace';
 
 export type Tag = {
@@ -51,7 +53,11 @@ export class TagStore extends Store {
     return disposable.unsubscribe.bind(disposable);
   }
 
-  constructor(private readonly workspaceService: WorkspaceService) {
+  constructor(
+    private readonly workspaceService: WorkspaceService,
+    // #151 段階2-3: タグ配下のページは**認可済みの一覧から**引く
+    private readonly docsStore: DocsStore
+  ) {
     super();
   }
 
@@ -144,33 +150,21 @@ export class TagStore extends Store {
     });
   }
 
+  /**
+   * このタグが付いたページの id。
+   *
+   * ⚠️ **Yjs の目次を直接舐めないこと**（#151 段階2-3）。目次には
+   * ワークスペースの全ページが載っているため、**権限外のページに
+   * 「人事」タグが付いていればタグ画面に出る**（存在が漏れる）。
+   *
+   * `DocsStore` の一覧は「存在は台帳・中身は目次」で合流済みなので、
+   * 認可されたうえで、タグの付け外しは即座に反映される。
+   */
   watchTagPageIds(id: string) {
-    return yjsGetPath(
-      this.workspaceService.workspace.rootYDoc.getMap('meta'),
-      'pages'
-    ).pipe(
-      switchMap(pages => {
-        return yjsObservePath(pages, '*.tags');
-      }),
-      map(meta => {
-        if (meta instanceof YArray) {
-          return meta
-            .map(v => {
-              const tags = v.get('tags') as YArray<string> | undefined;
-              if (tags instanceof YArray) {
-                for (const tagId of tags.toArray()) {
-                  if (tagId === id) {
-                    return v.get('id') as string;
-                  }
-                }
-              }
-              return null;
-            })
-            .filter(Boolean) as string[];
-        } else {
-          return [];
-        }
-      })
-    );
+    return this.docsStore
+      .watchAllDocTagIds()
+      .pipe(
+        map(docs => docs.filter(d => d.tags.includes(id)).map(d => d.id))
+      );
   }
 }

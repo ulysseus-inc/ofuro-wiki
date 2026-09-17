@@ -1,0 +1,15 @@
+query adminBackupList($skip: Int, $take: Int) {
+  adminBackupList(skip: $skip, take: $take) {
+    items {
+      id
+      filename
+      size
+      workspaceCount
+      docCount
+      blobCount
+      status
+      createdAt
+    }
+    totalCount
+  }
+}

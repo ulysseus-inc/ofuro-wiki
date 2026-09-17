@@ -1,6 +1,6 @@
 import { Resolver, Query, Mutation, Args, ResolveField, Parent } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
-import { UserType, PaginatedNotificationType, PaginationInput, UserCopilot, RemoveAvatarResult, UpdateUserInput, UpdateUserSettingsInput } from './user.model';
+import { UserType, FeatureType, PaginatedNotificationType, PaginationInput, UserCopilot, RemoveAvatarResult, UpdateUserInput, UpdateUserSettingsInput } from './user.model';
 import { UserService } from './user.service';
 import { NotificationService } from '../notification/notification.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -31,7 +31,7 @@ export class UserResolver {
       ...dbUser,
       hasPassword: !!dbUser.passwordHash,
       token: { sessionToken: null },
-      features: dbUser.isAdmin ? ['Admin'] : [],
+      features: dbUser.isAdmin ? [FeatureType.Admin] : [],
       notificationCount: await this.notificationService.getNotificationCount(user.id),
       quota: {
         name: 'Selfhosted Unlimited',

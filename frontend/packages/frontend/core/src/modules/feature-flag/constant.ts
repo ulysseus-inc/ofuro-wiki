@@ -293,7 +293,10 @@ export const AFFINE_FLAGS = {
     displayName: 'Enable PDF Export',
     description:
       'Experimental export PDFs support, it may contain the wrong style.',
-    configurable: true,
+    // #104: フォントを cdn.affine.pro から取得する（外部送信ゼロに反し、閉域では失敗する）。
+    // 無効に固定し、以前に有効にした保存値も無視する。PDF は「印刷」を使う
+    // （docs/oss-egress-verification.md）
+    configurable: false,
     defaultState: false,
   },
 } satisfies { [key in string]: FlagInfo };

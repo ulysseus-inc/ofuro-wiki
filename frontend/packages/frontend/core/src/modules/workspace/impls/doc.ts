@@ -24,19 +24,22 @@ export class DocImpl implements Doc {
   private readonly _storeContainer: StoreContainer;
 
   private readonly _initSpaceDoc = () => {
-    {
-      // This is a piece of old version compatible code. The old version relies on the subdoc instance on `spaces`.
-      // So if there is no subdoc on spaces, we will create it.
-      // new version no longer needs subdoc on `spaces`.
-      let subDoc = this.rootDoc.getMap('spaces').get(this.id);
-      if (!subDoc) {
-        subDoc = new Y.Doc({
-          guid: this.id,
-        });
-        this.rootDoc.getMap('spaces').set(this.id, subDoc);
-      }
-    }
-
+    // #151 stage 3 (PR5-c): do NOT register this doc under the root doc's
+    // `spaces` map.
+    //
+    // The root doc is shared with every workspace member, so anything written
+    // here is delivered to people who are not allowed to read the document.
+    // The value carries no title, but it does reveal that the document exists
+    // and what its id is - which stage 3 exists to hide.
+    //
+    // Upstream wrote this entry only for compatibility with older clients
+    // ("new version no longer needs subdoc on `spaces`"), and the subdoc it
+    // read back was discarded unmodified: the real space doc is created below.
+    // ofuro-wiki is self-hosted and every client runs the same version, so
+    // that compatibility is deliberately dropped. See docs 7.9.
+    //
+    // WARNING: removing existing entries is not enough on its own. As long as
+    // this method writes, opening a document puts the id straight back.
     const spaceDoc = new Y.Doc({ guid: this.id });
     spaceDoc.clientID = this.rootDoc.clientID;
     this._loaded = false;
@@ -174,6 +177,9 @@ export class DocImpl implements Doc {
 
   remove() {
     this._destroy();
+    // #151 stage 3 (PR5-c): we no longer write to `spaces`, but keep deleting
+    // so that entries left over from before the change are cleared as their
+    // documents are removed. Deleting an absent key is a no-op.
     this.rootDoc.getMap('spaces').delete(this.id);
   }
 }

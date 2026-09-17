@@ -22,6 +22,7 @@ import { DocModule } from './modules/doc/doc.module';
 import { BlobModule } from './modules/blob/blob.module';
 import { SearchModule } from './modules/search/search.module';
 import { PermissionModule } from './modules/permission/permission.module';
+import { DiscoveryModule } from './modules/discovery/discovery.module';
 import { TelemetryModule } from './modules/telemetry/telemetry.module';
 import { WorkerModule } from './modules/worker/worker.module';
 import { HealthModule } from './modules/health/health.module';
@@ -165,6 +166,8 @@ const staticImports = [
     BlobModule,
     SearchModule,
     PermissionModule,
+    // #151: Discovery Index（存在を知ってよいドキュメント）
+    DiscoveryModule,
     TelemetryModule,
     WorkerModule,
     HealthModule,

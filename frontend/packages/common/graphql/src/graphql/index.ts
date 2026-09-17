@@ -45,183 +45,168 @@ export const passwordLimitsFragment = `fragment PasswordLimits on PasswordLimits
   minLength
   maxLength
 }`;
-export const generateUserAccessTokenMutation = {
-  id: 'generateUserAccessTokenMutation' as const,
-  op: 'generateUserAccessToken',
-  query: `mutation generateUserAccessToken($input: GenerateAccessTokenInput!) {
-  generateUserAccessToken(input: $input) {
-    id
-    name
-    token
-    createdAt
-    expiresAt
-  }
-}`,
-};
-
-export const listUserAccessTokensQuery = {
-  id: 'listUserAccessTokensQuery' as const,
-  op: 'listUserAccessTokens',
-  query: `query listUserAccessTokens {
-  currentUser {
-    revealedAccessTokens {
+export const adminBackupListQuery = {
+  id: 'adminBackupListQuery' as const,
+  op: 'adminBackupList',
+  query: `query adminBackupList($skip: Int, $take: Int) {
+  adminBackupList(skip: $skip, take: $take) {
+    items {
       id
-      name
-      createdAt
-      expiresAt
-      token
-    }
-  }
-}`,
-};
-
-export const revokeUserAccessTokenMutation = {
-  id: 'revokeUserAccessTokenMutation' as const,
-  op: 'revokeUserAccessToken',
-  query: `mutation revokeUserAccessToken($id: String!) {
-  revokeUserAccessToken(id: $id)
-}`,
-};
-
-export const adminServerConfigQuery = {
-  id: 'adminServerConfigQuery' as const,
-  op: 'adminServerConfig',
-  query: `query adminServerConfig {
-  serverConfig {
-    version
-    baseUrl
-    name
-    features
-    type
-    initialized
-    credentialsRequirement {
-      ...CredentialsRequirements
-    }
-    availableUpgrade {
-      changelog
-      version
-      publishedAt
-      url
-    }
-    availableUserFeatures
-    availableWorkspaceFeatures
-  }
-}
-${passwordLimitsFragment}
-${credentialsRequirementsFragment}`,
-};
-
-export const adminUpdateWorkspaceMutation = {
-  id: 'adminUpdateWorkspaceMutation' as const,
-  op: 'adminUpdateWorkspace',
-  query: `mutation adminUpdateWorkspace($input: AdminUpdateWorkspaceInput!) {
-  adminUpdateWorkspace(input: $input) {
-    id
-    public
-    createdAt
-    name
-    avatarKey
-    enableAi
-    enableSharing
-    enableUrlPreview
-    enableDocEmbedding
-    features
-    owner {
-      id
-      name
-      email
-      avatarUrl
-    }
-    memberCount
-    publicPageCount
-    snapshotCount
-    snapshotSize
-    blobCount
-    blobSize
-  }
-}`,
-};
-
-export const adminWorkspaceQuery = {
-  id: 'adminWorkspaceQuery' as const,
-  op: 'adminWorkspace',
-  query: `query adminWorkspace($id: String!, $memberSkip: Int, $memberTake: Int, $memberQuery: String) {
-  adminWorkspace(id: $id) {
-    id
-    public
-    createdAt
-    name
-    avatarKey
-    enableAi
-    enableSharing
-    enableUrlPreview
-    enableDocEmbedding
-    features
-    owner {
-      id
-      name
-      email
-      avatarUrl
-    }
-    memberCount
-    publicPageCount
-    snapshotCount
-    snapshotSize
-    blobCount
-    blobSize
-    sharedLinks {
-      docId
-      title
-      publishedAt
-    }
-    members(skip: $memberSkip, take: $memberTake, query: $memberQuery) {
-      id
-      name
-      email
-      avatarUrl
-      role
+      filename
+      size
+      workspaceCount
+      docCount
+      blobCount
       status
+      createdAt
     }
+    totalCount
   }
 }`,
 };
 
-export const adminWorkspacesQuery = {
-  id: 'adminWorkspacesQuery' as const,
-  op: 'adminWorkspaces',
-  query: `query adminWorkspaces($filter: ListWorkspaceInput!) {
-  adminWorkspaces(filter: $filter) {
+export const adminCreateBackupMutation = {
+  id: 'adminCreateBackupMutation' as const,
+  op: 'adminCreateBackup',
+  query: `mutation adminCreateBackup {
+  adminCreateBackup {
     id
-    public
-    createdAt
-    name
-    avatarKey
-    enableAi
-    enableSharing
-    enableUrlPreview
-    enableDocEmbedding
-    features
-    owner {
-      id
-      name
-      email
-      avatarUrl
-    }
-    memberCount
-    publicPageCount
-    snapshotCount
-    snapshotSize
+    filename
+    size
+    workspaceCount
+    docCount
     blobCount
-    blobSize
+    status
+    createdAt
   }
 }`,
 };
 
-export const adminWorkspacesCountQuery = {
-  id: 'adminWorkspacesCountQuery' as const,
-  op: 'adminWorkspacesCount',
-  query: `query adminWorkspacesCount($filter: ListWorkspaceInput!) {
-  adminWorkspacesCount(filter: $filter)
+export const adminCreateUserMutation = {
+  id: 'adminCreateUserMutation' as const,
+  op: 'adminCreateUser',
+  query: `mutation adminCreateUser($input: AdminCreateUserInput!) {
+  adminCreateUser(input: $input) {
+    id
+    email
+    name
+    avatarUrl
+    isAdmin
+    emailVerified
+    createdAt
+  }
+}`,
+};
+
+export const adminDeleteBackupMutation = {
+  id: 'adminDeleteBackupMutation' as const,
+  op: 'adminDeleteBackup',
+  query: `mutation adminDeleteBackup($id: String!) {
+  adminDeleteBackup(id: $id)
+}`,
+};
+
+export const adminDeleteUserMutation = {
+  id: 'adminDeleteUserMutation' as const,
+  op: 'adminDeleteUser',
+  query: `mutation adminDeleteUser($userId: String!) {
+  adminDeleteUser(userId: $userId)
+}`,
+};
+
+export const adminServerSettingsQuery = {
+  id: 'adminServerSettingsQuery' as const,
+  op: 'adminServerSettings',
+  query: `query adminServerSettings {
+  adminServerSettings {
+    key
+    value
+    updatedAt
+  }
+}`,
+};
+
+export const adminSetUserAdminMutation = {
+  id: 'adminSetUserAdminMutation' as const,
+  op: 'adminSetUserAdmin',
+  query: `mutation adminSetUserAdmin($userId: String!, $isAdmin: Boolean!) {
+  adminSetUserAdmin(userId: $userId, isAdmin: $isAdmin) {
+    id
+    email
+    name
+    avatarUrl
+    isAdmin
+    emailVerified
+    createdAt
+  }
+}`,
+};
+
+export const adminUpdateServerSettingMutation = {
+  id: 'adminUpdateServerSettingMutation' as const,
+  op: 'adminUpdateServerSetting',
+  query: `mutation adminUpdateServerSetting($key: String!, $value: String!) {
+  adminUpdateServerSetting(key: $key, value: $value) {
+    key
+    value
+    updatedAt
+  }
+}`,
+};
+
+export const adminUserListQuery = {
+  id: 'adminUserListQuery' as const,
+  op: 'adminUserList',
+  query: `query adminUserList($search: String, $skip: Int, $take: Int) {
+  adminUserList(search: $search, skip: $skip, take: $take) {
+    items {
+      id
+      email
+      name
+      avatarUrl
+      isAdmin
+      emailVerified
+      createdAt
+    }
+    totalCount
+  }
+}`,
+};
+
+export const adminAuditLogsQuery = {
+  id: 'adminAuditLogsQuery' as const,
+  op: 'adminAuditLogs',
+  query: `query adminAuditLogs($actor: String, $action: String, $from: String, $to: String, $skip: Int, $take: Int) {
+  adminAuditLogs(
+    actor: $actor
+    action: $action
+    from: $from
+    to: $to
+    skip: $skip
+    take: $take
+  ) {
+    totalCount
+    items {
+      id
+      createdAt
+      action
+      actorEmail
+      actorName
+      targetType
+      targetId
+      targetName
+      ip
+      detail
+    }
+  }
+}`,
+};
+
+export const adminAuditLogsCsvQuery = {
+  id: 'adminAuditLogsCsvQuery' as const,
+  op: 'adminAuditLogsCsv',
+  query: `query adminAuditLogsCsv($actor: String, $action: String, $from: String, $to: String) {
+  adminAuditLogsCsv(actor: $actor, action: $action, from: $from, to: $to)
 }`,
 };
 
@@ -230,22 +215,6 @@ export const createChangePasswordUrlMutation = {
   op: 'createChangePasswordUrl',
   query: `mutation createChangePasswordUrl($callbackUrl: String!, $userId: String!) {
   createChangePasswordUrl(callbackUrl: $callbackUrl, userId: $userId)
-}`,
-};
-
-export const adminSetUserPasswordMutation = {
-  id: 'adminSetUserPasswordMutation' as const,
-  op: 'adminSetUserPassword',
-  query: `mutation adminSetUserPassword($userId: String!, $password: String!) {
-  adminSetUserPassword(userId: $userId, password: $password)
-}`,
-};
-
-export const isPasswordTokenValidQuery = {
-  id: 'isPasswordTokenValidQuery' as const,
-  op: 'isPasswordTokenValid',
-  query: `query isPasswordTokenValid($token: String!) {
-  isPasswordTokenValid(token: $token)
 }`,
 };
 
@@ -285,220 +254,21 @@ export const adminImportUsersMutation = {
 }`,
 };
 
-export const adminAuditLogsQuery = {
-  id: 'adminAuditLogsQuery' as const,
-  op: 'adminAuditLogs',
-  query: `query adminAuditLogs($actor: String, $action: String, $from: String, $to: String, $skip: Int, $take: Int) {
-  adminAuditLogs(actor: $actor, action: $action, from: $from, to: $to, skip: $skip, take: $take) {
-    totalCount
-    items {
-      id
-      createdAt
-      action
-      actorEmail
-      actorName
-      targetType
-      targetId
-      targetName
-      ip
-      detail
-    }
-  }
+export const sendTestEmailMutation = {
+  id: 'sendTestEmailMutation' as const,
+  op: 'sendTestEmail',
+  query: `mutation sendTestEmail($host: String!, $port: Int!, $sender: String!, $username: String!, $password: String!, $ignoreTLS: Boolean!) {
+  sendTestEmail(
+    config: {host: $host, port: $port, sender: $sender, username: $username, password: $password, ignoreTLS: $ignoreTLS}
+  )
 }`,
 };
 
-export const adminAuditLogsCsvQuery = {
-  id: 'adminAuditLogsCsvQuery' as const,
-  op: 'adminAuditLogsCsv',
-  query: `query adminAuditLogsCsv($actor: String, $action: String, $from: String, $to: String) {
-  adminAuditLogsCsv(actor: $actor, action: $action, from: $from, to: $to)
-}`,
-};
-
-export const appConfigQuery = {
-  id: 'appConfigQuery' as const,
-  op: 'appConfig',
-  query: `query appConfig {
-  appConfig
-}`,
-};
-
-export const adminUserListQuery = {
-  id: 'adminUserListQuery' as const,
-  op: 'adminUserList',
-  query: `query adminUserList($search: String, $skip: Int, $take: Int) {
-  adminUserList(search: $search, skip: $skip, take: $take) {
-    items {
-      id
-      email
-      name
-      avatarUrl
-      isAdmin
-      emailVerified
-      createdAt
-    }
-    totalCount
-  }
-}`,
-};
-
-export const adminCreateUserMutation = {
-  id: 'adminCreateUserMutation' as const,
-  op: 'adminCreateUser',
-  query: `mutation adminCreateUser($input: AdminCreateUserInput!) {
-  adminCreateUser(input: $input) {
-    id
-    email
-    name
-    avatarUrl
-    isAdmin
-    emailVerified
-    createdAt
-  }
-}`,
-};
-
-export const adminDeleteUserMutation = {
-  id: 'adminDeleteUserMutation' as const,
-  op: 'adminDeleteUser',
-  query: `mutation adminDeleteUser($userId: String!) {
-  adminDeleteUser(userId: $userId)
-}`,
-};
-
-export const adminSetUserAdminMutation = {
-  id: 'adminSetUserAdminMutation' as const,
-  op: 'adminSetUserAdmin',
-  query: `mutation adminSetUserAdmin($userId: String!, $isAdmin: Boolean!) {
-  adminSetUserAdmin(userId: $userId, isAdmin: $isAdmin) {
-    id
-    email
-    name
-    avatarUrl
-    isAdmin
-    emailVerified
-    createdAt
-  }
-}`,
-};
-
-export const adminServerSettingsQuery = {
-  id: 'adminServerSettingsQuery' as const,
-  op: 'adminServerSettings',
-  query: `query adminServerSettings {
-  adminServerSettings {
-    key
-    value
-    updatedAt
-  }
-}`,
-};
-
-export const adminUpdateServerSettingMutation = {
-  id: 'adminUpdateServerSettingMutation' as const,
-  op: 'adminUpdateServerSetting',
-  query: `mutation adminUpdateServerSetting($key: String!, $value: String!) {
-  adminUpdateServerSetting(key: $key, value: $value) {
-    key
-    value
-    updatedAt
-  }
-}`,
-};
-
-// #89: シングルサインオン（OIDC）の設定。
-// 設定は .env ではなく管理画面（DB）に持つ方針のため、GraphQL 経由で読み書きする。
-// ⚠️ clientSecret は「設定済みかどうか」だけを返す（値はサーバーから返さない）。
-export const oidcConfigQuery = {
-  id: 'oidcConfigQuery' as const,
-  op: 'oidcConfig',
-  query: `query oidcConfig {
-  oidcConfig {
-    enabled
-    issuer
-    clientId
-    clientSecretSet
-    buttonLabel
-    emailClaims
-    autoCreateUser
-    redirectUri
-  }
-}`,
-};
-
-export const updateOidcConfigMutation = {
-  id: 'updateOidcConfigMutation' as const,
-  op: 'updateOidcConfig',
-  query: `mutation updateOidcConfig($input: UpdateOidcConfigInput!) {
-  updateOidcConfig(input: $input) {
-    enabled
-    issuer
-    clientId
-    clientSecretSet
-    buttonLabel
-    emailClaims
-    autoCreateUser
-    redirectUri
-  }
-}`,
-};
-
-export const testOidcConnectionMutation = {
-  id: 'testOidcConnectionMutation' as const,
-  op: 'testOidcConnection',
-  query: `mutation testOidcConnection($issuer: String!) {
-  testOidcConnection(issuer: $issuer) {
-    ok
-    message
-    issuer
-    authorizationEndpoint
-    tokenEndpoint
-  }
-}`,
-};
-
-export const adminBackupListQuery = {
-  id: 'adminBackupListQuery' as const,
-  op: 'adminBackupList',
-  query: `query adminBackupList($skip: Int, $take: Int) {
-  adminBackupList(skip: $skip, take: $take) {
-    items {
-      id
-      filename
-      size
-      workspaceCount
-      docCount
-      blobCount
-      status
-      createdAt
-    }
-    totalCount
-  }
-}`,
-};
-
-export const adminCreateBackupMutation = {
-  id: 'adminCreateBackupMutation' as const,
-  op: 'adminCreateBackup',
-  query: `mutation adminCreateBackup {
-  adminCreateBackup {
-    id
-    filename
-    size
-    workspaceCount
-    docCount
-    blobCount
-    status
-    createdAt
-  }
-}`,
-};
-
-export const adminDeleteBackupMutation = {
-  id: 'adminDeleteBackupMutation' as const,
-  op: 'adminDeleteBackup',
-  query: `mutation adminDeleteBackup($id: String!) {
-  adminDeleteBackup(id: $id)
+export const adminSetUserPasswordMutation = {
+  id: 'adminSetUserPasswordMutation' as const,
+  op: 'adminSetUserPassword',
+  query: `mutation adminSetUserPassword($userId: String!, $password: String!) {
+  adminSetUserPassword(userId: $userId, password: $password)
 }`,
 };
 
@@ -542,27 +312,6 @@ export const setBlobMutation = {
   file: true,
 };
 
-export const abortBlobUploadMutation = {
-  id: 'abortBlobUploadMutation' as const,
-  op: 'abortBlobUpload',
-  query: `mutation abortBlobUpload($workspaceId: String!, $key: String!, $uploadId: String!) {
-  abortBlobUpload(workspaceId: $workspaceId, key: $key, uploadId: $uploadId)
-}`,
-};
-
-export const completeBlobUploadMutation = {
-  id: 'completeBlobUploadMutation' as const,
-  op: 'completeBlobUpload',
-  query: `mutation completeBlobUpload($workspaceId: String!, $key: String!, $uploadId: String, $parts: [BlobUploadPartInput!]) {
-  completeBlobUpload(
-    workspaceId: $workspaceId
-    key: $key
-    uploadId: $uploadId
-    parts: $parts
-  )
-}`,
-};
-
 export const createBlobUploadMutation = {
   id: 'createBlobUploadMutation' as const,
   op: 'createBlobUpload',
@@ -584,20 +333,6 @@ export const createBlobUploadMutation = {
 }`,
 };
 
-export const getBlobUploadPartUrlQuery = {
-  id: 'getBlobUploadPartUrlQuery' as const,
-  op: 'getBlobUploadPartUrl',
-  query: `query getBlobUploadPartUrl($workspaceId: String!, $key: String!, $uploadId: String!, $partNumber: Int!) {
-  workspace(id: $workspaceId) {
-    blobUploadPartUrl(key: $key, uploadId: $uploadId, partNumber: $partNumber) {
-      uploadUrl
-      headers
-      expiresAt
-    }
-  }
-}`,
-};
-
 export const changeEmailMutation = {
   id: 'changeEmailMutation' as const,
   op: 'changeEmail',
@@ -609,19 +344,19 @@ export const changeEmailMutation = {
 }`,
 };
 
-export const changePasswordMutation = {
-  id: 'changePasswordMutation' as const,
-  op: 'changePassword',
-  query: `mutation changePassword($token: String!, $userId: String!, $newPassword: String!) {
-  changePassword(token: $token, userId: $userId, newPassword: $newPassword)
-}`,
-};
-
 export const changeMyPasswordMutation = {
   id: 'changeMyPasswordMutation' as const,
   op: 'changeMyPassword',
   query: `mutation changeMyPassword($currentPassword: String!, $newPassword: String!) {
   changeMyPassword(currentPassword: $currentPassword, newPassword: $newPassword)
+}`,
+};
+
+export const changePasswordMutation = {
+  id: 'changePasswordMutation' as const,
+  op: 'changePassword',
+  query: `mutation changePassword($token: String!, $userId: String!, $newPassword: String!) {
+  changePassword(token: $token, userId: $userId, newPassword: $newPassword)
 }`,
 };
 
@@ -830,6 +565,87 @@ export const deleteWorkspaceMutation = {
 }`,
 };
 
+export const changeDocTagsMutation = {
+  id: 'changeDocTagsMutation' as const,
+  op: 'changeDocTags',
+  query: `mutation changeDocTags($workspaceId: String!, $docId: String!, $add: [String!], $remove: [String!]) {
+  changeDocTags(
+    workspaceId: $workspaceId
+    docId: $docId
+    add: $add
+    remove: $remove
+  ) {
+    status
+    revision
+  }
+}`,
+};
+
+export const createDocMetaMutation = {
+  id: 'createDocMetaMutation' as const,
+  op: 'createDocMeta',
+  query: `mutation createDocMeta($workspaceId: String!, $docId: String!, $title: String, $mode: String) {
+  createDocMeta(
+    workspaceId: $workspaceId
+    docId: $docId
+    title: $title
+    mode: $mode
+  ) {
+    status
+    revision
+    titleRevision
+    trashRevision
+    tagsRevision
+  }
+}`,
+};
+
+export const deleteDocMetaMutation = {
+  id: 'deleteDocMetaMutation' as const,
+  op: 'deleteDocMeta',
+  query: `mutation deleteDocMeta($workspaceId: String!, $docId: String!) {
+  deleteDocMeta(workspaceId: $workspaceId, docId: $docId) {
+    status
+  }
+}`,
+};
+
+export const setDocTitleMutation = {
+  id: 'setDocTitleMutation' as const,
+  op: 'setDocTitle',
+  query: `mutation setDocTitle($workspaceId: String!, $docId: String!, $title: String!, $baseRevision: String!) {
+  setDocTitle(
+    workspaceId: $workspaceId
+    docId: $docId
+    title: $title
+    baseRevision: $baseRevision
+  ) {
+    status
+    revision
+    currentTitle
+    currentTrash
+  }
+}`,
+};
+
+export const setDocTrashMutation = {
+  id: 'setDocTrashMutation' as const,
+  op: 'setDocTrash',
+  query: `mutation setDocTrash($workspaceId: String!, $docId: String!, $trash: Boolean!, $baseRevision: String!) {
+  setDocTrash(
+    workspaceId: $workspaceId
+    docId: $docId
+    trash: $trash
+    baseRevision: $baseRevision
+  ) {
+    status
+    revision
+    currentTitle
+    currentTrash
+  }
+}`,
+};
+
 export const getDocRolePermissionsQuery = {
   id: 'getDocRolePermissionsQuery' as const,
   op: 'getDocRolePermissions',
@@ -901,27 +717,38 @@ export const getCurrentUserQuery = {
     }
   }
 }`,
-  deprecations: ["'token' is deprecated: use [/api/auth/sign-in?native=true] instead"],
 };
 
-export const getDocCreatedByUpdatedByListQuery = {
-  id: 'getDocCreatedByUpdatedByListQuery' as const,
-  op: 'getDocCreatedByUpdatedByList',
-  query: `query getDocCreatedByUpdatedByList($workspaceId: String!, $pagination: PaginationInput!) {
-  workspace(id: $workspaceId) {
-    docs(pagination: $pagination) {
-      totalCount
-      pageInfo {
-        endCursor
-        hasNextPage
-      }
-      edges {
-        node {
-          id
-          creatorId
-          lastUpdaterId
-        }
-      }
+export const getDiscoveryRevisionQuery = {
+  id: 'getDiscoveryRevisionQuery' as const,
+  op: 'getDiscoveryRevision',
+  query: `query getDiscoveryRevision($workspaceId: String!) {
+  discoveryRevision(workspaceId: $workspaceId)
+}`,
+};
+
+export const getDiscoverySnapshotQuery = {
+  id: 'getDiscoverySnapshotQuery' as const,
+  op: 'getDiscoverySnapshot',
+  query: `query getDiscoverySnapshot($workspaceId: String!) {
+  discoverySnapshot(workspaceId: $workspaceId) {
+    workspaceId
+    userId
+    revision
+    fetchedAt
+    documents {
+      id
+      title
+      tagIds
+      mode
+      trash
+      createdAt
+      updatedAt
+      createdBy
+      updatedBy
+      titleRevision
+      trashRevision
+      tagsRevision
     }
   }
 }`,
@@ -1005,7 +832,6 @@ export const getMembersByWorkspaceIdQuery = {
     }
   }
 }`,
-  deprecations: ["'permission' is deprecated: Use role instead"],
 };
 
 export const oauthProvidersQuery = {
@@ -1060,32 +886,6 @@ export const getPublicUserByIdQuery = {
 }`,
 };
 
-export const getRecentlyUpdatedDocsQuery = {
-  id: 'getRecentlyUpdatedDocsQuery' as const,
-  op: 'getRecentlyUpdatedDocs',
-  query: `query getRecentlyUpdatedDocs($workspaceId: String!, $pagination: PaginationInput!) {
-  workspace(id: $workspaceId) {
-    recentlyUpdatedDocs(pagination: $pagination) {
-      totalCount
-      pageInfo {
-        endCursor
-        hasNextPage
-      }
-      edges {
-        node {
-          id
-          title
-          createdAt
-          updatedAt
-          creatorId
-          lastUpdaterId
-        }
-      }
-    }
-  }
-}`,
-};
-
 export const getUserFeaturesQuery = {
   id: 'getUserFeaturesQuery' as const,
   op: 'getUserFeatures',
@@ -1106,27 +906,6 @@ export const getUserSettingsQuery = {
       receiveInvitationEmail
       receiveMentionEmail
       receiveCommentEmail
-    }
-  }
-}`,
-};
-
-export const getUserQuery = {
-  id: 'getUserQuery' as const,
-  op: 'getUser',
-  query: `query getUser($email: String!) {
-  user(email: $email) {
-    __typename
-    ... on UserType {
-      id
-      name
-      avatarUrl
-      email
-      hasPassword
-    }
-    ... on LimitedUserType {
-      email
-      hasPassword
     }
   }
 }`,
@@ -1180,28 +959,6 @@ export const getWorkspacePageByIdQuery = {
     }
   }
 }`,
-};
-
-export const getWorkspacePageMetaByIdQuery = {
-  id: 'getWorkspacePageMetaByIdQuery' as const,
-  op: 'getWorkspacePageMetaById',
-  query: `query getWorkspacePageMetaById($id: String!, $pageId: String!) {
-  workspace(id: $id) {
-    pageMeta(pageId: $pageId) {
-      createdAt
-      updatedAt
-      createdBy {
-        name
-        avatarUrl
-      }
-      updatedBy {
-        name
-        avatarUrl
-      }
-    }
-  }
-}`,
-  deprecations: ["'pageMeta' is deprecated: use [WorkspaceType.doc] instead"],
 };
 
 export const getWorkspacePublicByIdQuery = {
@@ -1350,6 +1107,14 @@ export const indexerSearchQuery = {
 }`,
 };
 
+export const isPasswordTokenValidQuery = {
+  id: 'isPasswordTokenValidQuery' as const,
+  op: 'isPasswordTokenValid',
+  query: `query isPasswordTokenValid($token: String!) {
+  isPasswordTokenValid(token: $token)
+}`,
+};
+
 export const leaveWorkspaceMutation = {
   id: 'leaveWorkspaceMutation' as const,
   op: 'leaveWorkspace',
@@ -1408,13 +1173,50 @@ export const notificationCountQuery = {
 }`,
 };
 
-export const publishPageMutation = {
-  id: 'publishPageMutation' as const,
-  op: 'publishPage',
-  query: `mutation publishPage($workspaceId: String!, $pageId: String!, $mode: PublicDocMode = Page) {
-  publishDoc(workspaceId: $workspaceId, docId: $pageId, mode: $mode) {
-    id
-    mode
+export const oidcConfigQuery = {
+  id: 'oidcConfigQuery' as const,
+  op: 'oidcConfig',
+  query: `query oidcConfig {
+  oidcConfig {
+    enabled
+    issuer
+    clientId
+    clientSecretSet
+    buttonLabel
+    emailClaims
+    autoCreateUser
+    redirectUri
+  }
+}`,
+};
+
+export const testOidcConnectionMutation = {
+  id: 'testOidcConnectionMutation' as const,
+  op: 'testOidcConnection',
+  query: `mutation testOidcConnection($issuer: String!) {
+  testOidcConnection(issuer: $issuer) {
+    ok
+    message
+    issuer
+    authorizationEndpoint
+    tokenEndpoint
+  }
+}`,
+};
+
+export const updateOidcConfigMutation = {
+  id: 'updateOidcConfigMutation' as const,
+  op: 'updateOidcConfig',
+  query: `mutation updateOidcConfig($input: UpdateOidcConfigInput!) {
+  updateOidcConfig(input: $input) {
+    enabled
+    issuer
+    clientId
+    clientSecretSet
+    buttonLabel
+    emailClaims
+    autoCreateUser
+    redirectUri
   }
 }`,
 };
@@ -1444,7 +1246,6 @@ export const quotaQuery = {
     }
   }
 }`,
-  deprecations: ["'storageQuota' is deprecated: use `UserQuotaType['usedStorageQuota']` instead"],
 };
 
 export const readAllNotificationsMutation = {
@@ -1497,18 +1298,6 @@ export const revokeMemberPermissionMutation = {
 }`,
 };
 
-export const revokePublicPageMutation = {
-  id: 'revokePublicPageMutation' as const,
-  op: 'revokePublicPage',
-  query: `mutation revokePublicPage($workspaceId: String!, $pageId: String!) {
-  revokePublicDoc(workspaceId: $workspaceId, docId: $pageId) {
-    id
-    mode
-    public
-  }
-}`,
-};
-
 export const sendChangeEmailMutation = {
   id: 'sendChangeEmailMutation' as const,
   op: 'sendChangeEmail',
@@ -1552,16 +1341,6 @@ export const serverConfigQuery = {
 }
 ${passwordLimitsFragment}
 ${credentialsRequirementsFragment}`,
-};
-
-export const setWorkspacePublicByIdMutation = {
-  id: 'setWorkspacePublicByIdMutation' as const,
-  op: 'setWorkspacePublicById',
-  query: `mutation setWorkspacePublicById($id: ID!, $public: Boolean!) {
-  updateWorkspace(input: {id: $id, public: $public}) {
-    id
-  }
-}`,
 };
 
 export const updateDocDefaultRoleMutation = {
@@ -1653,46 +1432,6 @@ export const getWorkspaceConfigQuery = {
 }`,
 };
 
-export const setEnableAiMutation = {
-  id: 'setEnableAiMutation' as const,
-  op: 'setEnableAi',
-  query: `mutation setEnableAi($id: ID!, $enableAi: Boolean!) {
-  updateWorkspace(input: {id: $id, enableAi: $enableAi}) {
-    id
-  }
-}`,
-};
-
-export const setEnableDocEmbeddingMutation = {
-  id: 'setEnableDocEmbeddingMutation' as const,
-  op: 'setEnableDocEmbedding',
-  query: `mutation setEnableDocEmbedding($id: ID!, $enableDocEmbedding: Boolean!) {
-  updateWorkspace(input: {id: $id, enableDocEmbedding: $enableDocEmbedding}) {
-    id
-  }
-}`,
-};
-
-export const setEnableSharingMutation = {
-  id: 'setEnableSharingMutation' as const,
-  op: 'setEnableSharing',
-  query: `mutation setEnableSharing($id: ID!, $enableSharing: Boolean!) {
-  updateWorkspace(input: {id: $id, enableSharing: $enableSharing}) {
-    id
-  }
-}`,
-};
-
-export const setEnableUrlPreviewMutation = {
-  id: 'setEnableUrlPreviewMutation' as const,
-  op: 'setEnableUrlPreview',
-  query: `mutation setEnableUrlPreview($id: ID!, $enableUrlPreview: Boolean!) {
-  updateWorkspace(input: {id: $id, enableUrlPreview: $enableUrlPreview}) {
-    id
-  }
-}`,
-};
-
 export const inviteByEmailsMutation = {
   id: 'inviteByEmailsMutation' as const,
   op: 'inviteByEmails',
@@ -1759,38 +1498,6 @@ export const workspaceQuotaQuery = {
     }
   }
 }`,
-};
-
-export const getWorkspaceRolePermissionsQuery = {
-  id: 'getWorkspaceRolePermissionsQuery' as const,
-  op: 'getWorkspaceRolePermissions',
-  query: `query getWorkspaceRolePermissions($id: String!) {
-  workspaceRolePermissions(id: $id) {
-    permissions {
-      Workspace_Administrators_Manage
-      Workspace_Blobs_List
-      Workspace_Blobs_Read
-      Workspace_Blobs_Write
-      Workspace_Copilot
-      Workspace_CreateDoc
-      Workspace_Delete
-      Workspace_Organize_Read
-      Workspace_Payment_Manage
-      Workspace_Properties_Create
-      Workspace_Properties_Delete
-      Workspace_Properties_Read
-      Workspace_Properties_Update
-      Workspace_Read
-      Workspace_Settings_Read
-      Workspace_Settings_Update
-      Workspace_Sync
-      Workspace_TransferOwner
-      Workspace_Users_Manage
-      Workspace_Users_Read
-    }
-  }
-}`,
-  deprecations: ["'workspaceRolePermissions' is deprecated: use WorkspaceType[permissions] instead"],
 };
 
 export const approveWorkspaceTeamMemberMutation = {

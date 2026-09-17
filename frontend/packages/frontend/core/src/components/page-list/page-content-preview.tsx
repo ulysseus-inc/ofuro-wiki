@@ -1,5 +1,5 @@
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
-import { useLiveData, useService } from '@toeverything/infra';
+import { useService } from '@toeverything/infra';
 import { useAtomValue } from 'jotai';
 import { type ReactNode, useMemo } from 'react';
 

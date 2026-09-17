@@ -1,0 +1,7 @@
+mutation adminUpdateServerSetting($key: String!, $value: String!) {
+  adminUpdateServerSetting(key: $key, value: $value) {
+    key
+    value
+    updatedAt
+  }
+}

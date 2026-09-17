@@ -5,6 +5,29 @@ import type { Package } from '@ofuro-tools/utils/workspace';
 import { PackageToDistribution } from './distribution';
 import { ProjectRoot } from './path';
 
+/**
+ * #105: 製品の版数（設定→情報の「アプリ版」に出す）。
+ *
+ * ⚠️ **`appVersion` と混ぜないこと。** `appVersion` は画面表示のほかに
+ * `x-affine-version` ヘッダーと同期の `clientVersion` にも使われる通信用の値で、
+ * AFFiNE 由来の 0.26.x を保つ（CLAUDE.md「AFFINE_API_VERSION は触らない」と同じ理由）。
+ *
+ * ⚠️ アプリのパッケージ（apps/web・apps/mobile）の version は使わない。
+ * あれは 0.26.x のままで、リリースしても変わらない。
+ * `scripts/set-version.sh` が書き換えるのは frontend/package.json であり、
+ * docs/release-plan-v0.1.0.md も「UI 表示はここ」と定めている。
+ */
+function getProductVersion(): string {
+  try {
+    // ⚠️ ProjectRoot は frontend ディレクトリ（getBlockSuiteVersion と同じ基準）
+    const pkgPath = ProjectRoot.join('package.json').toString();
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
 function getBlockSuiteVersion(): string {
   try {
     const bsPkgPath = ProjectRoot.join(
@@ -56,6 +79,7 @@ export function getBuildConfig(
 
         appBuildType: 'stable' as const,
         appVersion: pkg.version,
+        productVersion: getProductVersion(),
         editorVersion: getBlockSuiteVersion(),
         githubUrl: '',
         changelogUrl: '',

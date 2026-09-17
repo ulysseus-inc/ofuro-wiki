@@ -11,6 +11,7 @@ import { PopupWindowProvider } from '@ofuro/core/modules/url';
 import { configureBrowserWorkbenchModule } from '@ofuro/core/modules/workbench';
 import { configureBrowserWorkspaceFlavours } from '@ofuro/core/modules/workspace-engine';
 import { configureMobileModules } from '@ofuro/core/mobile/modules';
+import { configureBrowserVirtualKeyboardProvider } from '@ofuro/core/mobile/modules/virtual-keyboard';
 import createEmotionCache from '@ofuro/core/utils/create-emotion-cache';
 import { getWorkerUrl } from '@ofuro/env/worker';
 import { StoreManagerClient } from '@ofuro/nbstore/worker/client';
@@ -60,6 +61,9 @@ const framework = new Framework();
 configureCommonModules(framework);
 configureBrowserWorkbenchModule(framework);
 configureMobileModules(framework);
+// #105: Web だけで配るため、キーボードの窓口はブラウザ実装を入れる
+// （上流は iOS / Android アプリが入れていた。無いと画面を描く前に落ちる）
+configureBrowserVirtualKeyboardProvider(framework);
 configureLocalStorageStateStorageImpls(framework);
 configureBrowserWorkspaceFlavours(framework);
 framework.impl(NbstoreProvider, {

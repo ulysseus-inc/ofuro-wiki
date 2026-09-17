@@ -1,0 +1,9 @@
+pg_restore: error: could not execute query: ERROR:  relation "i1" already exists
+Command was: CREATE INDEX i1 ON public.t1 USING btree (v);
+
+
+pg_restore: error: could not execute query: ERROR:  relation "i2" already exists
+Command was: CREATE INDEX i2 ON public.t2 USING btree (v);
+
+
+pg_restore: warning: errors ignored on restore: 2

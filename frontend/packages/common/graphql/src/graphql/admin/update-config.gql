@@ -1,3 +1,0 @@
-mutation updateAppConfig($updates: [UpdateAppConfigInput!]!) {
-  updateAppConfig(updates: $updates)
-}

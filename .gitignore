@@ -48,3 +48,7 @@ backups/
 # Test artifacts
 e2e/test-results/
 e2e/playwright-report/
+
+# エージェント向けの自動生成ファイル（CLAUDE.md の複製）。
+# コミットすると二重管理になり、必ず古いほうが残る
+AGENTS.md

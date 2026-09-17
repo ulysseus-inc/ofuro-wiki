@@ -1,0 +1,27 @@
+# ⚠️ #151 段階3: Discovery Metadata の書き込み。
+#
+# | 種類 | 対象 | 競合制御 |
+# |---|---|---|
+# | 値型 | title / trash | フィールド単位の版数 |
+# | 操作型 | tags の add / remove | 不要（順序に依存しない） |
+#
+# （#131 / #206 まで生成コードに手書きしていた。いまはこの .gql が正）
+#
+# #151 段階3: ページの作成・削除を台帳へ反映する。
+# ⚠️ これが無いと、目次にメタデータを書かなくなった時点で
+# **新しく作ったページが誰の一覧にも出なくなる**（段階2 までは
+# doc-meta-sync が Yjs 目次から行を作っていた）。
+mutation createDocMeta($workspaceId: String!, $docId: String!, $title: String, $mode: String) {
+  createDocMeta(
+    workspaceId: $workspaceId
+    docId: $docId
+    title: $title
+    mode: $mode
+  ) {
+    status
+    revision
+    titleRevision
+    trashRevision
+    tagsRevision
+  }
+}

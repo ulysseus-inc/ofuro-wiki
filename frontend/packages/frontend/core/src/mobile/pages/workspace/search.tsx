@@ -36,6 +36,7 @@ import * as styles from '../../views/search/style.css';
 const searchInput$ = new LiveData('');
 
 const RecentList = () => {
+  const t = useI18n();
   const { mobileSearchService, collectionService, tagService } = useServices({
     MobileSearchService,
     CollectionService,
@@ -92,7 +93,7 @@ const RecentList = () => {
 
   return (
     <SearchResults
-      title="Recent"
+      title={t['Recent']()}
       docs={docs}
       collections={collectionList}
       tags={tagList}
@@ -101,6 +102,7 @@ const RecentList = () => {
 };
 
 const WithQueryList = () => {
+  const t = useI18n();
   const searchService = useService(MobileSearchService);
   const collectionList = useLiveData(searchService.collections.items$);
   const docList = useLiveData(searchService.docs.items$);
@@ -122,7 +124,7 @@ const WithQueryList = () => {
 
   return (
     <SearchResults
-      title="Search result"
+      title={t['com.affine.m.search.result']()}
       docs={docs}
       collections={collectionList}
       tags={tagList}
@@ -170,7 +172,7 @@ export const Component = () => {
             autoFocus={!searchInput}
             value={searchInput}
             onInput={onSearch}
-            placeholder="Search Docs, Collections"
+            placeholder={t['com.affine.m.search.placeholder']()}
           />
           <NavigationBackButton>
             <Button

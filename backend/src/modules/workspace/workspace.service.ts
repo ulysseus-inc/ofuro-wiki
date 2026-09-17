@@ -2,6 +2,13 @@ import { Injectable, ForbiddenException, NotFoundException, Logger } from '@nest
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../mail/mail.service';
 import { AuditService } from '../audit/audit.service';
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
+// #148: 招待の受諾は種別ごとに扱いが違う。判定は1か所に置く
+import {
+  EMAIL_INVITE_TTL_MS,
+  INVITE_LINK_EMAIL,
+  judgeInvitation,
+} from './invitation-rule';
 
 @Injectable()
 export class WorkspaceService {
@@ -11,6 +18,8 @@ export class WorkspaceService {
     private prisma: PrismaService,
     private mailService: MailService,
     private audit: AuditService,
+    // #151: メンバーの増減・ロール変更で「誰に何が見えるか」が変わる
+    private discovery: DiscoveryRevisionService,
   ) {}
 
   async createWorkspace(userId: string, name?: string) {
@@ -107,6 +116,10 @@ export class WorkspaceService {
         inviterId,
         email,
         role,
+        // #148: 期限を入れる（招待リンクの既定と揃えて7日）。
+        // ⚠️ 既存の行は `null` のまま＝期限なしとして通す。
+        // 期限切れ扱いにすると、**いま出ている招待を黙って無効化する**
+        expireTime: new Date(Date.now() + EMAIL_INVITE_TTL_MS),
       },
     });
 
@@ -157,6 +170,8 @@ export class WorkspaceService {
         workspaceId_userId: { workspaceId, userId },
       },
     });
+    // ⚠️ #151: 誰に何が見えるかが変わる。**書き込んだあと**に上げる
+    await this.discovery.bump(workspaceId, 'permission-workspace');
     return true;
   }
 
@@ -188,26 +203,103 @@ export class WorkspaceService {
     return this.prisma.workspaceMember.count({ where: { workspaceId } });
   }
 
+  /**
+   * 招待を受諾する。
+   *
+   * ⚠️ **招待は2種類あり、扱いが違う**（docs/workspace-invitation.md）。
+   * 判定は `judgeInvitation` に委ねること。ここに条件を書き足さない。
+   *
+   * ⚠️ 以前は**招待 ID だけ**で受諾でき、宛先も期限も見ていなかった。
+   * リンクを転送されれば**招待していない人がワークスペースに入れた**（#148）。
+   */
   async acceptInvite(workspaceId: string, inviteId: string, userId: string) {
-    const invitation = await this.prisma.invitation.findUnique({
-      where: { id: inviteId },
+    const [invitation, user] = await Promise.all([
+      this.prisma.invitation.findUnique({ where: { id: inviteId } }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      }),
+    ]);
+
+    // ⚠️ 判定と消費で**同じ時刻**を使う。別々に取ると、境目で
+    // 「判定は通ったのに消費で期限切れ」という説明できない失敗が出る
+    const now = new Date();
+    const judgement = judgeInvitation({
+      invitation,
+      user: { email: user?.email ?? null },
+      workspaceId,
+      now,
     });
-    if (!invitation || invitation.workspaceId !== workspaceId) {
+
+    if (!judgement.ok) {
+      // ⚠️ **理由で応答を分けない。** 「宛先が違う」と「無い」を区別すると、
+      // 招待の**存在を確かめる手段**になる。記録には理由を残す
+      this.logger.warn(
+        `Invitation rejected: ${judgement.reason} (invite=${inviteId} user=${userId})`,
+      );
       throw new NotFoundException('Invitation not found');
     }
 
-    await this.prisma.workspaceMember.upsert({
-      where: {
-        workspaceId_userId: { workspaceId, userId },
-      },
-      create: {
-        workspaceId,
-        userId,
-        role: invitation.role,
-        status: 'accepted',
-      },
-      update: { status: 'accepted' },
+    // ⚠️ **消費とメンバー追加は同じトランザクションで、消費を先に行う。**
+    //
+    // 分けると、削除に失敗しても受諾が成功する。招待は残ったままなので
+    // **退出させたあとに同じリンクで戻れる**——「一度だけ」という
+    // 認可上の約束が、障害時に静かに破れる（Codex 指摘・2026-09-05）。
+    //
+    // ⚠️ **削除そのものを検査に使う**（読んでから消すのではなく）。
+    // 削除できた1件だけが受諾できるので、**同時受諾も片方だけが通る**。
+    const consumed = await this.prisma.$transaction(async (tx) => {
+      if (judgement.consume) {
+        // ⚠️ 条件を全部入れること。id だけで消すと、別ワークスペースの
+        // 招待や期限切れを掴んだまま消してしまう
+        const result = await tx.invitation.deleteMany({
+          where: {
+            id: inviteId,
+            workspaceId,
+            email: judgement.invitation.email,
+            OR: [{ expireTime: null }, { expireTime: { gt: now } }],
+          },
+        });
+        // 消せなかった＝他の誰か（別タブ・再送）が先に使い切った
+        if (result.count !== 1) return false;
+      } else {
+        // 招待リンクは消さない（再利用が仕様）。
+        // ⚠️ それでも**この瞬間に有効か**は確かめる。判定してから
+        // ここへ来るまでに失効・取り消しが起こり得る
+        const alive = await tx.invitation.count({
+          where: {
+            id: inviteId,
+            workspaceId,
+            OR: [{ expireTime: null }, { expireTime: { gt: now } }],
+          },
+        });
+        if (alive !== 1) return false;
+      }
+
+      await tx.workspaceMember.upsert({
+        where: {
+          workspaceId_userId: { workspaceId, userId },
+        },
+        create: {
+          workspaceId,
+          userId,
+          role: judgement.invitation.role,
+          status: 'accepted',
+        },
+        update: { status: 'accepted' },
+      });
+      return true;
     });
+
+    if (!consumed) {
+      this.logger.warn(
+        `Invitation already consumed or revoked (invite=${inviteId} user=${userId})`,
+      );
+      throw new NotFoundException('Invitation not found');
+    }
+
+    // ⚠️ #151: 誰に何が見えるかが変わる。**書き込んだあと**に上げる
+    await this.discovery.bump(workspaceId, 'permission-workspace');
     return true;
   }
 
@@ -224,6 +316,8 @@ export class WorkspaceService {
         workspaceId_userId: { workspaceId, userId },
       },
     });
+    // ⚠️ #151: 誰に何が見えるかが変わる。**書き込んだあと**に上げる
+    await this.discovery.bump(workspaceId, 'permission-workspace');
     return true;
   }
 
@@ -273,6 +367,8 @@ export class WorkspaceService {
         data: { role: newRole },
       });
     }
+    // ⚠️ #151: 誰に何が見えるかが変わる。**書き込んだあと**に上げる
+    await this.discovery.bump(workspaceId, 'permission-workspace');
     return true;
   }
 
@@ -342,7 +438,7 @@ export class WorkspaceService {
 
     // ワークスペースごとに招待リンクは1つだけ保持する（既存リンクは作り直す）
     await this.prisma.invitation.deleteMany({
-      where: { workspaceId, email: '__invite_link__' },
+      where: { workspaceId, email: INVITE_LINK_EMAIL },
     });
 
     // Store as a special invitation with email='__invite_link__'
@@ -350,7 +446,7 @@ export class WorkspaceService {
       data: {
         workspaceId,
         inviterId, // 招待リンクを生成したユーザー（外部キー制約のため実在ユーザーが必要）
-        email: '__invite_link__',
+        email: INVITE_LINK_EMAIL,
         role: 'member',
         expireTime: expireAt,
       },
@@ -364,7 +460,7 @@ export class WorkspaceService {
 
   async revokeInviteLink(workspaceId: string) {
     await this.prisma.invitation.deleteMany({
-      where: { workspaceId, email: '__invite_link__' },
+      where: { workspaceId, email: INVITE_LINK_EMAIL },
     });
     return true;
   }
@@ -374,7 +470,7 @@ export class WorkspaceService {
     const invitation = await this.prisma.invitation.findFirst({
       where: {
         workspaceId,
-        email: '__invite_link__',
+        email: INVITE_LINK_EMAIL,
         OR: [{ expireTime: null }, { expireTime: { gt: new Date() } }],
       },
       orderBy: { createdAt: 'desc' },

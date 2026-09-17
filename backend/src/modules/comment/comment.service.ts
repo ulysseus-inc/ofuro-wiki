@@ -163,6 +163,7 @@ export class CommentService {
     if (!role || role === 'reader') {
       throw new ForbiddenException('No permission to create comments');
     }
+    await this.assertReadable(input.workspaceId, input.docId, userId);
 
     const comment = await this.prisma.comment.create({
       data: {
@@ -239,7 +240,7 @@ export class CommentService {
   ): Promise<ReplyObjectType> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: input.commentId },
-      select: { workspaceId: true, userId: true },
+      select: { workspaceId: true, docId: true, userId: true },
     });
     if (!comment) throw new NotFoundException('Comment not found');
 
@@ -248,6 +249,7 @@ export class CommentService {
     if (!role || role === 'reader') {
       throw new ForbiddenException('No permission to reply to comments');
     }
+    await this.assertReadable(comment.workspaceId, comment.docId, userId);
 
     const reply = await this.prisma.reply.create({
       data: {
@@ -307,5 +309,46 @@ export class CommentService {
       where: { id: commentId },
       select: { id: true, userId: true, workspaceId: true, docId: true },
     });
+  }
+
+  // ───────────────────────────── #223: メンション（docs/mention-notification.md）
+
+  /** 送る人の条件。満たさなければ拒否する */
+  async assertReadable(workspaceId: string, docId: string, userId: string) {
+    if (await this.canReceive(workspaceId, docId, userId)) {
+      return;
+    }
+    throw new ForbiddenException('No permission to read this doc');
+  }
+
+  /**
+   * 同じワークスペースのメンバーで、ページを読めるか。
+   *
+   * ⚠️ WS のメンバーであることを別に確かめる。サーバー全体 Admin は
+   * `getDocRole` を素通りするため、`canRead` だけでは WS の外の Admin が通る。
+   */
+  async canReceive(workspaceId: string, docId: string, userId: string) {
+    const role = await this.permissionService.getWorkspaceRole(
+      workspaceId,
+      userId,
+    );
+    if (!role) {
+      return false;
+    }
+    return this.permissionService.canRead(workspaceId, docId, userId);
+  }
+
+  /**
+   * 通知・メールに載せる題。台帳（段階3 以降の正）から取る。
+   *
+   * ⚠️ 送る側から来た題は使わない。API を直接呼べば偽れる。
+   * 台帳に行が無ければ空（メールは「無題」と出す）。
+   */
+  async docTitle(workspaceId: string, docId: string): Promise<string> {
+    const meta = await this.prisma.docMeta.findUnique({
+      where: { workspaceId_docId: { workspaceId, docId } },
+      select: { title: true },
+    });
+    return meta?.title ?? '';
   }
 }

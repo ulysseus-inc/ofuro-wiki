@@ -1,5 +1,0 @@
-mutation setEnableUrlPreview($id: ID!, $enableUrlPreview: Boolean!) {
-  updateWorkspace(input: { id: $id, enableUrlPreview: $enableUrlPreview }) {
-    id
-  }
-}

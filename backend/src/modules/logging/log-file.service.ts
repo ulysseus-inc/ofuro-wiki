@@ -184,7 +184,7 @@ export class LogFileService implements OnModuleDestroy {
     }
 
     if (compressed > 0) {
-      this.logger.log(`ログファイルを圧縮しました: ${compressed}件`);
+      this.logger.log(`Compressed ${compressed} log file(s)`);
     }
     return compressed;
   }

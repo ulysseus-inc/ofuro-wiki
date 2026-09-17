@@ -1,3 +1,4 @@
+import { useI18n } from '@ofuro/i18n';
 import { DocDisplayMetaService } from '@ofuro/core/modules/doc-display-meta';
 import { JournalService } from '@ofuro/core/modules/journal';
 import { WorkbenchService } from '@ofuro/core/modules/workbench';
@@ -10,6 +11,7 @@ import type { AppTabCustomFCProps } from './type';
 
 export const AppTabJournal = ({ tab }: AppTabCustomFCProps) => {
   const workbench = useService(WorkbenchService).workbench;
+  const t = useI18n();
   const location = useLiveData(workbench.location$);
   const journalService = useService(JournalService);
   const docDisplayMetaService = useService(DocDisplayMetaService);
@@ -25,7 +27,11 @@ export const AppTabJournal = ({ tab }: AppTabCustomFCProps) => {
   const Icon = journalDate ? JournalIcon : TodayIcon;
 
   return (
-    <TabItem onClick={handleOpenToday} id={tab.key} label="Journal">
+    <TabItem
+      onClick={handleOpenToday}
+      id={tab.key}
+      label={t['com.affine.journal.app-sidebar-title']()}
+    >
       <Icon />
     </TabItem>
   );

@@ -62,6 +62,16 @@ model Workspace {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
+  /// #151: Discovery Index の版数。クライアントのキャッシュが古いことを検出する。
+  ///
+  /// ⚠️ **権限変更だけでなく、Index の内容が変わったときも上げること。**
+  /// 上げないと「権限は正しいのに一覧が古い」状態になる
+  /// （docs/doc-permission.md「Discovery Index Local Cache」4）。
+  ///
+  /// ⚠️ ワークスペース単位のため、1人の権限を変えると全員のキャッシュが失効する。
+  /// 正しさを優先した割り切りで、利用者単位への細分化は**最初からやらない**。
+  discoveryRevision BigInt @default(0) @map("discovery_revision")
+
   owner       User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   members     WorkspaceMember[]
   snapshots   DocSnapshot[]
@@ -76,6 +86,7 @@ model Workspace {
 
   @@index([ownerId], map: "idx_workspaces_owner")
   @@map("workspaces")
+  searchIndexQueues SearchIndexQueue[]
 }
 
 model WorkspaceMember {
@@ -149,6 +160,32 @@ model DocMeta {
   // ⚠️ 既定値を入れてはいけない。入れると全 doc が「設定済み」になり、
   // 所有者まで Reader に降格する（docs/doc-permission.md 4.2）
   defaultRole String?  @map("default_role") @db.VarChar(50)
+  // #151: Discovery Metadata。タグの「紐付け」をサーバー側で持つ。
+  // ⚠️ タグの定義（名前・色）は権限に関係しない共有情報のため対象外
+  //（`meta.properties.tags.options` に残す）。ここは doc → タグID の対応のみ。
+  // ⚠️ migration.sql の DEFAULT '{}' と揃えること。揃えないと
+  // 次の `prisma migrate dev` が「既定値を消す」差分を生成する
+  tagIds      String[] @default([]) @map("tag_ids")
+  // #151: ゴミ箱に入っているか。Yjs 目次（meta.pages[].trash）から写す。
+  // ⚠️ 一覧はこれで絞る。写さないと**削除したページが一覧に復活する**
+  trash       Boolean  @default(false)
+  // #151 段階3: フィールド単位の版数。用途は2つある（docs/discovery-stage3-comparison.md 7.5.10 / 7.7）
+  //
+  // 1. 競合制御（恒久）… その変更が「そのフィールドの現在値を基準にしたもの」か
+  //    を確かめる。ワークスペース単位の discoveryRevision は使えない
+  //    （他人の無関係な変更で上がり、ほとんどの書き込みが弾かれる）
+  //
+  // 2. 移行判定（⚠️ PR1〜PR5 の期間限定）… 0 なら Yjs 目次が正で
+  //    doc-meta-sync が写す。0 より大きければ doc_meta が正で上書きしない
+  //
+  // ⚠️ **2 を恒久的な所有権モデルとして扱わないこと。** Yjs 目次を廃止したら
+  //    この判定ごと捨て、1 の役割だけが残る
+  //
+  // ⚠️ tagsRevision は **移行判定にのみ**使う。tags は add/remove の操作型で
+  //    順序に依存しないため、競合制御に版数は要らない
+  titleRevision BigInt @default(0) @map("title_revision")
+  trashRevision BigInt @default(0) @map("trash_revision")
+  tagsRevision  BigInt @default(0) @map("tags_revision")
   createdById String?  @map("created_by") @db.Uuid
   updatedById String?  @map("updated_by") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
@@ -250,13 +287,47 @@ model SearchIndex {
   title       String?
   content     String
   blockType   String?  @map("block_type") @db.VarChar(50)
+
+  // #101: バックリンク。リンク元のブロックから、リンク先のページを引く
+  refDocId       String? @map("ref_doc_id") @db.VarChar(255)
+  ref            String?
+  parentBlockId  String? @map("parent_block_id") @db.VarChar(255)
+  parentFlavour  String? @map("parent_flavour") @db.VarChar(50)
+  additional     String?
+  markdownPreview String? @map("markdown_preview")
+  summary        String?
+
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz()
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, docId], map: "idx_search_workspace")
+  // #101: 「このページを参照しているブロック」を引くための索引
+  @@index([workspaceId, refDocId], map: "idx_search_ref_doc")
   @@map("search_index")
+}
+
+/// #101: 索引の作り直し待ち（docs/search-index.md 5章）
+///
+/// ⚠️ doc_meta に相乗りしない。台帳の行が無いページが過去に存在し、
+/// 相乗りすると取りこぼす。
+model SearchIndexQueue {
+  workspaceId String @map("workspace_id") @db.Uuid
+  docId       String @map("doc_id") @db.VarChar(255)
+
+  /// 編集のたびに +1。本文の保存と同一トランザクションで進める
+  pendingGeneration BigInt   @default(1) @map("pending_generation")
+  /// 作り直せた世代。pending > indexed が「作り直しが要る」
+  indexedGeneration BigInt   @default(0) @map("indexed_generation")
+  /// 最後の編集時刻。静まったかの判定に使う
+  pendingAt         DateTime @default(now()) @map("pending_at") @db.Timestamptz()
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, docId])
+  @@index([pendingAt], map: "idx_search_queue_pending")
+  @@map("search_index_queue")
 }
 
 model ServerSetting {

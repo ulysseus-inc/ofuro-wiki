@@ -482,7 +482,7 @@ export class IntrusionDetectionService implements OnModuleInit {
         select: { email: true },
       });
     } catch (e) {
-      this.logger.error(`Admin の取得に失敗しました: ${(e as Error).message}`);
+      this.logger.error(`Failed to load admin recipients: ${(e as Error).message}`);
       return { status: 'failed', recipients: 0, delivered: 0, rejected: 0 };
     }
 

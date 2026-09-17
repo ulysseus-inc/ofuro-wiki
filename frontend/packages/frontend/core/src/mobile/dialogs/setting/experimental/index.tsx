@@ -15,13 +15,16 @@ import { SwipeDialog } from '../swipe-dialog';
 import * as styles from './styles.css';
 
 export const ExperimentalFeatureSetting = () => {
+  const t = useI18n();
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <SettingGroup title="Experimental">
+      <SettingGroup
+        title={t['com.affine.settings.workspace.experimental-features']()}
+      >
         <RowLayout
-          label={'Experimental Features'}
+          label={t['com.affine.settings.workspace.experimental-features']()}
           onClick={() => setOpen(true)}
         >
           <ArrowRightSmallIcon fontSize={22} />
@@ -30,7 +33,7 @@ export const ExperimentalFeatureSetting = () => {
       <SwipeDialog
         open={open}
         onOpenChange={setOpen}
-        title="Experimental Features"
+        title={t['com.affine.settings.workspace.experimental-features']()}
       >
         <ExperimentalFeatureList />
       </SwipeDialog>

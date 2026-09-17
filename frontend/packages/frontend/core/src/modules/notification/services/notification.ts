@@ -1,4 +1,4 @@
-import type { DocMode } from '@ofuro/graphql';
+import type { DocMode } from '@blocksuite/affine/model';
 import { Service } from '@toeverything/infra';
 
 import type { NotificationStore } from '../stores/notification';
@@ -18,7 +18,8 @@ export class NotificationService extends Service {
       elementId?: string;
       mode: DocMode;
     }
-  ): Promise<string> {
+    // #210: バックエンドは Boolean! を返す（通知の ID ではない）。扱いは #217
+  ): Promise<boolean> {
     return this.store.mentionUser(userId, workspaceId, doc);
   }
 }

@@ -9,7 +9,7 @@ query serverConfig {
     features
     type
     initialized
-    calendarProviders
+    defaultLanguage
     credentialsRequirement {
       ...CredentialsRequirements
     }

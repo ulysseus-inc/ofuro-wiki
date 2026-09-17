@@ -99,7 +99,7 @@ export class DocEditAggregator implements OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     const keys = [...this.windows.keys()];
     if (keys.length > 0) {
-      this.logger.log(`編集中の監査ログを ${keys.length}件 記録します`);
+      this.logger.log(`Flushing ${keys.length} pending doc-edit audit log(s)`);
     }
     for (const key of keys) {
       await this.flush(key);

@@ -1,0 +1,9 @@
+mutation testOidcConnection($issuer: String!) {
+  testOidcConnection(issuer: $issuer) {
+    ok
+    message
+    issuer
+    authorizationEndpoint
+    tokenEndpoint
+  }
+}

@@ -1,7 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma.service';
 import { MailService } from '../mail/mail.service';
-import { PaginationInput, PaginatedNotificationType } from '../user/user.model';
+import {
+  NotificationType,
+  PaginationInput,
+  PaginatedNotificationType,
+} from '../user/user.model';
+
+/**
+ * #210: 列挙 `NotificationType` の値。DB の値がここに無い通知は返さない。
+ *
+ * ⚠️ **外すのは DB の問い合わせの条件で行う**（#218 のレビュー指摘）。取ったあとで外すと、
+ * 1ページ分がすべて知らない種類のとき一覧は空なのに「次のページあり」になり、次の位置が無い。
+ * フロントは先頭を取り直すので、同じページを繰り返して先へ進めない。件数もずれる。
+ */
+const KNOWN_NOTIFICATION_TYPES: string[] = Object.values(NotificationType);
 
 interface DocInfo {
   id: string;
@@ -27,7 +40,18 @@ export class NotificationService {
     const first = pagination?.first ?? 50;
     const after = pagination?.after;
 
-    const where = { userId };
+    // ⚠️ #210: 列挙に無い種類は返さない。DB の列はただの文字列で、列挙に無い値が1行でもあると
+    // GraphQL が変換できず、**通知の一覧が丸ごと失敗する**。件数・ページの位置も同じ条件で数える
+    const where = { userId, type: { in: KNOWN_NOTIFICATION_TYPES } };
+
+    const unknownCount = await this.prisma.notification.count({
+      where: { userId, type: { notIn: KNOWN_NOTIFICATION_TYPES } },
+    });
+    if (unknownCount > 0) {
+      this.logger.warn(
+        `Skipped ${unknownCount} notification(s) with unknown type for user ${userId}`,
+      );
+    }
 
     const totalCount = await this.prisma.notification.count({ where });
 
@@ -45,7 +69,7 @@ export class NotificationService {
       cursor: n.id,
       node: {
         id: n.id,
-        type: n.type,
+        type: n.type as NotificationType,
         level: n.level,
         read: n.read,
         body: n.body as any,
@@ -67,8 +91,9 @@ export class NotificationService {
   }
 
   async getNotificationCount(userId: string): Promise<number> {
+    // #210: 一覧と同じく、列挙に無い種類は数えない（バッジと一覧を食い違わせない）
     return this.prisma.notification.count({
-      where: { userId, read: false },
+      where: { userId, read: false, type: { in: KNOWN_NOTIFICATION_TYPES } },
     });
   }
 

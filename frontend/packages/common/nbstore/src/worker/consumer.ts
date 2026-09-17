@@ -23,6 +23,21 @@ class StoreConsumer {
     return this.storages.local;
   }
 
+  /**
+   * #151 stage 3 (PR2): the remote (cloud) storages.
+   *
+   * WARNING: throw when they are not ready, the way `ensureLocal` does.
+   * Returning nothing instead would subscribe to no one and leave the
+   * listing silently frozen - a failure with nothing in any log to explain
+   * it, which is the worst shape this particular bug can take.
+   */
+  get ensureRemotes() {
+    if (!this.storages) {
+      throw new Error('Not initialized');
+    }
+    return this.storages.remotes;
+  }
+
   get ensureSync() {
     if (!this.sync) {
       throw new Error('Sync not initialized');
@@ -198,6 +213,25 @@ class StoreConsumer {
             subscriber.next({ update, origin });
           });
         }),
+      // #151 stage 3 (PR2): pass the server's "revision changed" through to
+      // the main thread. The socket lives in the worker, the listing lives in
+      // the app - without this hop the app never hears about it (docs 7.11).
+      //
+      // WARNING: subscribe to the REMOTE storages, not `this.docStorage`.
+      // That one is the local (IndexedDB) copy, which has no server to hear
+      // from and would silently never fire - the failure mode is a listing
+      // that simply never updates, with nothing in any log to explain it.
+      'docStorage.subscribeDiscoveryChanged': () =>
+        new Observable(subscriber => {
+          // 未登録なら Dummy が返り、その購読は何も起きない（無害）
+          const disposes = Object.values(this.ensureRemotes).map(
+            remote =>
+              remote.get('doc').subscribeDiscoveryChanged(reason => {
+                subscriber.next({ reason });
+              })
+          );
+          return () => disposes.forEach(dispose => dispose());
+        }),
       'docStorage.waitForConnected': (_, ctx) =>
         this.docStorage.connection.waitForConnected(ctx.signal),
       'blobStorage.getBlob': key => this.blobStorage.get(key),
@@ -313,6 +347,7 @@ class StoreConsumer {
           const undo = this.indexerSync.addPriority(docId, priority);
           return () => undo();
         }),
+      'indexerSync.setDocList': docs => this.indexerSync.setDocList(docs),
       'indexerSync.waitForCompleted': (_, ctx) =>
         this.indexerSync.waitForCompleted(ctx.signal),
       'indexerSync.waitForDocCompleted': (docId: string, ctx) =>

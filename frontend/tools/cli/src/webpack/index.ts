@@ -388,7 +388,11 @@ export function createWorkerTargetConfig(
     },
     entry: { [workerName]: entry },
     output: {
-      filename: `js/${workerName}-${buildConfig.appVersion}.worker.js`,
+      // #105: 出力名は common/env の getWorkerUrl と必ずそろえること。
+      // 片方だけ変えると、読み込み先が 404 になりワーカーが動かない
+      filename: `js/${workerName}-${
+        buildConfig.isMobileEdition ? 'mobile' : 'web'
+      }-${buildConfig.appVersion}.worker.js`,
       path: pkg.distPath.value,
       clean: false,
       globalObject: 'globalThis',

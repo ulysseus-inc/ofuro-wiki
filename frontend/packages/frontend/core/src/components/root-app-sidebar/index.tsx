@@ -1,6 +1,5 @@
 import {
   AddPageButton,
-  AppDownloadButton,
   AppSidebar,
   MenuItem,
   MenuLinkItem,
@@ -8,7 +7,6 @@ import {
   SidebarContainer,
   SidebarScrollableContainer,
 } from '@ofuro/core/modules/app-sidebar/views';
-import { ExternalMenuLinkItem } from '@ofuro/core/modules/app-sidebar/views/menu-item/external-menu-link-item';
 import { AuthService, ServerService } from '@ofuro/core/modules/cloud';
 import { WorkspaceDialogService } from '@ofuro/core/modules/dialogs';
 import { FeatureFlagService } from '@ofuro/core/modules/feature-flag';
@@ -20,7 +18,6 @@ import {
   AiOutlineIcon,
   AllDocsIcon,
   ImportIcon,
-  JournalIcon,
   SettingsIcon,
 } from '@blocksuite/icons/rc';
 import { useLiveData, useService, useServices } from '@toeverything/infra';

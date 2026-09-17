@@ -113,6 +113,17 @@ export interface DocStorage extends Storage {
     callback: (update: DocRecord, origin?: string) => void
   ): () => void;
 
+  /**
+   * #151 stage 3 (PR2): the workspace's discovery revision moved on the server.
+   *
+   * Only cloud storage ever emits this - local storages have no other client
+   * to hear from, so their subscribers simply never fire.
+   *
+   * WARNING: this carries no listing data, only the fact that something
+   * changed. The listener re-reads the revision and decides for itself.
+   */
+  subscribeDiscoveryChanged(callback: (reason: string) => void): () => void;
+
   crawlDocData?(docId: string): Promise<CrawlResult | null>;
 }
 
@@ -192,6 +203,20 @@ export abstract class DocStorageBase<Opts = {}> implements DocStorage {
     return () => {
       this.event.off('update', callback);
     };
+  }
+
+  /** #151 stage 3 (PR2): see the interface. Cloud storage emits this. */
+  subscribeDiscoveryChanged(callback: (reason: string) => void) {
+    this.event.on('discovery-changed', callback);
+
+    return () => {
+      this.event.off('discovery-changed', callback);
+    };
+  }
+
+  /** #151 stage 3 (PR2): for subclasses that receive the server event. */
+  protected emitDiscoveryChanged(reason: string) {
+    this.event.emit('discovery-changed', reason);
   }
 
   async crawlDocData(_docId: string): Promise<CrawlResult | null> {

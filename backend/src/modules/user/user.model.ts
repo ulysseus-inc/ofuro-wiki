@@ -1,4 +1,12 @@
-import { ObjectType, Field, ID, Int, InputType, ArgsType } from '@nestjs/graphql';
+import {
+  ObjectType,
+  Field,
+  ID,
+  Int,
+  InputType,
+  ArgsType,
+  registerEnumType,
+} from '@nestjs/graphql';
 import { IsBoolean, IsOptional } from 'class-validator';
 import GraphQLJSON from 'graphql-type-json';
 
@@ -47,13 +55,56 @@ export class PageInfo {
   hasPreviousPage: boolean;
 }
 
-@ObjectType()
-class NotificationType {
+/**
+ * #210: 通知の種類。フロントエンドが値として比べる（`type === NotificationType.Mention`）。
+ *
+ * ⚠️ 以前はこの名前が**通知のオブジェクト型**だった。フロントエンドの `schema.ts` を生成物にすると、
+ * 列挙が同名のオブジェクト型に入れ替わり、比較が常に偽になって**通知が1件も描画されなくなる**。
+ * オブジェクト型は `NotificationObjectType` に改名した。
+ *
+ * 作るのは `Comment` / `Mention` / `CommentMention`（notification.service.ts）。
+ */
+export enum NotificationType {
+  Comment = 'Comment',
+  CommentMention = 'CommentMention',
+  Invitation = 'Invitation',
+  InvitationAccepted = 'InvitationAccepted',
+  InvitationBlocked = 'InvitationBlocked',
+  InvitationRejected = 'InvitationRejected',
+  InvitationReviewApproved = 'InvitationReviewApproved',
+  InvitationReviewDeclined = 'InvitationReviewDeclined',
+  InvitationReviewRequest = 'InvitationReviewRequest',
+  Mention = 'Mention',
+}
+
+registerEnumType(NotificationType, { name: 'NotificationType' });
+
+/**
+ * #210: ユーザーの機能。フロントエンドは `features.some(f => f === FeatureType.Admin)` で
+ * **管理者かどうかを判定する**。スキーマに無いと比較が常に偽になり、管理画面の入口が消える。
+ * 返すのは `Admin`（管理者のみ・user.resolver.ts）。
+ */
+export enum FeatureType {
+  AIEarlyAccess = 'AIEarlyAccess',
+  Admin = 'Admin',
+  EarlyAccess = 'EarlyAccess',
+  FreePlan = 'FreePlan',
+  LifetimeProPlan = 'LifetimeProPlan',
+  ProPlan = 'ProPlan',
+  TeamPlan = 'TeamPlan',
+  UnlimitedCopilot = 'UnlimitedCopilot',
+  UnlimitedWorkspace = 'UnlimitedWorkspace',
+}
+
+registerEnumType(FeatureType, { name: 'FeatureType' });
+
+@ObjectType('NotificationObjectType')
+class NotificationObjectType {
   @Field(() => ID)
   id: string;
 
-  @Field()
-  type: string;
+  @Field(() => NotificationType)
+  type: NotificationType;
 
   @Field()
   level: string;
@@ -76,8 +127,8 @@ class NotificationEdge {
   @Field()
   cursor: string;
 
-  @Field(() => NotificationType)
-  node: NotificationType;
+  @Field(() => NotificationObjectType)
+  node: NotificationObjectType;
 }
 
 @ObjectType('PaginatedNotificationObjectType')
@@ -202,8 +253,8 @@ export class UserType {
   @Field(() => TokenType, { nullable: true })
   token?: TokenType;
 
-  @Field(() => [String], { nullable: true })
-  features?: string[];
+  @Field(() => [FeatureType], { nullable: true })
+  features?: FeatureType[];
 
   @Field(() => PaginatedNotificationType, { nullable: true })
   notifications?: PaginatedNotificationType;

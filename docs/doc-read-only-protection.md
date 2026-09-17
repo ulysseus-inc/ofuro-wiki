@@ -42,7 +42,7 @@
 
 **→ 本機能（保護フラグ）は「唯一のドキュメント単位の読み取り専用手段」として競合なく導入できる。**
 doc単位ロールが動いていないため「両方あって混乱する」問題は起きない。
-詳細は [doc-level-permission-dead-code.md](./doc-level-permission-dead-code.md) を参照。
+詳細は doc-level-permission-dead-code.md を参照。
 
 ### 3.1 読み取り専用の決定フロー
 

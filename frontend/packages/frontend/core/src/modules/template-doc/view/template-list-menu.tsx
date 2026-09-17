@@ -1,5 +1,4 @@
 import {
-  IconButton,
   Menu,
   MenuItem,
   type MenuProps,
@@ -9,7 +8,6 @@ import { useAsyncCallback } from '@ofuro/core/components/hooks/affine-async-hook
 import { inferOpenMode } from '@ofuro/core/utils';
 import { useI18n } from '@ofuro/i18n';
 import {
-  DualLinkIcon,
   InformationIcon,
   TemplateIcon,
 } from '@blocksuite/icons/rc';

@@ -1,6 +1,4 @@
-import { useWorkspaceInfo } from '@ofuro/core/components/hooks/use-workspace-info';
 import type { SettingTab } from '@ofuro/core/modules/dialogs/constant';
-import { WorkspaceService } from '@ofuro/core/modules/workspace';
 import { useI18n } from '@ofuro/i18n';
 import {
   CollaborationIcon,
@@ -8,7 +6,6 @@ import {
   SaveIcon,
   SettingsIcon,
 } from '@blocksuite/icons/rc';
-import { useService } from '@toeverything/infra';
 import { useMemo } from 'react';
 
 import type { SettingSidebarItem, SettingState } from '../types';
@@ -46,8 +43,6 @@ export const WorkspaceSetting = ({
 };
 
 export const useWorkspaceSettingList = (): SettingSidebarItem[] => {
-  const workspaceService = useService(WorkspaceService);
-  const information = useWorkspaceInfo(workspaceService.workspace);
 
   const t = useI18n();
 

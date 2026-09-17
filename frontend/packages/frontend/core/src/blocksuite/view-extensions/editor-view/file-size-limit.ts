@@ -1,5 +1,3 @@
-import { WorkspaceDialogService } from '@ofuro/core/modules/dialogs';
-import track from '@ofuro/track';
 import type { Container } from '@blocksuite/affine/global/di';
 import {
   FileSizeLimitProvider,
@@ -8,8 +6,7 @@ import {
 import { Extension } from '@blocksuite/affine/store';
 import type { FrameworkProvider } from '@toeverything/infra';
 
-export function patchFileSizeLimitExtension(framework: FrameworkProvider) {
-  const workspaceDialogService = framework.get(WorkspaceDialogService);
+export function patchFileSizeLimitExtension(_framework: FrameworkProvider) {
 
   class AffineFileSizeLimitService
     extends Extension

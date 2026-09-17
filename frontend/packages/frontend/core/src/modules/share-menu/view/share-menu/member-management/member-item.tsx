@@ -62,7 +62,7 @@ export const MemberItem = ({
         <Avatar
           key={user.id}
           url={user.avatarUrl || ''}
-          name={user.name}
+          name={user.name ?? undefined}
           size={36}
         />
         <div className={styles.memberInfoStyle}>

@@ -1,5 +1,5 @@
+import type { DocMode } from '@blocksuite/affine/model';
 import {
-  type DocMode,
   type ListNotificationsQuery,
   listNotificationsQuery,
   mentionUserMutation,
@@ -7,17 +7,19 @@ import {
   type PaginationInput,
   readAllNotificationsMutation,
   readNotificationMutation,
-  type UnionNotificationBodyType,
 } from '@ofuro/graphql';
+
+import type { UnionNotificationBodyType } from '../body-types';
 import { Store } from '@toeverything/infra';
 import { map } from 'rxjs';
 
 import type { GraphQLService, ServerService } from '../../cloud';
 import type { GlobalSessionState } from '../../storage';
 
+// #210: スキーマでは currentUser.notifications は null を許す
 export type Notification = NonNullable<
-  ListNotificationsQuery['currentUser']
->['notifications']['edges'][number]['node'];
+  NonNullable<ListNotificationsQuery['currentUser']>['notifications']
+>['edges'][number]['node'];
 
 export type NotificationBody = UnionNotificationBodyType;
 
@@ -60,7 +62,7 @@ export class NotificationStore extends Store {
       },
     });
 
-    return result.currentUser?.notifications.totalCount;
+    return result.currentUser?.notifications?.totalCount;
   }
 
   async listNotification(pagination: PaginationInput, signal?: AbortSignal) {

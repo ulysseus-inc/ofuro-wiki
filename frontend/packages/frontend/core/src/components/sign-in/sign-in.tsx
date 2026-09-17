@@ -2,7 +2,6 @@ import { Button, notify } from '@ofuro/component';
 import {
   AuthContainer,
   AuthContent,
-  AuthFooter,
   AuthHeader,
   AuthInput,
 } from '@ofuro/component/auth-components';
@@ -29,7 +28,6 @@ import {
 
 import { useSelfhostLoginVersionGuard } from '../hooks/affine/use-selfhost-login-version-guard';
 import type { SignInState } from '.';
-import { Back } from './back';
 import * as style from './style.css';
 
 const emailRegex =
@@ -52,9 +50,6 @@ export const SignInStep = ({
 }) => {
   const t = useI18n();
   const serverService = useService(ServerService);
-  const serverName = useLiveData(
-    serverService.server.config$.selector(c => c.serverName)
-  );
   const versionError = useSelfhostLoginVersionGuard(serverService.server);
   const isSelfhosted = useLiveData(
     serverService.server.config$.selector(

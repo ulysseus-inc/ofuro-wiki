@@ -5,10 +5,10 @@ import {
 import { NoopLogger } from '@blocksuite/affine/global/utils';
 import {
   type Doc,
+  type DocMeta,
   type IdGenerator,
   nanoid,
   type Workspace,
-  type WorkspaceMeta,
 } from '@blocksuite/affine/store';
 import {
   BlobEngine,
@@ -21,7 +21,7 @@ import type { Doc as YDoc } from 'yjs';
 
 import type { FeatureFlagService } from '../../feature-flag';
 import { DocImpl } from './doc';
-import { WorkspaceMetaImpl } from './meta';
+import { WorkspaceMetaImpl, type DocMetaWriteSender } from './meta';
 
 type WorkspaceOptions = {
   id?: string;
@@ -31,6 +31,18 @@ type WorkspaceOptions = {
   onLoadAwareness?: (awareness: Awareness) => void;
   onCreateDoc?: (docId?: string) => string;
   featureFlagService?: FeatureFlagService;
+  /** #151 段階3: メタデータの変更をサーバーへ送る（7.5.2） */
+  onMetaWrite?: DocMetaWriteSender;
+  /** #151 段階3: ページを作った／消したことを台帳へ知らせる */
+  onMetaCreate?: (id: string, meta: DocMeta) => void;
+  onMetaDelete?: (id: string) => void;
+  /**
+   * #151 段階3: 台帳が Discovery Metadata の供給元か。
+   *
+   * ⚠️ **サーバーを持つワークスペースだけ true。** ローカルには台帳が
+   * 無いので、目次を使い続ける
+   */
+  ledgerDriven?: boolean;
 };
 
 export class WorkspaceImpl implements Workspace {
@@ -44,7 +56,9 @@ export class WorkspaceImpl implements Workspace {
 
   readonly idGenerator: IdGenerator;
 
-  meta: WorkspaceMeta;
+  // ⚠️ 実装クラスの型にする。上流の WorkspaceMeta には
+  // applyRemoteDocMeta（#151 段階3）が無い
+  meta: WorkspaceMetaImpl;
 
   slots = {
     /* eslint-disable rxjs/finnish */
@@ -60,6 +74,8 @@ export class WorkspaceImpl implements Workspace {
   readonly onLoadAwareness?: (awareness: Awareness) => void;
   readonly onCreateDoc?: (docId?: string) => string;
   readonly featureFlagService?: FeatureFlagService;
+  /** #151 段階3: メタデータの変更をサーバーへ送る（7.5.2） */
+  readonly onMetaWrite?: DocMetaWriteSender;
 
   constructor({
     id,
@@ -69,6 +85,10 @@ export class WorkspaceImpl implements Workspace {
     onLoadAwareness,
     onCreateDoc,
     featureFlagService,
+    onMetaWrite,
+    onMetaCreate,
+    onMetaDelete,
+    ledgerDriven,
   }: WorkspaceOptions) {
     this.id = id || '';
     this.featureFlagService = featureFlagService;
@@ -85,7 +105,14 @@ export class WorkspaceImpl implements Workspace {
 
     this.idGenerator = nanoid;
 
-    this.meta = new WorkspaceMetaImpl(this.doc);
+    this.meta = new WorkspaceMetaImpl(
+      this.doc,
+      undefined,
+      onMetaWrite,
+      onMetaCreate,
+      onMetaDelete,
+      ledgerDriven
+    );
     this._bindDocMetaEvents();
   }
 

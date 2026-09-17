@@ -76,6 +76,8 @@ const FIELD_TO_COLUMN: Record<string, string> = {
   title: 'title',
   flavour: 'block_type',
   refDocId: 'ref_doc_id',
+  // #101: 画面（バックリンク）が要求する。許可リストに無いと拒否される
+  markdownPreview: 'markdown_preview',
   parentFlavour: 'parent_flavour',
   parentBlockId: 'parent_block_id',
   additional: 'additional',
@@ -468,6 +470,10 @@ export class SearchService {
           break;
         case 'summary':
           fields.summary = row.summary ?? '';
+          break;
+        // #101: 画面（バックリンク）は、リンク元の前後を markdownPreview で出す
+        case 'markdownPreview':
+          fields.markdownPreview = row.markdown_preview ?? '';
           break;
         default:
           break;

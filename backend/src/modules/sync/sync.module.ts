@@ -5,6 +5,7 @@ import { SyncService } from './sync.service';
 import { AwarenessService } from './awareness.service';
 import { PrismaService } from '../../prisma.service';
 import { SearchModule } from '../search/search.module';
+import { DiscoveryModule } from '../discovery/discovery.module';
 
 @Module({
   imports: [
@@ -14,6 +15,8 @@ import { SearchModule } from '../search/search.module';
       }),
     }),
     SearchModule,
+    // #151: doc 削除で Index の版数を上げる
+    DiscoveryModule,
   ],
   providers: [SyncGateway, SyncService, AwarenessService, PrismaService],
   exports: [SyncService, SyncGateway],

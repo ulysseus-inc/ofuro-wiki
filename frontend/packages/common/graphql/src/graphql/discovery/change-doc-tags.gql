@@ -1,0 +1,13 @@
+# ⚠️ **配列全体を送らないこと。** 送ると2人が別のタグを付けたときに
+# 一方が消える（#164 と同じ形）。add / remove の操作として送る。
+mutation changeDocTags($workspaceId: String!, $docId: String!, $add: [String!], $remove: [String!]) {
+  changeDocTags(
+    workspaceId: $workspaceId
+    docId: $docId
+    add: $add
+    remove: $remove
+  ) {
+    status
+    revision
+  }
+}

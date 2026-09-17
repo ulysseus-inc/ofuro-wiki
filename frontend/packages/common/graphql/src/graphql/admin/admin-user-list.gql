@@ -1,0 +1,14 @@
+query adminUserList($search: String, $skip: Int, $take: Int) {
+  adminUserList(search: $search, skip: $skip, take: $take) {
+    items {
+      id
+      email
+      name
+      avatarUrl
+      isAdmin
+      emailVerified
+      createdAt
+    }
+    totalCount
+  }
+}

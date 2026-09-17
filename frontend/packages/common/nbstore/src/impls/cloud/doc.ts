@@ -70,10 +70,23 @@ export class CloudDocStorage extends DocStorageBase<CloudDocStorageOptions> {
     }
   };
 
+  /**
+   * #151 stage 3 (PR2): the server's discovery revision moved.
+   *
+   * WARNING: without this, another person's change never reaches this
+   * client's listing. Until stage 3 the shared index moving was itself the
+   * signal; emptying the index removed that channel (docs 7.11).
+   */
+  onDiscoveryChanged: ServerEventsMap['space:discovery-changed'] = message => {
+    if (this.spaceId !== message.spaceId) return;
+    this.emitDiscoveryChanged(message.reason);
+  };
+
   readonly connection = new CloudDocStorageConnection(
     this.options,
     this.onServerUpdate,
-    this.onServerUpdates
+    this.onServerUpdates,
+    this.onDiscoveryChanged
   );
 
   override async getDocSnapshot(docId: string) {
@@ -224,7 +237,8 @@ class CloudDocStorageConnection extends SocketConnection {
   constructor(
     private readonly options: CloudDocStorageOptions,
     private readonly onServerUpdate: ServerEventsMap['space:broadcast-doc-update'],
-    private readonly onServerUpdates: ServerEventsMap['space:broadcast-doc-updates']
+    private readonly onServerUpdates: ServerEventsMap['space:broadcast-doc-updates'],
+    private readonly onDiscoveryChanged: ServerEventsMap['space:discovery-changed']
   ) {
     super(options.serverBaseUrl, options.isSelfHosted);
   }
@@ -251,6 +265,7 @@ class CloudDocStorageConnection extends SocketConnection {
 
       socket.on('space:broadcast-doc-update', this.onServerUpdate);
       socket.on('space:broadcast-doc-updates', this.onServerUpdates);
+      socket.on('space:discovery-changed', this.onDiscoveryChanged);
 
       return { socket, disconnect };
     } catch (e) {
@@ -272,6 +287,7 @@ class CloudDocStorageConnection extends SocketConnection {
     });
     socket.off('space:broadcast-doc-update', this.onServerUpdate);
     socket.off('space:broadcast-doc-updates', this.onServerUpdates);
+    socket.off('space:discovery-changed', this.onDiscoveryChanged);
     super.doDisconnect({ socket, disconnect });
   }
 

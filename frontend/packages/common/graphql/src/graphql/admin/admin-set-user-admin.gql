@@ -1,0 +1,11 @@
+mutation adminSetUserAdmin($userId: String!, $isAdmin: Boolean!) {
+  adminSetUserAdmin(userId: $userId, isAdmin: $isAdmin) {
+    id
+    email
+    name
+    avatarUrl
+    isAdmin
+    emailVerified
+    createdAt
+  }
+}

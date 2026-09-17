@@ -16,8 +16,6 @@ const AttachmentAudioPlayer = ({ block }: { block: AudioAttachmentBlock }) => {
   const audioMedia = block.audioMedia;
   const playbackState = useLiveData(audioMedia.playbackState$);
   const stats = useLiveData(audioMedia.stats$);
-  const expanded = useLiveData(block.expanded$);
-  const loading = useLiveData(audioMedia.loading$);
   const loadingError = useLiveData(audioMedia.loadError$);
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     e.stopPropagation();

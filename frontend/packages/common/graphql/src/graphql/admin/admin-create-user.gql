@@ -1,0 +1,11 @@
+mutation adminCreateUser($input: AdminCreateUserInput!) {
+  adminCreateUser(input: $input) {
+    id
+    email
+    name
+    avatarUrl
+    isAdmin
+    emailVerified
+    createdAt
+  }
+}

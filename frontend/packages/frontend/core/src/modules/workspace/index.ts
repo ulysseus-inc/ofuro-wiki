@@ -8,6 +8,8 @@ export type { WorkspaceMetadata } from './metadata';
 export type { WorkspaceOpenOptions } from './open-options';
 export type { WorkspaceFlavourProvider } from './providers/flavour';
 export { WorkspaceFlavoursProvider } from './providers/flavour';
+export type { RootDocLoadState } from './root-doc-state';
+export { decideRootDocState } from './root-doc-state';
 export { WorkspaceLocalCache, WorkspaceLocalState } from './providers/storage';
 export { WorkspaceScope } from './scopes/workspace';
 export { WorkspaceService } from './services/workspace';
@@ -27,6 +29,8 @@ import {
 import { WorkspaceFlavoursProvider } from './providers/flavour';
 import { WorkspaceLocalCache, WorkspaceLocalState } from './providers/storage';
 import { WorkspaceScope } from './scopes/workspace';
+// ⚠️ バレルから読まないこと（循環参照になる）
+import { DocMetaWriteService } from '../discovery/services/doc-meta-write';
 import { WorkspaceDestroyService } from './services/destroy';
 import { WorkspaceEngineService } from './services/engine';
 import { WorkspaceFactoryService } from './services/factory';
@@ -72,7 +76,8 @@ export function configureWorkspaceModule(framework: Framework) {
     ])
     .scope(WorkspaceScope)
     .service(WorkspaceService)
-    .entity(Workspace, [WorkspaceScope, FeatureFlagService])
+    // #151 段階3: DocMetaWriteService はメタデータの変更をサーバーへ送る
+    .entity(Workspace, [WorkspaceScope, FeatureFlagService, DocMetaWriteService])
     .service(WorkspaceEngineService, [WorkspaceScope])
     .entity(WorkspaceEngine, [
       WorkspaceService,

@@ -1,27 +1,24 @@
 import { Avatar, Loading, Scrollable } from '@ofuro/component';
 import { EditorLoading } from '@ofuro/component/page-detail-skeleton';
-import { Button, IconButton } from '@ofuro/component/ui/button';
+import { Button } from '@ofuro/component/ui/button';
 import { Modal, useConfirmModal } from '@ofuro/component/ui/modal';
-import { WorkspaceDialogService } from '@ofuro/core/modules/dialogs';
 import { DocDisplayMetaService } from '@ofuro/core/modules/doc-display-meta';
 import { EditorService } from '@ofuro/core/modules/editor';
-import { WorkspacePermissionService } from '@ofuro/core/modules/permissions';
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
-import { i18nTime, Trans, useI18n } from '@ofuro/i18n';
+import { i18nTime, useI18n } from '@ofuro/i18n';
 import { track } from '@ofuro/track';
 import type { DocMode } from '@blocksuite/affine/model';
 import type { Store, Workspace } from '@blocksuite/affine/store';
-import { CloseIcon, ToggleRightIcon } from '@blocksuite/icons/rc';
+import { ToggleRightIcon } from '@blocksuite/icons/rc';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import type { DialogContentProps } from '@radix-ui/react-dialog';
 import { useLiveData, useService } from '@toeverything/infra';
-import { atom, useAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import type { PropsWithChildren } from 'react';
 import {
   Fragment,
   Suspense,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useState,
@@ -167,7 +164,6 @@ const HistoryEditorPreview = ({
     </div>
   );
 };
-const planPromptClosedAtom = atom(false);
 
 // ofuro-wiki: No plan prompt in version history
 const PlanPrompt = () => {

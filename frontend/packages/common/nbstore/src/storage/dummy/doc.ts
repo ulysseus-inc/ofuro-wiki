@@ -38,5 +38,10 @@ export class DummyDocStorage implements DocStorage {
   ): () => void {
     return () => {};
   }
+
+  /** #151 stage 3 (PR2): nothing to hear from - there is no server here. */
+  subscribeDiscoveryChanged(_callback: (reason: string) => void): () => void {
+    return () => {};
+  }
   connection = new DummyConnection();
 }

@@ -27,7 +27,6 @@ import { useI18n } from '@ofuro/i18n';
 import { DisposableGroup } from '@blocksuite/affine/global/disposable';
 import { RefNodeSlotsProvider } from '@blocksuite/affine/inlines/reference';
 import { type DocMode, DocModes } from '@blocksuite/affine/model';
-import { Logo1Icon } from '@blocksuite/icons/rc';
 import { FrameworkScope, useLiveData, useService } from '@toeverything/infra';
 import clsx from 'clsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -293,7 +292,6 @@ const SharePageInner = ({
 };
 
 const SharePageFooter = () => {
-  const t = useI18n();
   const editorService = useService(EditorService);
   const isPresent = useLiveData(editorService.editor.isPresenting$);
   const authService = useService(AuthService);

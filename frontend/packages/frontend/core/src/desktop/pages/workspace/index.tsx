@@ -10,6 +10,7 @@ import { DndService } from '@ofuro/core/modules/dnd/services';
 import { GlobalContextService } from '@ofuro/core/modules/global-context';
 
 import {
+  decideRootDocState,
   getAFFiNEWorkspaceSchema,
   type Workspace,
   type WorkspaceMetadata,
@@ -39,6 +40,7 @@ import { WorkbenchRoot } from '../../../modules/workbench';
 import { AppContainer } from '../../components/app-container';
 import { PageNotFound } from '../404';
 import { WorkspaceLayout } from './layouts/workspace-layout';
+import { WorkspaceUnloadable } from './unloadable';
 import { SharePage } from './share/share-page';
 
 declare global {
@@ -253,7 +255,10 @@ const WorkspacePage = ({ meta }: { meta: WorkspaceMetadata }) => {
     };
   }, [meta, workspacesService]);
 
-  const isRootDocReady =
+  // #128: ⚠️ **`ready` だけを見ないこと。** 空のルートドキュメントは
+  // 永久に `ready` にならないため、スケルトンから出られなくなる。
+  // 「まだ待つ」と「読み込めなかった」を分ける（docs/workspace-load-failure.md）
+  const rootDocState =
     useLiveData(
       useMemo(
         () =>
@@ -261,13 +266,13 @@ const WorkspacePage = ({ meta }: { meta: WorkspaceMetadata }) => {
             ? LiveData.from(
                 workspace.engine.doc
                   .docState$(workspace.id)
-                  .pipe(map(v => v.ready)),
-                false
+                  .pipe(map(decideRootDocState)),
+                'loading' as const
               )
             : null,
         [workspace]
       )
-    ) ?? false;
+    ) ?? 'loading';
 
   useEffect(() => {
     if (workspace) {
@@ -333,7 +338,17 @@ const WorkspacePage = ({ meta }: { meta: WorkspaceMetadata }) => {
     return null; // skip this, workspace will be set in layout effect
   }
 
-  if (!isRootDocReady) {
+  // #128: ⚠️ **ここが無いと、永久にスケルトンのまま復旧手段が無い。**
+  // 一覧には載っているので 404 にもならない
+  if (rootDocState === 'unloadable') {
+    return (
+      <FrameworkScope scope={workspace.scope}>
+        <WorkspaceUnloadable meta={meta} />
+      </FrameworkScope>
+    );
+  }
+
+  if (rootDocState !== 'ready') {
     return (
       <FrameworkScope scope={workspace.scope}>
         <DNDContextProvider>

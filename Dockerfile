@@ -23,7 +23,10 @@ RUN yarn install --inline-builds
 ENV BUILD_TYPE=stable
 ENV PUBLIC_PATH=/
 
-# SKIP_MOBILE=true to skip mobile build (saves ~70min in dev)
+# SKIP_MOBILE=true to skip mobile build.
+# 実測（2026-09-17）: ローカルでスマホ版のビルドは 2分31秒、
+# CI の全体は 6分42秒 → 9分30秒（約2分48秒の増加）。
+# 本番（CI）は SKIP_MOBILE=false。スマホからの接続に必要（docs/mobile.md）
 ARG SKIP_MOBILE=false
 
 # Build the web application (needs extra memory for TerserPlugin)

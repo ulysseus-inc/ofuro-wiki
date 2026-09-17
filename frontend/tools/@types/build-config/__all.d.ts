@@ -21,8 +21,15 @@ declare interface BUILD_CONFIG_TYPE {
   isAndroid: boolean;
   isAdmin: boolean;
 
+  /**
+   * ⚠️ **通信用**（x-affine-version ヘッダー・同期の clientVersion）。
+   * AFFiNE 由来のパッケージ版数で、フォーク元との互換のために変えない。
+   * 画面に出すのは productVersion（#105）
+   */
   appVersion: string;
   editorVersion: string;
+  /** 製品の版数（frontend/package.json）。設定→情報の「アプリ版」に出す（#105） */
+  productVersion: string;
   appBuildType: 'stable' | 'beta' | 'internal' | 'canary';
 
   githubUrl: string;

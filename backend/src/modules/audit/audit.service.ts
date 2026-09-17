@@ -147,7 +147,9 @@ export class AuditService {
         where: { createdAt: { lt: threshold } },
       });
       if (count > 0) {
-        this.logger.log(`古い監査ログを削除しました: ${count}件（保持 ${days}日）`);
+        this.logger.log(
+          `Deleted ${count} expired audit log(s) (retention ${days} days)`,
+        );
         await this.record({
           action: 'audit.cleanup',
           actor: { email: 'system' },

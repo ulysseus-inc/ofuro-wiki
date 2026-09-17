@@ -1,0 +1,12 @@
+mutation updateOidcConfig($input: UpdateOidcConfigInput!) {
+  updateOidcConfig(input: $input) {
+    enabled
+    issuer
+    clientId
+    clientSecretSet
+    buttonLabel
+    emailClaims
+    autoCreateUser
+    redirectUri
+  }
+}

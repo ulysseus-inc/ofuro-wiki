@@ -1,0 +1,25 @@
+# ⚠️ #151 段階3: Discovery Metadata の書き込み。
+#
+# | 種類 | 対象 | 競合制御 |
+# |---|---|---|
+# | 値型 | title / trash | フィールド単位の版数 |
+# | 操作型 | tags の add / remove | 不要（順序に依存しない） |
+#
+# （#131 / #206 まで生成コードに手書きしていた。いまはこの .gql が正）
+#
+# ⚠️ 移行期間にあった `observedTitle` / `observedTrash` は**送らなくなった**
+# （2026-09-10・段階3 の掃除）。サーバー側の `@Args` は、古い版を開いたままの
+# ブラウザのために**まだ残っている**。docs/discovery-stage3-comparison.md 7.7.5
+mutation setDocTitle($workspaceId: String!, $docId: String!, $title: String!, $baseRevision: String!) {
+  setDocTitle(
+    workspaceId: $workspaceId
+    docId: $docId
+    title: $title
+    baseRevision: $baseRevision
+  ) {
+    status
+    revision
+    currentTitle
+    currentTrash
+  }
+}

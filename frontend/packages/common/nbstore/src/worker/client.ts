@@ -210,6 +210,18 @@ class WorkerDocStorage implements DocStorage {
     return this.client.call('docStorage.deleteDoc', docId);
   }
 
+  /** #151 stage 3 (PR2): the server's discovery revision moved (docs 7.11). */
+  subscribeDiscoveryChanged(callback: (reason: string) => void) {
+    const subscription = this.client
+      .ob$('docStorage.subscribeDiscoveryChanged')
+      .subscribe(value => {
+        callback(value.reason);
+      });
+    return () => {
+      subscription.unsubscribe();
+    };
+  }
+
   subscribeDocUpdate(callback: (update: DocRecord, origin?: string) => void) {
     const subscription = this.client
       .ob$('docStorage.subscribeDocUpdate')
@@ -507,6 +519,11 @@ class WorkerIndexerSync implements IndexerSync {
   }
   docState$(docId: string) {
     return this.client.ob$('indexerSync.docState', docId);
+  }
+  setDocList(docs: Array<{ docId: string; title?: string }>) {
+    this.client.call('indexerSync.setDocList', docs).catch(err => {
+      console.error('failed to send doc list to indexer', err);
+    });
   }
   addPriority(docId: string, priority: number) {
     const subscription = this.client

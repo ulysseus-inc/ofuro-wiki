@@ -9,13 +9,17 @@ import { Store } from '@toeverything/infra';
 import type { WorkspaceServerService } from '../../cloud';
 import type { WorkspaceService } from '../../workspace';
 
+// #210: スキーマでは permissions も doc も null を許す。NonNullable を挟まないと
+// keyof が never に崩れ、useGuard('Workspace_…') がページの権限（引数2つ）と解釈される
 export type WorkspacePermissionActions = keyof Omit<
-  GetWorkspaceInfoQuery['workspace']['permissions'],
+  NonNullable<GetWorkspaceInfoQuery['workspace']['permissions']>,
   '__typename'
 >;
 
 export type DocPermissionActions = keyof Omit<
-  NonNullable<GetDocRolePermissionsQuery['workspace']['doc']['permissions']>,
+  NonNullable<
+    NonNullable<GetDocRolePermissionsQuery['workspace']['doc']>['permissions']
+  >,
   '__typename'
 >;
 
@@ -39,7 +43,12 @@ export class GuardStore extends Store {
         workspaceId: this.workspaceService.workspace.id,
       },
     });
-    return data.workspace.permissions;
+    // #210: スキーマでは null を許す。返らなければ**すべて不可**（キーが無い＝不可として扱われる）
+    const permissions = data.workspace.permissions;
+    if (!permissions) {
+      return {} as Record<WorkspacePermissionActions, boolean>;
+    }
+    return permissions;
   }
 
   async getDocPermissions(

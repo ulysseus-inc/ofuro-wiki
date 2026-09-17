@@ -1,6 +1,6 @@
 import { AuthPageContainer } from '@ofuro/component/auth-components';
-import { UserFriendlyError } from '@ofuro/error';
-import { ErrorNames, type GetInviteInfoQuery } from '@ofuro/graphql';
+import { ErrorNames, UserFriendlyError } from '@ofuro/error';
+import type { GetInviteInfoQuery } from '@ofuro/graphql';
 import { Trans, useI18n } from '@ofuro/i18n';
 
 import { Avatar } from '../../ui/avatar';

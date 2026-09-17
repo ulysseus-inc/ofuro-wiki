@@ -18,7 +18,7 @@ import {
   useServices,
 } from '@toeverything/infra';
 import clsx from 'clsx';
-import { lazy, Suspense, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useCallback } from 'react';
 
 import { WorkbenchService } from '../../../workbench';
 import type { DocReferenceInfo } from '../../entities/peek-view';

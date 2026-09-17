@@ -1,3 +1,4 @@
+import { useI18n } from '@ofuro/i18n';
 import { useBlockSuiteDocMeta } from '@ofuro/core/components/hooks/use-block-suite-page-meta';
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
 import { useService } from '@toeverything/infra';
@@ -9,6 +10,7 @@ import * as styles from './styles.css';
 
 export const RecentDocs = ({ max = 5 }: { max?: number }) => {
   const workspace = useService(WorkspaceService).workspace;
+  const t = useI18n();
   const allPageMetas = useBlockSuiteDocMeta(workspace.docCollection);
 
   const cardMetas = useMemo(() => {
@@ -25,7 +27,7 @@ export const RecentDocs = ({ max = 5 }: { max?: number }) => {
   return (
     <CollapsibleSection
       path={['recent']}
-      title="Recent"
+      title={t['Recent']()}
       headerClassName={styles.header}
       className={styles.recentSection}
       testId="recent-docs"

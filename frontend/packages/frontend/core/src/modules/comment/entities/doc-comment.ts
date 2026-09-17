@@ -1,4 +1,4 @@
-import { type CommentChangeAction, DocMode } from '@ofuro/graphql';
+import type { CommentChangeAction } from '@ofuro/graphql';
 import { track } from '@ofuro/track';
 import { InlineCommentManager } from '@blocksuite/affine/inlines/comment';
 import type {
@@ -65,7 +65,9 @@ export class DocCommentEntity extends Entity<{
   private readonly store = this.framework.createEntity(DocCommentStore, {
     docId: this.props.docId,
     getDocMode: () =>
-      this.docMode$.value === 'edgeless' ? DocMode.edgeless : DocMode.page,
+      // #210: 以前は @ofuro/graphql の列挙 DocMode（値は 'edgeless' / 'page'）。
+      // スキーマに無いため生成物から消えた。値は同じ文字列
+      this.docMode$.value === 'edgeless' ? 'edgeless' : 'page',
     getDocTitle: () => {
       return this.docDisplayMetaService.title$(this.props.docId).value;
     },

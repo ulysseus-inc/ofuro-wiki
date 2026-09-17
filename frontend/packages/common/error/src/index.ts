@@ -1,5 +1,8 @@
-import type { ErrorDataUnion, ErrorNames } from '@ofuro/graphql';
 import { GraphQLError as BaseGraphQLError } from 'graphql';
+
+import type { ErrorNames } from './error-names';
+
+export { ErrorNames } from './error-names';
 
 export type ErrorName =
   | keyof typeof ErrorNames
@@ -27,16 +30,13 @@ function UnknownError(message: string) {
   });
 }
 
-type ToPascalCase<S extends string> = S extends `${infer A}_${infer B}`
-  ? `${Capitalize<Lowercase<A>>}${ToPascalCase<B>}`
-  : Capitalize<Lowercase<S>>;
-
-export type ErrorData = {
-  [K in ErrorNames]: Extract<
-    ErrorDataUnion,
-    { __typename?: `${ToPascalCase<K>}DataType` }
-  >;
-};
+/**
+ * エラー名ごとの付随データ。
+ *
+ * #210: 以前は AFFiNE のサーバーの付随データの型（61個）から引いていた。ofuro-wiki の
+ * バックエンドのスキーマには無く、どこからも参照されていないため、中身は問わない形にした。
+ */
+export type ErrorData = Record<ErrorNames, unknown>;
 
 export class GraphQLError extends BaseGraphQLError {
   // @ts-expect-error better to be a known type without any type casting

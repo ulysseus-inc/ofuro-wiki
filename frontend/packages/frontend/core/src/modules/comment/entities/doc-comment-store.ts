@@ -1,9 +1,9 @@
+import type { DocMode } from '@blocksuite/affine/model';
 import {
   createCommentMutation,
   createReplyMutation,
   deleteCommentMutation,
   deleteReplyMutation,
-  type DocMode,
   listCommentChangesQuery,
   type ListCommentsQuery,
   listCommentsQuery,

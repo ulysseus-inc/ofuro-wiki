@@ -1,0 +1,12 @@
+mutation adminCreateBackup {
+  adminCreateBackup {
+    id
+    filename
+    size
+    workspaceCount
+    docCount
+    blobCount
+    status
+    createdAt
+  }
+}

@@ -1,5 +1,6 @@
 import { DebugLogger } from '@ofuro/debug';
 import {
+  createDocMetaMutation,
   createWorkspaceMutation,
   deleteWorkspaceMutation,
   getWorkspaceInfoQuery,
@@ -220,6 +221,25 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
       // apply initial state
       await initial(docCollection, blobStorage, docStorage);
 
+      // #151 stage 3: the template pages created above go straight into the
+      // root doc's shared index, which is delivered to every member. Every
+      // other page goes through the ledger (PR5-a), so this creation path was
+      // the one place where titles still leaked into the shared index.
+      //
+      // WARNING: order matters. The ledger must own these rows BEFORE the
+      // index is cleared - the server learns about index-only pages by reading
+      // that index, so clearing first would make the template pages vanish
+      // instead of merely becoming private. If the ledger write fails we keep
+      // the index untouched: a leaked title is recoverable, a lost page is not.
+      const templateDocs = readInitialIndex(docCollection.doc);
+      const registered = await this.registerInitialDocs(
+        workspaceId,
+        templateDocs
+      );
+      if (registered) {
+        clearInitialIndex(docCollection.doc);
+      }
+
       // save workspace to local storage, should be vary fast
       for (const subdocs of docList) {
         await docStorage.pushDocUpdate({
@@ -230,9 +250,11 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
 
       const accountId = this.authService.session.account$.value?.id;
       await this.writeInitialDocProperties(
-        workspaceId,
         docStorage,
-        accountId ?? ''
+        accountId ?? '',
+        // #151 stage 3: this used to re-read the ids from the shared index,
+        // which we have just emptied. Pass what we captured before clearing.
+        templateDocs.map(d => d.id)
       );
 
       docStorage.connection.disconnect();
@@ -577,24 +599,53 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
     };
   }
 
-  async writeInitialDocProperties(
+  /**
+   * #151 stage 3: register the workspace's template pages in the server
+   * ledger, so their titles never have to travel through the shared index.
+   *
+   * Returns whether every row was written. The caller must not clear the
+   * index unless this returns true.
+   */
+  private async registerInitialDocs(
     workspaceId: string,
+    docs: Array<{ id: string; title: string }>
+  ): Promise<boolean> {
+    try {
+      for (const doc of docs) {
+        // `as never`: createDocMetaMutation is hand-written and so is missing
+        // from codegen's schema map (#131), which types gql() as never. The
+        // same workaround is used in discovery/stores/doc-meta-write.ts.
+        await this.graphqlService.gql({
+          query: createDocMetaMutation,
+          variables: {
+            workspaceId,
+            docId: doc.id,
+            title: doc.title,
+            mode: 'page',
+          },
+        } as never);
+      }
+      return true;
+    } catch (error) {
+      // Keep the index. The pages stay visible to everyone, which is the old
+      // behaviour - worse for privacy, but nothing is lost. A later purge run
+      // cleans it up once the ledger has caught up.
+      //
+      // Partial success needs no unwinding: createDocMeta is an idempotent
+      // upsert that leaves an existing row untouched, so the rows already
+      // written are simply correct, and the server fills in the rest by
+      // reading the index we just kept. Retrying cannot duplicate them.
+      logger.error('failed to register initial docs in the ledger', error);
+      return false;
+    }
+  }
+
+  async writeInitialDocProperties(
     docStorage: DocStorage,
-    creatorId: string
+    creatorId: string,
+    docIds: string[]
   ) {
     try {
-      const rootDocBuffer = await docStorage.getDoc(workspaceId);
-      const rootDoc = new YDoc({ guid: workspaceId });
-      if (rootDocBuffer) {
-        applyUpdate(rootDoc, rootDocBuffer.bin);
-      }
-
-      const docIds = (
-        rootDoc.getMap('meta').get('pages') as YArray<YMap<string>>
-      )
-        ?.map(page => page.get('id'))
-        .filter(Boolean) as string[];
-
       const propertiesDBBuffer = await docStorage.getDoc('db$docProperties');
       const propertiesDB = new YDoc({ guid: 'db$docProperties' });
       if (propertiesDBBuffer) {
@@ -684,4 +735,35 @@ export function isEmptyUpdate(binary: Uint8Array | undefined) {
     binary.byteLength === 0 ||
     (binary.byteLength === 2 && binary[0] === 0 && binary[1] === 0)
   );
+}
+
+/**
+ * #151 stage 3: read the pages the workspace template just put in the shared
+ * index, so they can be handed to the ledger before the index is cleared.
+ */
+function readInitialIndex(rootDoc: YDoc): Array<{ id: string; title: string }> {
+  const pages = rootDoc.getMap('meta').get('pages') as
+    | YArray<YMap<string>>
+    | undefined;
+  if (!pages) return [];
+  const docs: Array<{ id: string; title: string }> = [];
+  for (const page of pages) {
+    const id = page.get('id');
+    if (typeof id !== 'string' || !id) continue;
+    docs.push({ id, title: page.get('title') ?? '' });
+  }
+  return docs;
+}
+
+/**
+ * #151 stage 3: empty the shared index.
+ *
+ * WARNING: only safe once the ledger owns these pages. See the call site.
+ */
+function clearInitialIndex(rootDoc: YDoc) {
+  const pages = rootDoc.getMap('meta').get('pages') as
+    | YArray<YMap<string>>
+    | undefined;
+  if (!pages || pages.length === 0) return;
+  pages.delete(0, pages.length);
 }

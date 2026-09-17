@@ -1,4 +1,3 @@
-import { readAllDocsFromRootDoc } from '@ofuro/reader';
 import { omit } from 'lodash-es';
 import {
   filter,
@@ -72,6 +71,11 @@ export interface IndexerSync {
   state$: Observable<IndexerSyncState>;
   docState$(docId: string): Observable<IndexerDocSyncState>;
   addPriority(docId: string, priority: number): () => void;
+  /**
+   * #199: 索引すべきページの一覧を渡す（認可済み台帳から）。
+   * ⚠️ 渡すまで索引は始まらない。docs/client-indexer.md
+   */
+  setDocList(docs: Array<{ docId: string; title?: string }>): void;
   waitForCompleted(signal?: AbortSignal): Promise<void>;
   waitForDocCompleted(docId: string, signal?: AbortSignal): Promise<void>;
 
@@ -114,6 +118,80 @@ export class IndexerSyncImpl implements IndexerSync {
   private readonly remote?: IndexerStorage;
 
   private lastRefreshed = Date.now();
+
+  /**
+   * #199: **索引すべきページの一覧（認可済み台帳から渡される）。**
+   *
+   * ⚠️ `null` のあいだは**何も索引しない**。共有目次へ後戻りしてはいけない。
+   * 段階3 で目次を空にしたため、目次を見ると索引が0件になる。
+   *
+   * ⚠️ `status.reset()` は再試行のたびに一覧を消すので、**ここで保持する**。
+   *
+   * 詳細は docs/client-indexer.md
+   */
+  private authorizedDocs: Map<string, { title: string | undefined }> | null = null;
+  /** 一覧が届くのを待っている者を起こす */
+  private docListArrived: (() => void) | null = null;
+
+  /**
+   * #199: 索引すべきページの一覧を渡す（主スレッドから）。
+   *
+   * ⚠️ **認可の判断はここでしない。** 渡された一覧をそのまま信じる。
+   * 誰が読めるかを決めるのはサーバー（`discoverySnapshot`）。
+   */
+  setDocList(docs: Array<{ docId: string; title?: string }>) {
+    this.authorizedDocs = new Map(docs.map(d => [d.docId, { title: d.title }]));
+    this.applyDocList();
+    this.docListArrived?.();
+  }
+
+  /**
+   * 一覧を索引の基準へ反映する。
+   *
+   * ⚠️ **`docsInRootDoc` を差し替えるだけにする。** 追加も削除も既に
+   * この変数を基準に動いているので、差し替えれば**両方が同時に**台帳基準になる。
+   * 削除側を書き換えると、片方だけ直したときに
+   * **権限を剥奪したページが索引に residue として残る**。
+   */
+  private applyDocList() {
+    const docs = this.authorizedDocs;
+    if (!docs || !this.status.rootDocReady) {
+      return;
+    }
+
+    const previous = this.status.docsInRootDoc;
+    this.status.docsInRootDoc = new Map(docs);
+
+    // ⚠️ **変わったものだけ積む。** 一覧は台帳を取り直すたびに届き、
+    // 取り直しは誰かが題を打つたびに起きる。毎回すべて積むと、
+    // **ページ数 × 接続人数**の空振りが題の打鍵ごとに走る
+    for (const [docId, { title }] of docs) {
+      const before = previous.get(docId);
+      if (before && before.title === title) {
+        continue;
+      }
+      this.status.scheduleJob(docId);
+    }
+
+    // ⚠️ ルート文書の job が「追加と削除の突き合わせ」を行う。積み忘れると
+    // 一覧から消えたページが索引に残る（＝剥奪されたページが検索に出る）
+    this.status.scheduleJob(this.rootDocId);
+    this.status.statusUpdatedSubject$.next(true);
+  }
+
+  /** 一覧が届くまで待つ。⚠️ 届くまで索引を始めない */
+  private async waitForDocList(signal?: AbortSignal) {
+    if (this.authorizedDocs) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      this.docListArrived = () => {
+        this.docListArrived = null;
+        resolve();
+      };
+      signal?.addEventListener('abort', () => reject(signal.reason));
+    });
+  }
 
   state$ = this.status.state$.pipe(
     // throttle the state to 1 second to avoid spamming the UI
@@ -270,31 +348,10 @@ export class IndexerSyncImpl implements IndexerSync {
         return;
       }
       if (update.docId === this.rootDocId) {
+        // ⚠️ 本文の取り込みは続ける（参照の解決に `status.rootDoc` を使う）。
+        // #199: **一覧はここから作らない。** 共有目次は段階3 で空になっており、
+        // 見に行くと索引の対象が0件になる。一覧は `setDocList` から来る
         applyUpdate(this.status.rootDoc, update.bin);
-
-        const allDocs = this.getAllDocsFromRootDoc();
-
-        for (const [docId, { title }] of allDocs) {
-          const existingDoc = this.status.docsInRootDoc.get(docId);
-          if (!existingDoc) {
-            this.status.scheduleJob(docId);
-            this.status.docsInRootDoc.set(docId, { title });
-            this.status.statusUpdatedSubject$.next(docId);
-          } else {
-            if (existingDoc.title !== title) {
-              this.status.docsInRootDoc.set(docId, { title });
-              this.status.statusUpdatedSubject$.next(docId);
-            }
-          }
-        }
-
-        for (const docId of this.status.docsInRootDoc.keys()) {
-          if (!allDocs.has(docId)) {
-            this.status.docsInRootDoc.delete(docId);
-            this.status.statusUpdatedSubject$.next(docId);
-          }
-        }
-        this.status.scheduleJob(this.rootDocId);
       } else {
         const docId = update.docId;
         const existingDoc = this.status.docsInRootDoc.get(docId);
@@ -310,17 +367,13 @@ export class IndexerSyncImpl implements IndexerSync {
         applyUpdate(this.status.rootDoc, rootDocBin);
       }
 
-      this.status.scheduleJob(this.rootDocId);
-
-      const allDocs = this.getAllDocsFromRootDoc();
-      this.status.docsInRootDoc = allDocs;
-      this.status.statusUpdatedSubject$.next(true);
-
-      for (const docId of allDocs.keys()) {
-        this.status.scheduleJob(docId);
-      }
+      // #199: ⚠️ **索引の対象は共有目次ではなく、渡される一覧（認可済み台帳）。**
+      // 段階3 で目次を空にしたため、目次を見ると索引が0件になる。
+      // 一覧が届くまで索引を始めない（docs/client-indexer.md 5章）
+      await this.waitForDocList(signal);
 
       this.status.rootDocReady = true;
+      this.applyDocList();
       this.status.statusUpdatedSubject$.next(true);
 
       const allIndexedDocs = await this.getAllDocsFromIndexer();
@@ -494,15 +547,6 @@ export class IndexerSyncImpl implements IndexerSync {
       await this.indexer.refreshIfNeed();
       this.lastRefreshed = Date.now();
     }
-  }
-
-  /**
-   * Get all docs from the root doc, without deleted docs
-   */
-  private getAllDocsFromRootDoc() {
-    return readAllDocsFromRootDoc(this.status.rootDoc, {
-      includeTrash: false,
-    });
   }
 
   private async tryNativeCrawlDocData(docId: string) {

@@ -20,6 +20,7 @@ import { DocEditAggregator } from '../audit/doc-edit-aggregator';
 import { AuditService } from '../audit/audit.service';
 import { LogFileService } from '../logging/log-file.service';
 import { parseAllowedOrigins } from '../../common/cors';
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 
 // AFFiNE protocol: response wrapper
 type WsResponse<T> = { data: T } | { error: { name: string; message: string } };
@@ -152,6 +153,8 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private awarenessService: AwarenessService,
     private jwtService: JwtService,
     private indexerService: IndexerService,
+    // #151 PR2: 台帳の変更をクライアントへ知らせる（7.11）
+    private discoveryRevision: DiscoveryRevisionService,
     private prisma: PrismaService,
     // #97: ドキュメント単位の認可。判定はすべてここに委ねる
     private permission: PermissionService,
@@ -166,6 +169,37 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.permission.onInvalidate((workspaceId, docId, userId) =>
       this.invalidateDocAccess(workspaceId, docId, userId),
     );
+
+    // #151 PR2: 台帳の内容が変わったことをクライアントへ知らせる（7.11）。
+    //
+    // ⚠️ **これが無いと、他人の変更が相手の一覧に出ない。** 段階2 までは
+    // 共有目次（Yjs）が動くことが配信を兼ねていたが、段階3 で目次への
+    // 書き込みをやめ、目次そのものを空にしたため**その経路が消えた**。
+    this.discoveryRevision.onChanged((workspaceId, reason) =>
+      this.broadcastDiscoveryChanged(workspaceId, reason),
+    );
+  }
+
+  /**
+   * 版数が変わったことを、そのワークスペースの全クライアントへ知らせる。
+   *
+   * ⚠️ **一覧の中身は載せない**（7.11.3）。載せると「誰に何を配ってよいか」を
+   * ここでも解くことになる。受け取った側が版数を引き、必要なら自分で取りに行く。
+   *
+   * ⚠️ **重複して届いてよい。** 受け取り側は版数を確かめるだけなので、
+   * 2回届いても実害が無い。**厳密な一回限り配送を作る必要はない。**
+   */
+  private broadcastDiscoveryChanged(workspaceId: string, reason: string): void {
+    // ⚠️ 送り主も含めて全員へ送ること（`client.to()` ではない）。
+    // 変更した本人の**別のタブ**も受け取る必要がある
+    //
+    // ⚠️ **単一プロセス前提**（7.11.5d）。多重化すると、別インスタンスへ
+    // 繋いだ利用者には届かない。ただしこれはここだけの制約ではなく、
+    // 本文の配信（`space:broadcast-doc-updates`）と各種プロセス内キャッシュも
+    // 同じ。移すときは**まとめて共有アダプターへ載せ替えること**
+    this.server
+      ?.to(syncRoom('workspace', workspaceId))
+      .emit('space:discovery-changed', { spaceId: workspaceId, reason });
   }
 
   async handleConnection(client: Socket) {
@@ -520,6 +554,7 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Schedule search index update (debounced)
       this.indexerService.scheduleIndex(spaceId, docId);
+
 
       return ok({ timestamp });
     } catch (e: any) {

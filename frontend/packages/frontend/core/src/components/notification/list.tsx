@@ -26,7 +26,7 @@ import type {
   InvitationReviewDeclinedNotificationBodyType,
   InvitationReviewRequestNotificationBodyType,
   MentionNotificationBodyType,
-} from '@ofuro/graphql';
+} from '@ofuro/core/modules/notification/body-types';
 import { i18nTime, Trans, useI18n } from '@ofuro/i18n';
 import track from '@ofuro/track';
 import {

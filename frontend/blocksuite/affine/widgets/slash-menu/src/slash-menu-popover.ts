@@ -127,6 +127,79 @@ export class SlashMenu extends WithDisposable(LitElement) {
 
   private readonly _startRange = this.inlineEditor.getInlineRange();
 
+  /**
+   * #197: **文脈が壊れていれば閉じる。壊れていなければ絞り込み直す。**
+   *
+   * ⚠️ 判断は次のティックで行う。押された瞬間には、その操作が選択や本文を
+   * どう変えるかがまだ分からない。
+   */
+  /** 描画待ちの購読。⚠️ 積み上げると閉じたあとも残る（1つだけ持つ） */
+  private _pendingRender: { unsubscribe: () => void } | null = null;
+  /** 文脈の確認待ち。⚠️ 閉じたあとに走ると、片付け済みの相手を触る */
+  private _pendingContextCheck: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * ⚠️ **閉じるときに、待たせているものを必ず片付ける。**
+   * 購読とタイマーを残すと、片付け済みの相手を触りにいく。
+   */
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this._pendingRender?.unsubscribe();
+    this._pendingRender = null;
+    if (this._pendingContextCheck) {
+      clearTimeout(this._pendingContextCheck);
+      this._pendingContextCheck = null;
+    }
+  }
+
+  /**
+   * 描画が終わってから絞り込み直す。
+   *
+   * ⚠️ **購読は1つだけ持つ。** 入力のたびに増やすと、発火しないまま
+   * 閉じた分が residue として残る（打鍵のたびに増える）。
+   */
+  private readonly _updateAfterRender = () => {
+    this._pendingRender?.unsubscribe();
+    this._pendingRender = this.inlineEditor.slots.renderComplete.subscribe(
+      () => {
+        this._pendingRender?.unsubscribe();
+        this._pendingRender = null;
+        this._updateFilteredItems();
+      }
+    );
+  };
+
+  private readonly _abortIfContextLost = () => {
+    if (this._pendingContextCheck) clearTimeout(this._pendingContextCheck);
+    this._pendingContextCheck = setTimeout(() => {
+      this._pendingContextCheck = null;
+      // ⚠️ 片付け済みなら何もしない（閉じたあとに走り得る）
+      if (!this.isConnected) return;
+      const current = this.inlineEditor.getInlineRange();
+      const start = this._startRange;
+      const query = this._query;
+      if (
+        !current ||
+        !start ||
+        // 起点より前へ戻った（Ctrl+Z など）
+        current.index < start.index ||
+        // 範囲が選択された（Ctrl+A など）
+        current.length > 0 ||
+        // ⚠️ **後ろへ飛び出した場合も閉じる**（Cmd+End・Ctrl+ArrowDown など）。
+        // 起点より前だけを見ていると、**行末へ飛んでも残り**、
+        // 起点から飛び先までの本文が丸ごとクエリになる（Codex 指摘）。
+        // このメニューは空白で閉じる仕様なので、空白や改行を含んだ時点で
+        // 「入力の続きではない」と判断できる
+        query === null ||
+        /[\s\u3000]/.test(query)
+      ) {
+        this.abortController.abort();
+        return;
+      }
+      this._updateFilteredItems();
+    }, 0);
+  };
+
   private readonly _updateFilteredItems = () => {
     const query = this._query;
     if (query === null) {
@@ -264,19 +337,61 @@ export class SlashMenu extends WithDisposable(LitElement) {
           return;
         }
 
+        // #197: ⚠️ **修飾キーの組み合わせで、押された事実だけで閉じない。**
+        //
+        // 観測側（`createKeydownObserver`）は「修飾キー＋何か」を
+        // 異常な操作とみなして一律に閉じる。しかし **IME の切り替えは
+        // 修飾キーの組み合わせで行うのが普通**（Ctrl+Space / Alt+` など）で、
+        // **日本語に切り替えた瞬間にメニューが消えていた**（#197・実機で確認）。
+        //
+        // ⚠️ **`isComposing` では見分けられない。** 切り替えキーを押した
+        // 時点では変換がまだ始まっておらず、この値は false である。
+        //
+        // ⚠️ **キーを列挙して除外しない。** IME の切り替えキーは OS・
+        // ブラウザ・IME の設定で違うため、列挙すると別の環境で再発する。
+        //
+        // 代わりに「**文脈が壊れたか**」で判断する。Ctrl+A や Ctrl+Z は
+        // 選択や本文が変わるので閉じ、IME の切り替えは何も変えないので残る。
+        if (isControlledKeyboardEvent(event)) {
+          const isOnlyCmd =
+            (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey;
+          // 観測側が扱う移動・貼り付けと、修飾キー単独はそのまま通す
+          if (
+            (isOnlyCmd && ['p', 'n', 'v'].includes(key)) ||
+            ['Control', 'Meta', 'Alt', 'Shift'].includes(key)
+          ) {
+            next();
+            return;
+          }
+          this._abortIfContextLost();
+          return;
+        }
+
         next();
       },
-      onInput: isComposition => {
-        if (isComposition) {
-          this._updateFilteredItems();
-        } else {
-          const subscription = this.inlineEditor.slots.renderComplete.subscribe(
-            () => {
-              subscription.unsubscribe();
-              this._updateFilteredItems();
-            }
-          );
-        }
+      // #197: ⚠️ **いま読んで、描画後にもう一度読む。**
+      //
+      // IME（日本語・中国語・韓国語）の確定は `compositionend` で伝わるが、
+      // **確定した文字が本文（yText）へ入る順序はブラウザによって違う**。
+      // 片方だけにすると、順序が合わない環境で**絞り込みが効かなくなる**。
+      //
+      // ```
+      // 即時だけ        … 確定文字が入る前に読むと、空のクエリで評価され
+      //                   `_queryState` が 'off'（＝絞り込みなし）に落ちたまま戻らない
+      // 描画待ちだけ    … 描画が起きない場合に一度も更新されない
+      // 両方（この形）  … どちらの順序でも、最後には正しいクエリで評価される
+      // ```
+      //
+      // ⚠️ **`isComposition` を見て分岐しないこと。** 分岐していたのが
+      // #197 の原因で、**英語で試すと再現しない**ため気づけなかった。
+      onInput: () => {
+        // ⚠️ **即時の更新では閉じない。** 確定した文字が本文へ入る前だと
+        // `_query` が null／空になり、`_updateFilteredItems` は
+        // **メニューを閉じるか `_queryState` を 'off' に落とす**。
+        // そのあと描画待ちの更新が届かず、直したはずの不具合に戻る。
+        // 確実に文字がある場合だけ、先に絞り込む
+        if (this._query) this._updateFilteredItems();
+        this._updateAfterRender();
       },
       onPaste: () => {
         setTimeout(() => {
@@ -291,12 +406,7 @@ export class SlashMenu extends WithDisposable(LitElement) {
         if (curRange.index < this._startRange.index) {
           this.abortController.abort();
         }
-        const subscription = this.inlineEditor.slots.renderComplete.subscribe(
-          () => {
-            subscription.unsubscribe();
-            this._updateFilteredItems();
-          }
-        );
+        this._updateAfterRender();
       },
       onAbort: () => this.abortController.abort(),
     });

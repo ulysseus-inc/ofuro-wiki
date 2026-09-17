@@ -274,6 +274,12 @@ export const statusFailed = style({
   color: '#c5221f',
 });
 
+// #212: 作成中（非同期ジョブ）
+export const statusRunning = style({
+  background: '#e8f0fe',
+  color: '#1a56db',
+});
+
 export const restoreProgress = style({
   display: 'flex',
   alignItems: 'center',

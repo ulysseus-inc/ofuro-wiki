@@ -8,9 +8,10 @@ import { Store } from '@toeverything/infra';
 
 import type { GraphQLService } from '../services/graphql';
 
+// #210: スキーマでは currentUser.settings は null を許す
 export type UserSettings = NonNullable<
-  GetCurrentUserProfileQuery['currentUser']
->['settings'];
+  NonNullable<GetCurrentUserProfileQuery['currentUser']>['settings']
+>;
 
 export type { UpdateUserSettingsInput };
 
@@ -23,7 +24,8 @@ export class UserSettingsStore extends Store {
     const result = await this.gqlService.gql({
       query: getCurrentUserProfileQuery,
     });
-    return result.currentUser?.settings;
+    // #210: スキーマでは settings は null を許す
+    return result.currentUser?.settings ?? undefined;
   }
 
   async updateUserSettings(settings: UpdateUserSettingsInput) {

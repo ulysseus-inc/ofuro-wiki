@@ -157,7 +157,10 @@ export class AdminResolver {
   @AdminOnly()
   @Mutation(() => BackupRecordType)
   async adminCreateBackup(@CurrentUser() user: { id: string }) {
-    const record = await this.scheduledBackupService.createFullBackup(user.id);
+    // #212: ⚠️ 始めるだけで待たない（status: running を返す）。
+    // 同期で待つとブラウザ（15秒）と本番 nginx（60秒）のタイムアウトに当たる。
+    // 完了は adminBackupList の status で知る。docs/backup.md
+    const record = await this.scheduledBackupService.startBackup(user.id);
     return { ...record, size: record.size.toString() };
   }
 

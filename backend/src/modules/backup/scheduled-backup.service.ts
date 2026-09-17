@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import archiver from 'archiver';
 import { execFile } from 'child_process';
@@ -55,10 +55,101 @@ async function execPgTool(
   }
 }
 
+/**
+ * `pg_restore` の失敗を「無視してよいもの」と判定する。
+ *
+ * ⚠️ **データ本体が入らなかった場合は必ず失敗にすること。**
+ * 「復元できていないのに成功と報告する」ほうが、逆より危険である
+ * （障害対応中に、退路が無いことに気づけない）。
+ *
+ * ## ⚠️ 実際の出力を見て作ること
+ *
+ * 二度誤った。**どちらもテストは緑だった。**
+ *
+ * 1. 「4つの悪い語句が無ければ成功」という**除外リスト**にしていた。
+ *    `pg_restore` はデータ投入の失敗でも `errors ignored on restore` を出す。
+ * 2. `Command was:` ブロックだけを見る形にした。しかし
+ *    **COPY の失敗には `Command was:` が付かない**（下記）。
+ *    索引の失敗だけが `Command was:` を持てば、
+ *    **データが入っていなくても「成功」**になっていた。
+ *
+ * 2 を見逃したのは、テストのヘルパーが**出力形式を捏造していた**ため。
+ * 実出力は `test/modules/backup/fixtures/` に置いてある。**それで検査すること。**
+ *
+ * ## 実際の形
+ *
+ * 無視してよいもの（`Command was:` がある）:
+ * ```
+ * pg_restore: error: could not execute query: ERROR:  relation "i1" already exists
+ * Command was: CREATE INDEX i1 ON public.t1 USING btree (v);
+ * ```
+ *
+ * ⚠️ 無視できないもの（`Command was:` が**無い**）:
+ * ```
+ * pg_restore: error: COPY failed for table "t1": ERROR:  duplicate key ...
+ * DETAIL:  Key (id)=(1) already exists.
+ * CONTEXT:  COPY t1, line 1
+ * ```
+ *
+ * **エラー1件ずつに分けて、すべてが無視してよいものであることを確かめる。**
+ */
+export function isIgnorableRestoreError(stderr: string): boolean {
+  if (!stderr) return false;
+  // 続行できずに終わった場合は、この行が出ない
+  if (!/errors ignored on restore/i.test(stderr)) return false;
+
+  // `pg_restore: error:` ごとに区切る（次のエラー、または警告行まで）
+  const blocks = stderr
+    .split(/^pg_restore: error:/m)
+    .slice(1) // 先頭は最初のエラーより前の部分
+    .map((b) => b.split(/^pg_restore: warning:/m)[0]);
+
+  // ⚠️ 何が失敗したのか分からないなら、無視してよいとは言えない
+  if (blocks.length === 0) return false;
+
+  return blocks.every((block) => {
+    // ⚠️ `Command was:` が無いエラー（COPY 失敗等）は無視できない。
+    // 何の SQL が失敗したのか分からず、データ投入の可能性がある
+    const m = /Command was:\s*([\s\S]*)$/.exec(block);
+    if (!m) return false;
+    return IGNORABLE_COMMAND.test(m[1].trim());
+  });
+}
+
+/**
+ * 作成に失敗しても**データ本体には影響しない** SQL。
+ *
+ * ⚠️ ここに `COPY` / `INSERT` / `CREATE TABLE` を足さないこと。
+ * それらが失敗している＝**データが入っていない**ということである。
+ *
+ * 索引・制約が欠けたままでも、データは読める（検索が遅くなる等の影響は
+ * 残るため、呼び出し側で必ずログに出すこと）。
+ */
+const IGNORABLE_COMMAND =
+  /^\s*(CREATE\s+(UNIQUE\s+)?INDEX|ALTER\s+TABLE\s+[\s\S]*?ADD\s+CONSTRAINT|CREATE\s+TRIGGER|COMMENT\s+ON)\b/i;
+
 const BACKUP_DIR =
   process.env.BACKUP_STORAGE_PATH || path.join(process.cwd(), 'data', 'backups');
 
 const BLOB_DIR = process.env.BLOB_STORAGE_PATH || './data/blobs';
+
+/**
+ * #212: `pg_dump` の引数。
+ *
+ * ⚠️ **`backup_records`（バックアップの一覧）はダンプに入れない。** 一覧は業務データ
+ * ではなく、ディスク上の ZIP の目録。入れると復元で一覧が取得時点に巻き戻り、
+ * 使ったバックアップの記録が消える（同期のころ）か、`running` のまま消せなくなる
+ * （非同期にしてから）。docs/backup.md 3b章
+ */
+export function pgDumpArgs(dumpPath: string, dbUrl: string): string[] {
+  return [
+    '--format=custom',
+    '--exclude-table=public.backup_records',
+    '--file',
+    dumpPath,
+    dbUrl,
+  ];
+}
 
 /**
  * #34: バックアップ/リストアは DB 全体（public + 同居する他スキーマ）を
@@ -92,8 +183,32 @@ function getAdminDbUrl(): { url: string; password?: string } {
   }
 }
 
+
+/**
+ * #212: バックアップ／リストアが既に動いているときのエラー名。
+ * ⚠️ 大文字スネークにすること（formatError が extensions.name に載せ、画面が翻訳する）
+ */
+export const BACKUP_IN_PROGRESS = 'BACKUP_IN_PROGRESS';
+
+/** #212: バックアップの状態（docs/backup.md 1章） */
+export const BACKUP_STATUS = {
+  RUNNING: 'running',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+} as const;
+
+/** #212: 同時に1つだけ動かせる作業の種類（docs/backup.md 3章） */
+type BackupJobKind = 'backup' | 'restore';
+
+type BackupArchive = {
+  size: bigint;
+  workspaceCount: number;
+  docCount: number;
+  blobCount: number;
+};
+
 @Injectable()
-export class ScheduledBackupService {
+export class ScheduledBackupService implements OnModuleInit {
   private readonly logger = new Logger(ScheduledBackupService.name);
 
   constructor(
@@ -104,6 +219,41 @@ export class ScheduledBackupService {
     if (!fs.existsSync(BACKUP_DIR)) {
       fs.mkdirSync(BACKUP_DIR, { recursive: true });
     }
+  }
+
+  /**
+   * #212: いま動いている作業（バックアップ／リストア）。
+   *
+   * ⚠️ **メモリ上に持つ。バックエンドが1プロセスで動いていることが前提**
+   * （#151 の変更通知と同じ前提）。複数インスタンスにするなら DB の鍵に置き換える。
+   */
+  private activeJob: BackupJobKind | null = null;
+
+  /**
+   * #212: 実行中に落ちた記録を failed にする。
+   * ⚠️ プロセスが無い以上その作業は二度と終わらず、running のままだと
+   * **削除もできない**（実行中は削除を拒否するため）。
+   */
+  async onModuleInit() {
+    const { count } = await this.prisma.backupRecord.updateMany({
+      where: { status: BACKUP_STATUS.RUNNING },
+      data: { status: BACKUP_STATUS.FAILED },
+    });
+    if (count > 0) {
+      this.logger.warn(`Marked ${count} interrupted backup(s) as failed`);
+    }
+  }
+
+  /** #212: 鍵を取る。⚠️ 取れなければ BACKUP_IN_PROGRESS（重ねない・待たない） */
+  private acquireJob(kind: BackupJobKind) {
+    if (this.activeJob) {
+      throw new ConflictException(BACKUP_IN_PROGRESS);
+    }
+    this.activeJob = kind;
+  }
+
+  private releaseJob() {
+    this.activeJob = null;
   }
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
@@ -132,32 +282,120 @@ export class ScheduledBackupService {
 
     this.logger.log('Starting scheduled backup...');
     try {
-      await this.createFullBackup();
+      const result = await this.createFullBackup();
+      // #212: ⚠️ **成功したときだけ古いものを消す。** runBackupJob は失敗を failed に
+      // 変えて正常に返す（投げない）。確かめずに消すと、失敗した日にも保持期間切れの
+      // **正常なバックアップが消え、補充されないまま減っていく**（失敗が続けば0になる）
+      if (result?.status !== BACKUP_STATUS.COMPLETED) {
+        this.logger.error(
+          `Scheduled backup did not complete (status: ${result?.status ?? 'unknown'}); skip pruning old backups`,
+        );
+        return;
+      }
       await this.pruneOldBackups();
     } catch (err) {
+      // #212: 手動のバックアップやリストアが動いていれば、その回は見送る
+      if (err instanceof ConflictException) {
+        this.logger.warn('Scheduled backup skipped: another backup/restore is running');
+        return;
+      }
       this.logger.error('Scheduled backup failed', err);
     }
   }
 
-  async createFullBackup(userId?: string): Promise<{
-    id: string;
-    filename: string;
-    size: bigint;
-    workspaceCount: number;
-    docCount: number;
-    blobCount: number;
-    status: string;
-    createdAt: Date;
-  }> {
+  /**
+   * #212: バックアップを**始めるだけ**で、完了を待たずに返す（管理画面の作成ボタン）。
+   *
+   * ⚠️ 同期で待つと、ブラウザの既定のタイムアウト（15秒）と本番 nginx の
+   * proxy_read_timeout（60秒）に当たる。画面は「失敗」と出るのにサーバーは成功していた。
+   * 完了は一覧の status（running → completed / failed）で知る。docs/backup.md 1章
+   */
+  async startBackup(userId?: string) {
+    const record = await this.beginBackup(userId);
+    // ⚠️ 待たない。鍵はジョブが終わったら（成否を問わず）返す
+    void this.runBackupJob(record.id, record.filename).finally(() =>
+      this.releaseJob(),
+    );
+    return record;
+  }
+
+  /**
+   * バックアップを作って完了まで待つ（定期実行が使う）。
+   * ⚠️ 鍵は同じ。手動のバックアップやリストアと重ならない
+   */
+  async createFullBackup(userId?: string) {
+    const record = await this.beginBackup(userId);
+    try {
+      return await this.runBackupJob(record.id, record.filename);
+    } finally {
+      this.releaseJob();
+    }
+  }
+
+  /** 鍵を取り、running の記録を先に作る。⚠️ 作れなければ鍵を返す */
+  private async beginBackup(userId?: string) {
+    this.acquireJob('backup');
+    try {
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')
+        .slice(0, 19);
+      return await this.prisma.backupRecord.create({
+        data: {
+          filename: `backup-${timestamp}.zip`,
+          size: BigInt(0),
+          workspaceCount: 0,
+          docCount: 0,
+          blobCount: 0,
+          status: BACKUP_STATUS.RUNNING,
+          createdBy: userId ?? null,
+        },
+      });
+    } catch (err) {
+      this.releaseJob();
+      throw err;
+    }
+  }
+
+  /**
+   * ZIP を作り、記録を completed / failed に更新する。
+   * ⚠️ **投げない。** 呼び出し側が待たない（startBackup）ため、投げると誰にも拾われない
+   */
+  private async runBackupJob(id: string, zipFilename: string) {
+    try {
+      const archive = await this.buildBackupArchive(zipFilename);
+      return await this.prisma.backupRecord.update({
+        where: { id },
+        data: { ...archive, status: BACKUP_STATUS.COMPLETED },
+      });
+    } catch (err) {
+      this.logger.error(`Backup ${id} failed`, err);
+      // 作りかけの ZIP を残さない。
+      // ⚠️ ここで投げさせないこと。投げると failed への更新に届かず、記録が
+      // **running のまま残る**（画面は取り直しを続け、削除も拒否され続ける）
+      try {
+        fs.rmSync(path.join(BACKUP_DIR, zipFilename), { force: true });
+      } catch (rmErr) {
+        this.logger.error(`Failed to remove partial backup ${zipFilename}`, rmErr);
+      }
+      return await this.prisma.backupRecord
+        .update({ where: { id }, data: { status: BACKUP_STATUS.FAILED } })
+        .catch((updateErr) => {
+          this.logger.error(`Failed to mark backup ${id} as failed`, updateErr);
+          return null;
+        });
+    }
+  }
+
+  /** pg_dump + ブロブを ZIP にまとめる（記録は書かない） */
+  private async buildBackupArchive(zipFilename: string): Promise<BackupArchive> {
     this.logger.log('Creating full backup (pg_dump + blobs)...');
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[:.]/g, '-')
-      .slice(0, 19);
-
     // Work in a temporary directory, then ZIP into a single file
-    const tmpDir = path.join(BACKUP_DIR, `.tmp-backup-${timestamp}`);
+    const tmpDir = path.join(
+      BACKUP_DIR,
+      `.tmp-${zipFilename.replace(/\.zip$/, '')}`,
+    );
     fs.mkdirSync(tmpDir, { recursive: true });
 
     try {
@@ -169,7 +407,7 @@ export class ScheduledBackupService {
 
       await execPgTool(
         'pg_dump',
-        ['--format=custom', '--file', dumpPath, dbUrl],
+        pgDumpArgs(dumpPath, dbUrl),
         dbPassword
           ? { env: { ...process.env, PGPASSWORD: dbPassword } }
           : undefined,
@@ -213,7 +451,6 @@ export class ScheduledBackupService {
       );
 
       // 5. ZIP the temporary directory into a single file
-      const zipFilename = `backup-${timestamp}.zip`;
       const zipPath = path.join(BACKUP_DIR, zipFilename);
       await this.zipDirectory(tmpDir, zipPath);
       this.logger.log('ZIP archive created');
@@ -221,24 +458,11 @@ export class ScheduledBackupService {
       // 6. Get ZIP file size
       const zipSize = BigInt(fs.statSync(zipPath).size);
 
-      // 7. Record in DB
-      const record = await this.prisma.backupRecord.create({
-        data: {
-          filename: zipFilename,
-          size: zipSize,
-          workspaceCount,
-          docCount,
-          blobCount,
-          status: 'completed',
-          createdBy: userId ?? null,
-        },
-      });
-
       this.logger.log(
         `Full backup completed: ${workspaceCount} workspaces, ${docCount} docs, ${blobCount} blobs (${(Number(zipSize) / 1024 / 1024).toFixed(1)} MB)`,
       );
 
-      return record;
+      return { size: zipSize, workspaceCount, docCount, blobCount };
     } finally {
       // Clean up temporary directory
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -263,6 +487,12 @@ export class ScheduledBackupService {
     });
     if (!record) return false;
 
+    // #212: ⚠️ 実行中は拒否する。記録だけ消えるとジョブは走り続け、
+    // 最後に消えた記録を更新しようとして失敗し、**ZIP だけが残る**
+    if (record.status === BACKUP_STATUS.RUNNING) {
+      throw new ConflictException(BACKUP_IN_PROGRESS);
+    }
+
     // Delete ZIP file
     const backupPath = path.join(BACKUP_DIR, record.filename);
     if (fs.existsSync(backupPath)) {
@@ -286,7 +516,21 @@ export class ScheduledBackupService {
     return backupPath;
   }
 
+  /**
+   * バックアップから復元する。
+   * #212: ⚠️ バックアップと同じ鍵を取る。pg_dump が書き換え途中の DB を読むと、
+   * どちらの結果も信用できない（docs/backup.md 3章）
+   */
   async restoreFromBackup(filePath: string): Promise<void> {
+    this.acquireJob('restore');
+    try {
+      await this.restoreFromBackupUnlocked(filePath);
+    } finally {
+      this.releaseJob();
+    }
+  }
+
+  private async restoreFromBackupUnlocked(filePath: string): Promise<void> {
     this.logger.log('Starting restore from backup...');
 
     const tmpDir = path.join(os.tmpdir(), `ofuro-restore-${Date.now()}`);
@@ -323,14 +567,35 @@ export class ScheduledBackupService {
       // CWE-532: パスワードは引数ではなく PGPASSWORD で渡す（失敗時のログ漏洩防止）。
       const { url: dbUrl, password: dbPassword } = getAdminDbUrl();
 
-      await execPgTool(
-        'pg_restore',
-        ['--format=custom', '--clean', '--if-exists', `--dbname=${dbUrl}`, dumpPath],
-        dbPassword
-          ? { env: { ...process.env, PGPASSWORD: dbPassword } }
-          : undefined,
-      );
-      this.logger.log('Database restored via pg_restore');
+      // ⚠️ **pg_restore は一部の失敗を「無視して続行」する。**
+      // その場合もデータ本体は復元されているが、終了コードは非ゼロになる。
+      // 素直に失敗として扱うと、**復元できているのに「失敗」と報告**され、
+      // 障害対応中に再実行や別手段の模索を招く（実際に開発環境で発生。
+      // pgvector の ivfflat 索引が maintenance_work_mem 不足で作れなかった）。
+      //
+      // 「無視された」とだけ言っている場合は**警告として通す**。
+      try {
+        await execPgTool(
+          'pg_restore',
+          ['--format=custom', '--clean', '--if-exists', `--dbname=${dbUrl}`, dumpPath],
+          dbPassword
+            ? { env: { ...process.env, PGPASSWORD: dbPassword } }
+            : undefined,
+        );
+        this.logger.log('Database restored via pg_restore');
+      } catch (err) {
+        const stderr = String((err as { stderr?: string })?.stderr ?? '');
+        if (!isIgnorableRestoreError(stderr)) throw err;
+
+        // ⚠️ 握りつぶさない。**何が作られなかったか**を残す。
+        // 索引が欠けると検索が遅くなるなど、後から効いてくる
+        this.logger.warn(
+          'Database restored, but pg_restore reported ignorable errors. ' +
+            'Some indexes or constraints may not have been recreated ' +
+            '(the data itself was restored):\n' +
+            stderr.trim(),
+        );
+      }
 
       // 4. Restore blobs
       const blobsAbsPath = path.resolve(BLOB_DIR);
@@ -412,7 +677,8 @@ export class ScheduledBackupService {
     const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
 
     const oldRecords = await this.prisma.backupRecord.findMany({
-      where: { createdAt: { lt: cutoff } },
+      // #212: 実行中は消さない（deleteBackup も拒否する）
+      where: { createdAt: { lt: cutoff }, status: { not: BACKUP_STATUS.RUNNING } },
     });
 
     for (const record of oldRecords) {

@@ -10,8 +10,8 @@ export const AboutGroup = () => {
     <SettingGroup title={t['com.affine.mobile.setting.about.title']()}>
       <RowLayout label={t['com.affine.mobile.setting.about.appVersion']()}>
         {BUILD_CONFIG.isIOS
-          ? hiddenVersionVariant(BUILD_CONFIG.appVersion)
-          : BUILD_CONFIG.appVersion}
+          ? hiddenVersionVariant(BUILD_CONFIG.productVersion)
+          : BUILD_CONFIG.productVersion}
       </RowLayout>
 
       <RowLayout label={t['com.affine.mobile.setting.about.editorVersion']()}>

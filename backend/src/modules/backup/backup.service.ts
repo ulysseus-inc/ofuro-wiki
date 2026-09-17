@@ -2,6 +2,8 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import archiver from 'archiver';
 import * as unzipper from 'unzipper';
 import { PrismaService } from '../../prisma.service';
+// #151: 取り込みで doc が増える＝Index の内容が変わる
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 import { BlobService } from '../blob/blob.service';
 import { mergeUpdates } from '../sync/yjs.utils';
 import { isSafeArchiveEntry, isValidBlobKey } from './backup-path.util';
@@ -40,6 +42,7 @@ export class BackupService {
   constructor(
     private prisma: PrismaService,
     private blobService: BlobService,
+    private discovery: DiscoveryRevisionService,
   ) {}
 
   async exportWorkspace(workspaceId: string): Promise<Buffer> {
@@ -290,6 +293,8 @@ export class BackupService {
       // Create DocMeta if available (search by original docId from export)
       const originalDocId = docFile.path.replace('docs/', '').replace('.yjs', '');
       const meta = docsMeta.find((m) => m.docId === originalDocId);
+      // ⚠️ 版数は取り込みの最後に1回だけ上げる（下記）。
+      // doc ごとに上げると取り込み中に何度も失効させることになる
       await this.prisma.docMeta.create({
         data: {
           workspaceId,
@@ -330,6 +335,9 @@ export class BackupService {
       await this.blobService.setBlob(workspaceId, data, meta?.mime ?? undefined, key);
       blobCount++;
     }
+
+    // ⚠️ #151: 取り込みで Index の内容が変わる。ここで1回だけ上げる
+    await this.discovery.bump(workspaceId, 'doc-create');
 
     this.logger.log(
       `Imported workspace ${workspaceId}: ${docCount} docs, ${blobCount} blobs`,

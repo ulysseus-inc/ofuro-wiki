@@ -6,9 +6,11 @@ import { PrismaService } from '../../prisma.service';
 import { BlobModule } from '../blob/blob.module';
 import { AdminModule } from '../admin/admin.module';
 import { SyncModule } from '../sync/sync.module';
+// #151: 取り込みで Index の内容が変わる
+import { DiscoveryModule } from '../discovery/discovery.module';
 
 @Module({
-  imports: [BlobModule, forwardRef(() => AdminModule), SyncModule],
+  imports: [DiscoveryModule, BlobModule, forwardRef(() => AdminModule), SyncModule],
   providers: [BackupService, ScheduledBackupService, PrismaService],
   controllers: [BackupController],
   exports: [BackupService, ScheduledBackupService],

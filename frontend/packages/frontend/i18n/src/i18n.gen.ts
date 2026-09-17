@@ -228,6 +228,14 @@ export function useAFFiNEI18N(): {
       */
     ["Export to HTML"](): string;
     /**
+      * `Export`
+      */
+    ["Export"](): string;
+    /**
+      * `Export to Snapshot`
+      */
+    ["Export to Snapshot"](): string;
+    /**
       * `Export to Markdown`
       */
     ["Export to Markdown"](): string;
@@ -1025,6 +1033,14 @@ export function useAFFiNEI18N(): {
       * `Document unpublished`
       */
     ["com.affine.admin.audit.action.doc.unpublish"](): string;
+    /**
+      * `Document moved to trash`
+      */
+    ["com.affine.admin.audit.action.doc.trash"](): string;
+    /**
+      * `Document restored from trash`
+      */
+    ["com.affine.admin.audit.action.doc.untrash"](): string;
     /**
       * `Server setting changed`
       */
@@ -3396,6 +3412,30 @@ export function useAFFiNEI18N(): {
     /**
       * `Journals`
       */
+    /**
+      * `Docs`
+      */
+    ["com.affine.m.all-docs.tab.docs"](): string;
+    /**
+      * `Collections`
+      */
+    ["com.affine.m.all-docs.tab.collections"](): string;
+    /**
+      * `Tags`
+      */
+    ["com.affine.m.all-docs.tab.tags"](): string;
+    /**
+      * `Search result`
+      */
+    /**
+      * `Search Docs, Collections`
+      */
+    ["com.affine.m.search.placeholder"](): string;
+    ["com.affine.m.search.result"](): string;
+    /**
+      * `Empty`
+      */
+    ["com.affine.m.doc-card.empty"](): string;
     ["com.affine.journal.app-sidebar-title"](): string;
     /**
       * `{{count}} more articles`

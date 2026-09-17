@@ -1,9 +1,4 @@
-import type { PublicDocMode } from '@ofuro/graphql';
-import {
-  getWorkspacePageByIdQuery,
-  publishPageMutation,
-  revokePublicPageMutation,
-} from '@ofuro/graphql';
+import { getWorkspacePageByIdQuery } from '@ofuro/graphql';
 import { Store } from '@toeverything/infra';
 
 import type { WorkspaceServerService } from '../../cloud';
@@ -32,47 +27,5 @@ export class ShareStore extends Store {
       },
     });
     return data.workspace.doc ?? undefined;
-  }
-
-  async enableSharePage(
-    workspaceId: string,
-    pageId: string,
-    docMode?: PublicDocMode,
-    signal?: AbortSignal
-  ) {
-    if (!this.workspaceServerService.server) {
-      throw new Error('No Server');
-    }
-    await this.workspaceServerService.server.gql({
-      query: publishPageMutation,
-      variables: {
-        pageId,
-        workspaceId,
-        mode: docMode,
-      },
-      context: {
-        signal,
-      },
-    });
-  }
-
-  async disableSharePage(
-    workspaceId: string,
-    pageId: string,
-    signal?: AbortSignal
-  ) {
-    if (!this.workspaceServerService.server) {
-      throw new Error('No Server');
-    }
-    await this.workspaceServerService.server.gql({
-      query: revokePublicPageMutation,
-      variables: {
-        pageId,
-        workspaceId,
-      },
-      context: {
-        signal,
-      },
-    });
   }
 }

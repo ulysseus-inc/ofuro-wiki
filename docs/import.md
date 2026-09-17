@@ -113,5 +113,5 @@ accept="text/markdown,.md,.markdown"
 
 ## 5. 関連
 
-- [`docs/import-undo-root-guard.md`](import-undo-root-guard.md) — インポート直後の Undo で root が消える問題への対策
+- `docs/import-undo-root-guard.md` — インポート直後の Undo で root が消える問題への対策
 - Issue #86 — WSL 上のファイルがインポートできない

@@ -356,6 +356,14 @@ export const createKeydownObserver = ({
   target.addEventListener('paste', () => onDelete?.(), { signal });
 
   // Fix composition input
+  //
+  // #197: ⚠️ **この時点では、確定した文字はまだ本文（yText）に入っていない。**
+  // 受け取る側が即座にクエリを読むと空のままで、**IME を使う言語
+  // （日本語・中国語・韓国語）でだけ絞り込みが効かなくなる**。
+  // 読むのは `renderComplete` を待ってからにすること。
+  //
+  // ⚠️ 引数の `true`（合成入力か）を見て分岐しないこと。分岐した結果が
+  // まさにこの不具合だった。英語で試すと再現しないため気づけない。
   target.addEventListener('compositionend', () => onInput?.(true), { signal });
 };
 

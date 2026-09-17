@@ -1,3 +1,4 @@
+import { useI18n } from '@ofuro/i18n';
 import { IconButton, Skeleton } from '@ofuro/component';
 import { useCatchEventCallback } from '@ofuro/core/components/hooks/use-catch-event-hook';
 import { PagePreview } from '@ofuro/core/components/page-list/page-content-preview';
@@ -39,6 +40,7 @@ export const DocCard = forwardRef<HTMLAnchorElement, DocCardProps>(
     { showTags = true, meta, className, autoHeightById, ...attrs },
     outerRef
   ) {
+    const t = useI18n();
     const containerRef = useRef<HTMLAnchorElement | null>(null);
     const favAdapter = useService(CompatibleFavoriteItemsAdapter);
     const docDisplayService = useService(DocDisplayMetaService);
@@ -93,7 +95,11 @@ export const DocCard = forwardRef<HTMLAnchorElement, DocCardProps>(
               </>
             }
             pageId={meta.id}
-            emptyFallback={<div className={styles.contentEmpty}>Empty</div>}
+            emptyFallback={
+              <div className={styles.contentEmpty}>
+                {t['com.affine.m.doc-card.empty']()}
+              </div>
+            }
           />
         </main>
         {showTags ? <DocCardTags docId={meta.id} rows={2} /> : null}

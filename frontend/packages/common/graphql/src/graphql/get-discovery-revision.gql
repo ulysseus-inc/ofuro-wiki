@@ -1,0 +1,3 @@
+query getDiscoveryRevision($workspaceId: String!) {
+  discoveryRevision(workspaceId: $workspaceId)
+}

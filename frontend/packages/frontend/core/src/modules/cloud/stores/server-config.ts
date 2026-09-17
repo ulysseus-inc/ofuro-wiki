@@ -45,6 +45,11 @@ export class ServerConfigStore extends Store {
         ...oauthProvidersData.serverConfig,
       };
     }
-    return { ...serverConfigData.serverConfig, oauthProviders: [] };
+    // #210: oidcButtonLabel は oauthProviders と同じクエリで取る。取らないときは未設定（null）
+    return {
+      ...serverConfigData.serverConfig,
+      oauthProviders: [],
+      oidcButtonLabel: null,
+    };
   }
 }

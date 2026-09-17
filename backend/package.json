@@ -18,7 +18,13 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "schema:gql": "ts-node --transpile-only src/scripts/print-schema.ts",
+    "purge:index": "npx tsx src/scripts/purge-index.ts",
+    "purge:index:prod": "node dist/src/scripts/purge-index.js",
+    "audit:index-removal": "npx tsx src/scripts/audit-index-removal.ts",
+    "audit:index-removal:prod": "node dist/src/scripts/audit-index-removal.js",
+    "audit:doc-meta": "npx tsx scripts/audit-doc-meta.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.4.0",

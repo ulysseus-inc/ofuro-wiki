@@ -1,9 +1,0 @@
-query validateConfig($updates: [UpdateAppConfigInput!]!) {
-  validateAppConfig(updates: $updates) {
-    module
-    key
-    value
-    valid
-    error
-  }
-}

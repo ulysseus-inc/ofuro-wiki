@@ -23,7 +23,8 @@ export class UserQuotaStore extends Store {
     return {
       userId: data.currentUser.id,
       quota: data.currentUser.quota,
-      used: data.currentUser.quotaUsage.storageQuota,
+      // #210: スキーマでは null を許す
+      used: data.currentUser.quotaUsage?.storageQuota ?? 0,
     };
   }
 }

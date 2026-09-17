@@ -20,6 +20,7 @@ import {
   ensureSidebarOpen,
   dismissDevOverlay,
   createNewPage,
+  getOwnedWorkspaceId,
 } from './helpers';
 
 // ---------------------------------------------------------------------------
@@ -1178,6 +1179,9 @@ test.describe('ドキュメント削除', () => {
     await page.keyboard.type('E2E Delete Test', { delay: 50 });
     await page.waitForTimeout(1_000);
 
+    // #136: 監査ログの対象と突き合わせるため、ページの ID を控える
+    const docId = page.url().split('/').pop()!.split('?')[0];
+
     // ヘッダーの「...」メニューを開く
     await page.locator('[data-testid="header-dropDownButton"]').click();
     await page.waitForTimeout(500);
@@ -1200,6 +1204,24 @@ test.describe('ドキュメント削除', () => {
       return document.body.innerText.includes('E2E Delete Test');
     });
     expect(inTrash).toBe(true);
+
+    // #136: ゴミ箱への移動が監査ログに残る（記録は書き込み後に非同期で入るため待つ）
+    await expect
+      .poll(
+        async () => {
+          const result = await graphqlQuery(
+            page,
+            `query { adminAuditLogs(action: "doc.trash", take: 50) {
+              items { action targetId targetName }
+            } }`
+          );
+          return result.data?.adminAuditLogs.items.some(
+            (i: any) => i.targetId === docId
+          );
+        },
+        { timeout: 15_000 }
+      )
+      .toBe(true);
   });
 });
 
@@ -2006,6 +2028,44 @@ test.describe('ページ単位の権限', () => {
         }),
       });
       expect([403, 404]).toContain(write.status);
+
+      // --- 7) Discovery スナップショットに出ない（#151 段階2-2/2-3）
+      //
+      // ⚠️ **画面のドキュメント一覧・タグ配下・コレクションのフィルタは、
+      // すべてこのスナップショットから作られる。** ここに載れば、
+      // 一覧に出ないつもりでも**タグを開いた瞬間に題が出る**。
+      //
+      // ⚠️ **タイトルだけでなく tagIds も見ること。** 「人事」タグが
+      // 付いていることが分かれば、中身を読めなくても情報が漏れる。
+      const snapshot = await gql(
+        memberCookie,
+        `query ($w: String!) {
+          discoverySnapshot(workspaceId: $w) { documents { id title tagIds } }
+        }`,
+        { w: wsId },
+      );
+      expect(snapshot.errors).toBeUndefined();
+      const snapDocs = snapshot.data?.discoverySnapshot?.documents ?? [];
+      const snapIds = snapDocs.map((d: any) => d.id);
+      // ポジティブコントロール（空を返すだけの壊れ方で素通りしないこと）
+      expect(snapIds).toContain(OPEN_DOC);
+      expect(snapIds).not.toContain(SECRET_DOC);
+      // 題が別経路で紛れ込んでいないこと
+      const snapTitles = snapDocs.map((d: any) => d.title);
+      expect(snapTitles).not.toContain('役員限定ページ');
+
+      // 所有者からは見えること（絞り込みが効きすぎて全員に空、を防ぐ）
+      const ownerSnapshot = await gql(
+        ownerCookie,
+        `query ($w: String!) {
+          discoverySnapshot(workspaceId: $w) { documents { id } }
+        }`,
+        { w: wsId },
+      );
+      const ownerSnapIds = (
+        ownerSnapshot.data?.discoverySnapshot?.documents ?? []
+      ).map((d: any) => d.id);
+      expect(ownerSnapIds).toContain(SECRET_DOC);
     } finally {
       await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
         id: wsId,
@@ -2712,6 +2772,389 @@ test.describe('ドキュメントの鮮度表示', () => {
     if (collapsed !== null) {
       expect(collapsed).toBe('true');
       await expect(label).toBeVisible();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 招待の受諾（#148）
+// ---------------------------------------------------------------------------
+/**
+ * #148: 招待の受諾は、種別ごとに扱いが違う（docs/workspace-invitation.md）。
+ *
+ * ⚠️ **期限切れの検査はここに無い。** 招待リンクは最短でも1日先しか
+ * 作れず、E2E で期限切れを作れないため、`invitation-rule.spec.ts` で
+ * 判定を固定している（メール招待・招待リンクの両方）。
+ */
+test.describe('招待の受諾', () => {
+  const API = process.env.API_URL ?? 'http://localhost:3010';
+
+  // ⚠️ **Admin を使わないこと。** Admin は判定をバイパスするため、
+  // 塞げていなくてもテストが通ってしまう（ページ単位の権限と同じ理由）
+  const OWNER = {
+    email: 'e2e-inv-owner@ofuro-wiki.local',
+    password: 'E2eInvOwner123!',
+  };
+  const INVITED = {
+    email: 'e2e-inv-invited@ofuro-wiki.local',
+    password: 'E2eInvInvited123!',
+  };
+  const OTHER = {
+    email: 'e2e-inv-other@ofuro-wiki.local',
+    password: 'E2eInvOther123!',
+  };
+
+  async function authCookie(email: string, password: string): Promise<string> {
+    let res = await fetch(`${API}/api/auth/sign-in`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      res = await fetch(`${API}/api/auth/sign-up`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name: email.split('@')[0] }),
+      });
+      if (!res.ok) throw new Error(`sign-up failed: ${res.status} ${await res.text()}`);
+    }
+    const cookie = res.headers.get('set-cookie');
+    if (!cookie) throw new Error('no cookie');
+    return cookie.split(';')[0];
+  }
+
+  async function gql(cookie: string, query: string, variables?: Record<string, any>) {
+    const res = await fetch(`${API}/graphql`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ query, variables }),
+    });
+    return res.json();
+  }
+
+  const accept = (cookie: string, wsId: string, inviteId: string) =>
+    gql(
+      cookie,
+      `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+      { w: wsId, i: inviteId },
+    );
+
+  const isMember = async (cookie: string, wsId: string) => {
+    const r = await gql(cookie, `query { workspaces { id } }`);
+    return (r.data?.workspaces ?? []).some((w: any) => w.id === wsId);
+  };
+
+  /** 招待用に、所有者だけのワークスペースを1つ作る */
+  async function makeWorkspace(ownerCookie: string): Promise<string> {
+    const r = await gql(ownerCookie, `mutation { createWorkspace { id } }`);
+    const id = r.data?.createWorkspace?.id;
+    if (!id) throw new Error(`createWorkspace failed: ${JSON.stringify(r)}`);
+    return id;
+  }
+
+  /**
+   * ⚠️ **これが #148 の本丸。**
+   *
+   * 招待メールのリンクは転送できる。宛先を照合しないと、
+   * **招待していない人がワークスペースに入れる**。
+   */
+  test('⚠️ 他人宛のメール招待は受諾できない（リンクを転送されても入れない）', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const otherCookie = await authCookie(OTHER.email, OTHER.password);
+    // 招待する相手のアカウントを先に作っておく
+    // ⚠️ 既存ユーザーはその場でメンバーになるため、招待は**未参加の相手**に出す
+    const wsId = await makeWorkspace(ownerCookie);
+
+    try {
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: ['e2e-inv-notyet@ofuro-wiki.local'] },
+      );
+      const inviteId = invited.data?.inviteMembers?.[0]?.inviteId;
+      expect(inviteId).toBeTruthy();
+
+      // ⚠️ 別人が同じ招待 ID で受諾を試みる
+      const r = await accept(otherCookie, wsId, inviteId);
+      expect(r.errors).toBeTruthy();
+
+      // ポジティブコントロール: 実際に入れていないこと
+      expect(await isMember(otherCookie, wsId)).toBe(false);
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  /** ⚠️ 招待リンクは「誰でも入れる」のが仕様。塞ぎすぎていないこと */
+  test('有効な招待リンクは、誰でも受諾できる（仕様）', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const otherCookie = await authCookie(OTHER.email, OTHER.password);
+    const wsId = await makeWorkspace(ownerCookie);
+
+    try {
+      const created = await gql(
+        ownerCookie,
+        `mutation ($w: String!) {
+          createInviteLink(workspaceId: $w, expireTime: OneWeek) { link }
+        }`,
+        { w: wsId },
+      );
+      const link: string = created.data?.createInviteLink?.link ?? '';
+      const inviteId = link.split('/invite/')[1];
+      expect(inviteId).toBeTruthy();
+
+      const r = await accept(otherCookie, wsId, inviteId);
+      expect(r.errors).toBeUndefined();
+      expect(await isMember(otherCookie, wsId)).toBe(true);
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+
+  /**
+   * ⚠️ **一度きりであること。**
+   * 残すと、同じリンクで何度でも入れる（退出したあとに戻れてしまう）。
+   */
+  test('⚠️ メール招待は、受諾したあと再利用できない', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const invitedCookie = await authCookie(INVITED.email, INVITED.password);
+    const wsId = await makeWorkspace(ownerCookie);
+
+    try {
+      // ⚠️ 既存ユーザーへの招待はその場で参加になるので、
+      // ここでは「受諾を通る」ことだけを見る（2回目が弾かれること）
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [INVITED.email] },
+      );
+      const inviteId = invited.data?.inviteMembers?.[0]?.inviteId;
+
+      const first = await accept(invitedCookie, wsId, inviteId);
+      expect(first.errors).toBeUndefined();
+
+      // 2回目は招待そのものが無いので弾かれる
+      const second = await accept(invitedCookie, wsId, inviteId);
+      expect(second.errors).toBeTruthy();
+    } finally {
+      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: wsId,
+      });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #199: クライアント索引（@ メニュー）
+// ---------------------------------------------------------------------------
+test.describe('クライアント索引（#199）', () => {
+  /**
+   * ⚠️ `@` メニューは**手元の索引しか見ない**（サーバー検索へ落ちない）。
+   *
+   * 索引の対象は共有目次から取られていたが、#151 段階3 で目次を空にしたため
+   * 対象が0件になり、**候補が常に0件**になっていた。エラーは出ないので、
+   * この網が無いと同じことが静かに再発する。
+   *
+   * 詳細は docs/client-indexer.md
+   */
+  test('⚠️ @ メニューに、日本語・英語どちらの題でも候補が出る', async ({
+    sharedPage: page,
+  }) => {
+    test.setTimeout(180_000);
+
+    await ensureSidebarOpen(page);
+
+    const stamp = Date.now();
+    const titles = [`索引テスト${stamp}`, `IndexProbe${stamp}`];
+
+    // 候補になるページを作る（題を付けて台帳へ載せる）
+    for (const title of titles) {
+      await createNewPage(page);
+      await page.waitForTimeout(2_000);
+      // ⚠️ 題は `doc-title` に入れること。本文の段落に打つと題にならない
+      await page.locator('doc-title .inline-editor').first().click();
+      await page.keyboard.type(title);
+      await page.waitForTimeout(1_500);
+    }
+
+    // 検索する側のページ
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+
+    for (const title of titles) {
+      await page.locator('[data-block-id] .inline-editor').first().click();
+      await page.keyboard.press('@');
+      await page.waitForTimeout(1_000);
+      await page.keyboard.type(title);
+
+      // 索引は SharedWorker で非同期に進むため、候補が出るまで待つ
+      await expect(
+        page.locator('affine-linked-doc-popover').getByText(title, { exact: false }).first()
+      ).toBeVisible({ timeout: 30_000 });
+
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      // 打ち込んだ問い合わせを消す（次の周回に残さない）
+      for (let i = 0; i < title.length + 1; i++) {
+        await page.keyboard.press('Backspace');
+      }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #128: 読み込めないワークスペースからの脱出
+// ---------------------------------------------------------------------------
+test.describe('読み込めないワークスペース（#128）', () => {
+  /**
+   * ⚠️ **通常操作では起きにくい境界条件。** 作成は「行を作る」と「中身を書く」の
+   * 2段階で、後者が終わる前に中断すると**行だけが残る**。
+   *
+   * その状態は一覧に載っているので 404 にならず、ルートドキュメントは
+   * 永久に `ready` にならないため、**スケルトンのまま復旧手段が無かった**。
+   *
+   * ⚠️ **「一定時間待ったら復旧画面」ではなく「同期の完了後に復旧画面」を
+   * 検査すること。** ここを取り違えると、秒数待ちの実装に戻っても網が鳴らない。
+   *
+   * 詳細は docs/workspace-load-failure.md
+   */
+  test('⚠️ 中身の無いワークスペースを開くと、復旧画面から削除できる', async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+    });
+    const page = await context.newPage();
+
+    let wsId: string | undefined;
+    try {
+      await signInViaAPI(page);
+
+      // ⚠️ **GraphQL だけを叩く＝中身を書かない。** これが「作成が中断された」
+      // 状態そのもの（行はあるが snapshots 0 / updates 0）
+      const created = await graphqlQuery(
+        page,
+        `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+        { name: `unloadable-${Date.now()}` }
+      );
+      wsId = created?.data?.createWorkspace?.id;
+      expect(wsId).toBeTruthy();
+
+      await page.goto(`/workspace/${wsId}/all`);
+
+      // スケルトンではなく復旧画面が出ること
+      await expect(page.getByTestId('workspace-unloadable')).toBeVisible({
+        timeout: 60_000,
+      });
+
+      // ⚠️ 復旧手段が効くこと。効かないと、出しただけで詰みは変わらない
+      await page.getByTestId('workspace-unloadable-delete').click();
+      await page
+        .locator('button:has-text("Delete"), button:has-text("削除")')
+        .last()
+        .click();
+
+      // 一覧から消えること（サーバー側で消えている）
+      await expect
+        .poll(
+          async () => {
+            const list = await graphqlQuery(page, '{ workspaces { id } }');
+            const ids: string[] = (list?.data?.workspaces ?? []).map(
+              (w: any) => w.id
+            );
+            return ids.includes(wsId as string);
+          },
+          { timeout: 30_000 }
+        )
+        .toBe(false);
+
+      wsId = undefined;
+    } finally {
+      if (wsId) {
+        await graphqlQuery(
+          page,
+          `mutation ($id: String!) { deleteWorkspace(id: $id) }`,
+          { id: wsId }
+        ).catch(() => undefined);
+      }
+      await context.close();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #131: 共有メニューに存在しない機能を出さない
+// ---------------------------------------------------------------------------
+test.describe('共有メニュー（#131）', () => {
+  /**
+   * ⚠️ **公開リンク（リンクを持っている全員）は仕様上未実装**（docs/doc-sharing.md §2・§8）。
+   *
+   * AFFiNE 由来の画面にはこの行があり、公開すると表示は「読み取り専用」に変わるが、
+   * バックエンドはページの `public` を読み取りの許可に使っていないため、
+   * **そのリンクを未ログインで開いても誰も読めない**（2026-09-11 実測）。
+   * 存在しない機能を「使える」と見せないよう、行ごと隠している。
+   *
+   * ⚠️ この網が無いと、上流追従などで行が戻っても気づけない。
+   */
+  test('⚠️ 公開リンクの行を出さない（存在しない機能を見せない）', async ({
+    browser,
+  }) => {
+    test.setTimeout(180_000);
+
+    // ⚠️ 共有ページを使わない。手前の検査が所有ワークスペースを消している
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
+
+    try {
+      await signInViaAPI(page);
+
+      const workspaceId = await getOwnedWorkspaceId(page);
+      expect(workspaceId).toBeTruthy();
+
+      // サーバー側に直接作る（台帳に載る前のページだと共有メニューがスケルトンのまま）
+      const docId = `share-e2e-${Date.now()}`;
+      const res = await page.request.post('/api/internal/docs/upsert', {
+        data: { workspaceId, docId, title: '共有メニューの検査', markdown: '本文' },
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(
+        res.status(),
+        `upsert failed (ws=${workspaceId}): ${await res.text()}`
+      ).toBe(200);
+
+      await page.goto(`/workspace/${workspaceId}/${docId}`);
+      await page.waitForTimeout(5_000);
+
+      await page
+        .locator(
+          '[data-testid="cloud-share-menu-button"], [data-testid="local-share-menu-button"]'
+        )
+        .first()
+        .click();
+
+      // ⚠️ まずメニューが読み込み終わったことを確かめる（スケルトンのままだと
+      // 「行が無い」が素通りする）
+      await expect(page.getByText('ワークスペースのメンバー').first()).toBeVisible({
+        timeout: 30_000,
+      });
+
+      // ⚠️ 公開リンクの行が無いこと
+      await expect(page.getByTestId('share-link-menu-trigger')).toHaveCount(0);
+      await expect(page.getByText('リンクを持っている全員')).toHaveCount(0);
+    } finally {
+      await context.close();
     }
   });
 });

@@ -29,7 +29,18 @@ export class DocHistorySchedulerService {
 
     this.logger.log(`Saving history for ${snapshots.length} docs`);
 
-    for (const snapshot of snapshots) {
+    // ⚠️ #151 段階3: **ルート文書（目次）の履歴は作らない。**
+    //
+    // ルート文書はページとして開かれず、履歴を見る経路（版数モーダル）が
+    // 使わない。にもかかわらず作ると、**掃除しても履歴から題が取れる**
+    // （docs/discovery-stage3-comparison.md 7.8.7b）。
+    //
+    // 錠で守るのではなく、**経路そのものを断つ**。錠は掛け忘れれば破れる。
+    const targets = snapshots.filter(
+      (s) => s.docId !== s.workspaceId,
+    );
+
+    for (const snapshot of targets) {
       // 直近インターバル以内にすでに保存済みの履歴があればスキップ
       const existing = await this.prisma.docHistory.findFirst({
         where: {
@@ -53,6 +64,9 @@ export class DocHistorySchedulerService {
       });
     }
 
-    this.logger.log(`History saved for ${snapshots.length} docs`);
+    this.logger.log(
+      `History saved for ${targets.length} docs` +
+        ` (skipped ${snapshots.length - targets.length} workspace index docs)`,
+    );
   }
 }

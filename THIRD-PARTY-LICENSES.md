@@ -4,9 +4,25 @@
 詳細な全量は `THIRD-PARTY-frontend.csv` / `THIRD-PARTY-backend.csv` を参照してください。
 
 - 監査ツール: `license-checker`
-- 監査日: 2026-06-27
+- 監査日: 2026-06-27 / **再監査: 2026-09-17（v0.1.0 リリース前）**
 - 監査対象: frontend（yarn workspaces 全依存ツリー）/ backend（`--production` 依存）
 - 自社の private workspace パッケージ（`@ofuro/*`, `@ofuro-tools/*` 等）は集計から除外（`--excludePrivatePackages`）。これらはリポジトリルートの MIT ライセンスが適用される。
+
+## 再監査（2026-09-17）
+
+v0.1.0 のリリースに向けて取り直した。**結論は変わらない。**
+
+| | 前回（2026-06-27） | 今回（2026-09-17） |
+|---|---|---|
+| frontend | 1,591 | 1,587 |
+| backend（本番依存） | 462 | 463 |
+
+増減の中身:
+
+- 追加: `jose`（MIT。SSO #89 で入った JWT の検証）
+- 削除: `@myriaddreamin/typst.ts` 系3件（Apache-2.0）、`idb`（ISC）
+
+**GPL / AGPL / SSPL / BUSL はゼロ、第三者の UNKNOWN もゼロ**（再確認済み）。
 
 ## 結論
 

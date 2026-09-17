@@ -15,6 +15,37 @@ import { useCallback, useEffect, useState } from 'react';
 
 import * as styles from './style.css';
 
+/** #212: 作成中（非同期ジョブ）。docs/backup.md 1章 */
+const BACKUP_STATUS_RUNNING = 'running';
+
+/** #212: 作成中の一覧を取り直す間隔 */
+const RUNNING_POLL_INTERVAL_MS = 3000;
+
+/** #212: バックアップ／リストアが既に動いているときのエラー名（backend と揃える） */
+const BACKUP_IN_PROGRESS = 'BACKUP_IN_PROGRESS';
+
+type Translate = ReturnType<typeof useI18n>;
+
+function backupStatusLabel(status: string, t: Translate): string {
+  if (status === 'completed') {
+    return t['com.affine.admin.backup.status.completed']();
+  }
+  if (status === BACKUP_STATUS_RUNNING) {
+    return t['com.affine.admin.backup.status.running']();
+  }
+  if (status === 'failed') {
+    return t['com.affine.admin.backup.status.failed']();
+  }
+  return status;
+}
+
+function backupErrorMessage(e: any, t: Translate): string {
+  if (e?.message === BACKUP_IN_PROGRESS || e?.name === BACKUP_IN_PROGRESS) {
+    return t['error.BACKUP_IN_PROGRESS']();
+  }
+  return e?.message ?? '';
+}
+
 interface BackupRecord {
   id: string;
   filename: string;
@@ -143,6 +174,9 @@ export const BackupPanel = () => {
     [updateSetting]
   );
 
+  // #212: ⚠️ 作成は「始めるだけ」で、すぐに running が返る（完了を待たない）。
+  // 同期で待つとブラウザ（15秒）と本番 nginx（60秒）のタイムアウトに当たり、
+  // サーバーは成功しているのに「失敗」と出ていた。完了は一覧の status で知る
   const onCreateBackup = useCallback(async () => {
     setCreating(true);
     try {
@@ -150,17 +184,31 @@ export const BackupPanel = () => {
         query: adminCreateBackupMutation,
         variables: {},
       } as any);
-      notify.success({ title: t['com.affine.admin.backup.notify.created']() });
+      notify.success({ title: t['com.affine.admin.backup.notify.started']() });
       await fetchBackups();
     } catch (e: any) {
       notify.error({
         title: t['com.affine.admin.backup.notify.createFailed'](),
-        message: e.message,
+        message: backupErrorMessage(e, t),
       });
     } finally {
       setCreating(false);
     }
   }, [graphqlService, fetchBackups, t]);
+
+  // #212: 作成中のものがある間だけ、一覧を取り直す（終われば止まる）
+  const hasRunning = backups.some(b => b.status === BACKUP_STATUS_RUNNING);
+  useEffect(() => {
+    if (!hasRunning) {
+      return;
+    }
+    const timer = setInterval(() => {
+      fetchBackups().catch(() => {
+        // 取り直しの失敗は次の周回で拾う
+      });
+    }, RUNNING_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [hasRunning, fetchBackups]);
 
   const onDeleteBackup = useCallback(
     async (id: string) => {
@@ -175,7 +223,7 @@ export const BackupPanel = () => {
       } catch (e: any) {
         notify.error({
           title: t['com.affine.admin.backup.notify.deleteFailed'](),
-          message: e.message,
+          message: backupErrorMessage(e, t),
         });
       }
     },
@@ -324,25 +372,32 @@ export const BackupPanel = () => {
                   </div>
                 </div>
                 <span
+                  data-testid="admin-backup-status"
                   className={`${styles.statusBadge} ${
                     backup.status === 'completed'
                       ? styles.statusCompleted
-                      : styles.statusFailed
+                      : backup.status === BACKUP_STATUS_RUNNING
+                        ? styles.statusRunning
+                        : styles.statusFailed
                   }`}
                 >
-                  {backup.status}
+                  {backupStatusLabel(backup.status, t)}
                 </span>
                 <div className={styles.backupActions}>
                   <Button
                     variant="secondary"
                     onClick={() => onDownloadBackup(backup.id)}
                     prefix={<DownloadIcon />}
+                    // #212: ZIP はまだ無い
+                    disabled={backup.status !== 'completed'}
                   >
                     {t['com.affine.admin.backup.download']()}
                   </Button>
                   <Button
                     variant="error"
                     onClick={() => setDeleteTarget(backup)}
+                    // #212: 実行中はサーバーも拒否する（docs/backup.md 2章）
+                    disabled={backup.status === BACKUP_STATUS_RUNNING}
                     prefix={<DeleteIcon />}
                   >
                     {t['Delete']()}

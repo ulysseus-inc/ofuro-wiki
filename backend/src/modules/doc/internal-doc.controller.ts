@@ -12,6 +12,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
 import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import { PrismaService } from '../../prisma.service';
+import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 import { PermissionService } from '../permission/permission.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
@@ -44,7 +45,9 @@ export class InternalDocController {
   constructor(
     // #97: ドキュメント単位の認可
     private permission: PermissionService,
-    private prisma: PrismaService) {}
+    private prisma: PrismaService,
+    private discovery: DiscoveryRevisionService,
+  ) {}
 
   /**
    * 対象 workspace が存在することを保証する。
@@ -181,6 +184,12 @@ export class InternalDocController {
       });
       await this.prisma.docUpdate.deleteMany({ where: { workspaceId, docId: foldersDocId } });
     }
+
+    // ⚠️ #151: **すべての書き込みが終わってから**版数を上げる。
+    // 先に上げると、その間に Snapshot を取ったクライアントが
+    // 「新しい版数 ＋ 古い一覧」を固定し、**永久に取り直さない**。
+    // この経路は DocService を通らないため、ここで明示的に呼ぶ。
+    await this.discovery.bump(workspaceId, 'doc-update');
 
     return { ok: true, workspaceId, docId, title };
   }

@@ -16,7 +16,10 @@ import type { WorkspaceService } from '../../workspace';
 import type { DocGrantedUsersStore } from '../stores/doc-granted-users';
 
 export type GrantedUser =
-  GetPageGrantedUsersListQuery['workspace']['doc']['grantedUsersList']['edges'][number]['node'];
+  // #210: スキーマでは doc は null を許す（読めない doc は null・#97）
+  NonNullable<
+    GetPageGrantedUsersListQuery['workspace']['doc']
+  >['grantedUsersList']['edges'][number]['node'];
 
 export class DocGrantedUsersService extends Service {
   constructor(

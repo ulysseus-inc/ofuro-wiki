@@ -8,12 +8,11 @@ import { useAppUpdater } from '@ofuro/core/components/hooks/use-app-updater';
 import { UrlService } from '@ofuro/core/modules/url';
 import { appIconMap, appNames } from '@ofuro/core/utils/channel';
 import { useI18n } from '@ofuro/i18n';
-import { ArrowRightSmallIcon, OpenInNewIcon } from '@blocksuite/icons/rc';
+import { ArrowRightSmallIcon } from '@blocksuite/icons/rc';
 import { useServices } from '@toeverything/infra';
 import { useCallback } from 'react';
 
 import { useAppSettingHelper } from '../../../../../components/hooks/affine/use-app-setting-helper';
-import { relatedLinks } from './config';
 import * as styles from './style.css';
 import { UpdateCheckSection } from './update-check-section';
 
@@ -54,7 +53,7 @@ export const AboutAffine = () => {
       <SettingWrapper title={t['com.affine.aboutAFFiNE.version.title']()}>
         <SettingRow
           name={appName}
-          desc={BUILD_CONFIG.appVersion}
+          desc={BUILD_CONFIG.productVersion}
           className={styles.appImageRow}
         >
           <img src={appIcon} alt={appName} width={56} height={56} />

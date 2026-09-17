@@ -1,11 +1,8 @@
 import { UserFriendlyError } from '@ofuro/error';
 import {
-  abortBlobUploadMutation,
   BlobUploadMethod,
-  completeBlobUploadMutation,
   createBlobUploadMutation,
   deleteBlobMutation,
-  getBlobUploadPartUrlQuery,
   listBlobsQuery,
   releaseDeletedBlobsMutation,
   setBlobMutation,
@@ -120,50 +117,10 @@ export class CloudBlobStorage extends BlobStorageBase {
       if (upload.alreadyUploaded) {
         return;
       }
-      if (upload.method === BlobUploadMethod.GRAPHQL) {
-        await this.uploadViaGraphql(blob, signal);
-        return;
-      }
-
-      if (upload.method === BlobUploadMethod.PRESIGNED) {
-        try {
-          await this.uploadViaPresigned(
-            upload.uploadUrl!,
-            upload.headers,
-            blob.data,
-            signal
-          );
-          await this.completeUpload(blob.key, undefined, undefined, signal);
-          return;
-        } catch {
-          await this.uploadViaGraphql(blob, signal);
-          return;
-        }
-      }
-
-      if (upload.method === BlobUploadMethod.MULTIPART) {
-        try {
-          const parts = await this.uploadViaMultipart(
-            blob.key,
-            upload.uploadId!,
-            upload.partSize!,
-            blob.data,
-            upload.uploadedParts,
-            signal
-          );
-          await this.completeUpload(blob.key, upload.uploadId!, parts, signal);
-          return;
-        } catch {
-          if (upload.uploadId) {
-            await this.tryAbortMultipartUpload(
-              blob.key,
-              upload.uploadId,
-              signal
-            );
-          }
-          await this.uploadViaGraphql(blob, signal);
-          return;
-        }
+      // ⚠️ #204: バックエンドは常に GRAPHQL を返す（PRESIGNED / MULTIPART は
+      // AFFiNE 由来で、ofuro-wiki のバックエンドには実装が無い）
+      if (upload.method !== BlobUploadMethod.GRAPHQL) {
+        throw new Error(`Unsupported blob upload method: ${upload.method}`);
       }
 
       await this.uploadViaGraphql(blob, signal);
@@ -223,148 +180,6 @@ export class CloudBlobStorage extends BlobStorageBase {
     });
   }
 
-  private async uploadViaPresigned(
-    uploadUrl: string,
-    headers: Record<string, string> | null | undefined,
-    data: Uint8Array,
-    signal?: AbortSignal
-  ) {
-    const res = await this.fetchWithTimeout(uploadUrl, {
-      method: 'PUT',
-      headers: headers ?? undefined,
-      body: data,
-      signal,
-      timeout: UPLOAD_REQUEST_TIMEOUT,
-    });
-    if (!res.ok) {
-      throw new Error(`Presigned upload failed with status ${res.status}`);
-    }
-  }
-
-  private async uploadViaMultipart(
-    key: string,
-    uploadId: string,
-    partSize: number,
-    data: Uint8Array,
-    uploadedParts: { partNumber: number; etag: string }[] | null | undefined,
-    signal?: AbortSignal
-  ) {
-    const partsMap = new Map<number, string>();
-    for (const part of uploadedParts ?? []) {
-      partsMap.set(part.partNumber, part.etag);
-    }
-    const total = data.byteLength;
-    const totalParts = Math.ceil(total / partSize);
-
-    for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
-      if (partsMap.has(partNumber)) {
-        continue;
-      }
-      const start = (partNumber - 1) * partSize;
-      const end = Math.min(start + partSize, total);
-      const chunk = data.subarray(start, end);
-
-      const part = await this.connection.gql({
-        query: getBlobUploadPartUrlQuery,
-        variables: { workspaceId: this.options.id, key, uploadId, partNumber },
-        context: { signal },
-      });
-
-      const res = await this.fetchWithTimeout(
-        part.workspace.blobUploadPartUrl.uploadUrl,
-        {
-          method: 'PUT',
-          headers: part.workspace.blobUploadPartUrl.headers ?? undefined,
-          body: chunk,
-          signal,
-          timeout: UPLOAD_REQUEST_TIMEOUT,
-        }
-      );
-      if (!res.ok) {
-        throw new Error(
-          `Multipart upload failed at part ${partNumber} with status ${res.status}`
-        );
-      }
-
-      const etag = res.headers.get('etag');
-      if (!etag) {
-        throw new Error(`Missing ETag for part ${partNumber}.`);
-      }
-      partsMap.set(partNumber, etag);
-    }
-
-    if (partsMap.size !== totalParts) {
-      throw new Error('Multipart upload has missing parts.');
-    }
-
-    return [...partsMap.entries()]
-      .sort((left, right) => left[0] - right[0])
-      .map(([partNumber, etag]) => ({ partNumber, etag }));
-  }
-
-  private async completeUpload(
-    key: string,
-    uploadId: string | undefined,
-    parts: { partNumber: number; etag: string }[] | undefined,
-    signal?: AbortSignal
-  ) {
-    await this.connection.gql({
-      query: completeBlobUploadMutation,
-      variables: { workspaceId: this.options.id, key, uploadId, parts },
-      context: { signal },
-      timeout: UPLOAD_REQUEST_TIMEOUT,
-    });
-  }
-
-  private async tryAbortMultipartUpload(
-    key: string,
-    uploadId: string,
-    signal?: AbortSignal
-  ) {
-    try {
-      await this.connection.gql({
-        query: abortBlobUploadMutation,
-        variables: { workspaceId: this.options.id, key, uploadId },
-        context: { signal },
-      });
-    } catch {}
-  }
-
-  private async fetchWithTimeout(
-    input: string,
-    init: RequestInit & { timeout?: number }
-  ) {
-    const externalSignal = init.signal;
-    if (externalSignal?.aborted) {
-      throw externalSignal.reason;
-    }
-
-    const abortController = new AbortController();
-    externalSignal?.addEventListener('abort', reason => {
-      abortController.abort(reason);
-    });
-
-    const timeout = init.timeout ?? 15000;
-    const timeoutId =
-      timeout > 0
-        ? setTimeout(() => {
-            abortController.abort(new Error('request timeout'));
-          }, timeout)
-        : undefined;
-
-    try {
-      const resolvedUrl = new URL(input, this.options.serverBaseUrl).toString();
-      return await globalThis.fetch(resolvedUrl, {
-        ...init,
-        signal: abortController.signal,
-      });
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    }
-  }
-
   private humanReadableBlobSizeLimitCache: string | null = null;
   private blobSizeLimitCache: number | null = null;
   private blobSizeLimitCacheTime = 0;
@@ -382,9 +197,14 @@ export class CloudBlobStorage extends BlobStorageBase {
         variables: { id: this.options.id },
       });
 
-      this.humanReadableBlobSizeLimitCache =
-        res.workspace.quota.humanReadable.blobLimit;
-      this.blobSizeLimitCache = res.workspace.quota.blobLimit;
+      // #210: スキーマでは quota は null を許す。上限が分からないときはクライアントで止めない
+      // （上限はサーバーでも検査する）
+      const quota = res.workspace.quota;
+      if (!quota) {
+        return Number.POSITIVE_INFINITY;
+      }
+      this.humanReadableBlobSizeLimitCache = quota.humanReadable.blobLimit;
+      this.blobSizeLimitCache = quota.blobLimit;
       this.blobSizeLimitCacheTime = Date.now();
       return this.blobSizeLimitCache;
     } catch (err) {

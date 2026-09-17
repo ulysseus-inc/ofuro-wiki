@@ -1,0 +1,22 @@
+query getDiscoverySnapshot($workspaceId: String!) {
+  discoverySnapshot(workspaceId: $workspaceId) {
+    workspaceId
+    userId
+    revision
+    fetchedAt
+    documents {
+      id
+      title
+      tagIds
+      mode
+      trash
+      createdAt
+      updatedAt
+      createdBy
+      updatedBy
+      titleRevision
+      trashRevision
+      tagsRevision
+    }
+  }
+}

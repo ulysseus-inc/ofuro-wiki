@@ -23,10 +23,6 @@ import { WorkbenchLink } from '@ofuro/core/modules/workbench';
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
 import { useI18n } from '@ofuro/i18n';
 import track from '@ofuro/track';
-import type {
-  ExtensionType,
-  TransformerMiddleware,
-} from '@blocksuite/affine/store';
 import { ToggleDownIcon } from '@blocksuite/icons/rc';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import {
@@ -58,12 +54,6 @@ type BacklinkGroups = {
   docId: string;
   title: string;
   links: Backlink[];
-};
-
-type TextRendererOptions = {
-  customHeading: boolean;
-  extensions: ExtensionType[];
-  additionalMiddlewares: TransformerMiddleware[];
 };
 
 const useBiDirectionalLinkPanelCollapseState = (
@@ -183,8 +173,8 @@ const usePreviewExtensions = () => {
 };
 
 export const BacklinkGroups = () => {
-  const [extensions, portals] = usePreviewExtensions();
-  const { workspaceService, docService } = useServices({
+  const [, portals] = usePreviewExtensions();
+  const { docService } = useServices({
     WorkspaceService,
     DocService,
   });
@@ -220,22 +210,6 @@ export const BacklinkGroups = () => {
     docLinksService.backlinks.revalidateFromCloud();
   }, [docLinksService]);
 
-  const textRendererOptions = useMemo(() => {
-    const docLinkBaseURLMiddleware: TransformerMiddleware = ({
-      adapterConfigs,
-    }) => {
-      adapterConfigs.set(
-        'docLinkBaseUrl',
-        `/workspace/${workspaceService.workspace.id}`
-      );
-    };
-
-    return {
-      customHeading: true,
-      extensions,
-      additionalMiddlewares: [docLinkBaseURLMiddleware],
-    };
-  }, [extensions, workspaceService.workspace.id]);
 
   return (
     <>
@@ -257,10 +231,7 @@ export const BacklinkGroups = () => {
             docId={docService.doc.id}
             linkDocId={linkGroup.docId}
           >
-            <LinkPreview
-              textRendererOptions={textRendererOptions}
-              linkGroup={linkGroup}
-            />
+            <LinkPreview linkGroup={linkGroup} />
           </CollapsibleSection>
         ))
       )}
@@ -322,10 +293,8 @@ const BacklinkLinks = () => {
 
 export const LinkPreview = ({
   linkGroup,
-  textRendererOptions,
 }: {
   linkGroup: BacklinkGroups;
-  textRendererOptions: TextRendererOptions;
 }) => {
   const canAccess = useGuard('Doc_Read', linkGroup.docId);
   const t = useI18n();

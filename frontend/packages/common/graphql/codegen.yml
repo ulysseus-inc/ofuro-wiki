@@ -19,13 +19,23 @@ config:
     Decimal: number
     UUID: string
     ID: string
-    JSON: Record<string, string>
+    # #210: バックエンドの JSON は、コメントの本文（content.blocks などの入れ子）や
+    # 通知の本文のような任意のオブジェクト。Record<string, string> は中身と合わない。
+    # 手書きの schema.ts はこれらを JSONObject（any）で型付けしていたので、それに合わせる
+    JSON: any
     Upload: File
     SafeInt: number
 overwrite: true
-schema: ../../backend/server/src/schema.gql
+# #205: バックエンドが書き出すスキーマ（DB もサーバー起動も要らない）。
+# 更新は backend で `npm run schema:gql`。⚠️ バックエンドを変えたら同じ PR で更新すること
+schema: ../../../../backend/schema.gql
 documents: ./src/**/*.gql
 generates:
+  # #210: 型（schema.ts）と送るクエリ（index.ts）の両方を生成する。どちらも手で編集しない。
+  #
+  # ⚠️ フロントエンドが値として使う列挙（FeatureType・NotificationType など）は、
+  # バックエンドで registerEnumType して schema.gql に載せる。スキーマに無いと生成物から消え、
+  # 比較が常に偽になって実行時に壊れる（docs/development.md）
   ./src/schema.ts:
     plugins:
       - typescript

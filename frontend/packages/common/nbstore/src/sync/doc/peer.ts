@@ -44,6 +44,19 @@ interface Status {
   syncing: boolean;
   retrying: boolean;
   skipped: boolean;
+  /**
+   * #128: ⚠️ **サーバーの状態を一通り受け取り終えたか。**
+   *
+   * これが立つまでは「サーバーに何が有るか」を知らない。立ったあとに
+   * 一度も現れなかった doc は、**サーバーにも手元にも無い**と言い切れる。
+   *
+   * ⚠️ `synced` では代用できない。`synced` は `jobMap` が空かどうかを見るので、
+   * **接続直後・ジョブが積まれる前にも true になる**。その窓で
+   * 「読み込めなかった」と判定すると、サーバーにだけ中身がある
+   * ワークスペースを新しい端末で開いたときに誤判定する。
+   * 詳細は docs/workspace-load-failure.md
+   */
+  initialSyncDone: boolean;
   errorMessage: string | null;
 }
 
@@ -59,6 +72,20 @@ interface PeerDocState {
   syncing: boolean;
   synced: boolean;
   retrying: boolean;
+  /** #128: サーバーの状態を一通り受け取り終えたか */
+  initialSyncDone: boolean;
+  /**
+   * #128: ⚠️ **この doc の存在を同期ピアが把握しているか。**
+   *
+   * 手元の保存かサーバーの clock に現れた doc は `addDoc()` され、ここが true。
+   * **true なら中身はこれから届く**ので、まだ待たなければならない。
+   *
+   * ⚠️ `initialSyncDone` だけでは足りない。あれは「サーバーに何が有るかを
+   * 知った」時点で立ち、**取りに行くジョブはこれから走る**。
+   * サーバーにだけ中身があるワークスペースを新しい端末で開くと、その窓で
+   * 「読み込めなかった」と誤判定する（Codex 指摘・2026-09-10）。
+   */
+  known: boolean;
   errorMessage: string | null;
 }
 
@@ -161,6 +188,7 @@ export class DocSyncPeer {
     syncing: false,
     retrying: false,
     skipped: false,
+    initialSyncDone: false,
     errorMessage: null,
   };
   private readonly statusUpdatedSubject$ = new Subject<string | true>();
@@ -212,12 +240,17 @@ export class DocSyncPeer {
     return new Observable<PeerDocState>(subscribe => {
       const next = () => {
         if (this.status.skipped) {
+          // ⚠️ **`return` が無く、直後の値に上書きされていた**（Codex 指摘・
+          // 2026-09-10）。同期を飛ばすピアは「待つものが無い」を報せる
           subscribe.next({
             syncing: false,
             synced: true,
             retrying: false,
+            initialSyncDone: true,
+            known: false,
             errorMessage: null,
           });
+          return;
         }
         subscribe.next({
           syncing:
@@ -225,6 +258,8 @@ export class DocSyncPeer {
             this.status.jobMap.has(docId),
           synced: !this.status.jobMap.has(docId),
           retrying: this.status.retrying,
+          initialSyncDone: this.status.initialSyncDone,
+          known: this.status.docs.has(docId),
           errorMessage: this.status.errorMessage,
         });
       };
@@ -550,6 +585,8 @@ export class DocSyncPeer {
           remoteClocks: new ClockMap(new Map()),
           syncing: false,
           skipped: false,
+          // ⚠️ 再試行では取り直しになるので倒す（#128）
+          initialSyncDone: false,
           // tell ui to show retrying status
           retrying: true,
           // error message from last retry
@@ -706,6 +743,11 @@ export class DocSyncPeer {
       for (const docId of this.status.remoteClocks.keys()) {
         this.actions.addDoc(docId);
       }
+
+      // #128: ⚠️ **ここまで来て初めて「サーバーに何が有るか」を知った。**
+      // これより前に判定してはいけない
+      this.status.initialSyncDone = true;
+      this.statusUpdatedSubject$.next(true);
 
       // begin to process jobs
 

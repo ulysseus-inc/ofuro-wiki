@@ -39,7 +39,6 @@ import {
   useMemo,
 } from 'react';
 
-import { WorkspaceDialogService } from '../../../../modules/dialogs';
 import { useSignalValue } from '../../../../modules/doc-info/utils';
 import type { ImageData } from '../../../../modules/peek-view/view/image-preview';
 import { CircularProgress } from '../../components/loading';
@@ -387,7 +386,6 @@ const FileCellComponent: ForwardRefRenderFunction<
   const fileList = useSignalValue(manager.fileList);
   const isEditing = useSignalValue(manager.isEditing);
   // ofuro-wiki: no plans page
-  const jumpToPricePlan = useCallback(() => {}, []);
   const renderPopoverContent = () => {
     if (fileList.length === 0) {
       return (

@@ -141,29 +141,6 @@ export const MemberOptions = ({
         });
       });
   }, [member, membersService, t]);
-  const handleChangeToCollaborator = useCallback(() => {
-    membersService
-      .adjustMemberPermission(member.id, Permission.Collaborator)
-      .then(result => {
-        if (result) {
-          notify.success({
-            title: t['com.affine.payment.member.team.change.notify.title'](),
-            message: t[
-              'com.affine.payment.member.team.change.collaborator.notify.message'
-            ]({
-              name: member.name || member.email || member.id,
-            }),
-          });
-          membersService.members.revalidate();
-        }
-      })
-      .catch(error => {
-        notify.error({
-          title: 'Operation failed',
-          message: error.message,
-        });
-      });
-  }, [member, membersService, t]);
 
   const handleChangeToMember = useCallback(() => {
     membersService
@@ -273,7 +250,7 @@ export const MemberOptions = ({
             WorkspaceMemberStatus.NeedMoreSeat,
             WorkspaceMemberStatus.NeedMoreSeatAndReview,
             WorkspaceMemberStatus.Pending,
-          ].includes(member.status),
+          ].includes(member.status ?? WorkspaceMemberStatus.Pending),
       },
       {
         label: t['com.affine.payment.member.team.remove'](),
@@ -284,14 +261,6 @@ export const MemberOptions = ({
             member.status === WorkspaceMemberStatus.Accepted &&
             member.permission !== Permission.Owner &&
             member.permission !== Permission.Admin),
-      },
-      {
-        label: t['com.affine.payment.member.team.change.collaborator'](),
-        onClick: handleChangeToCollaborator,
-        show:
-          isOwner &&
-          member.status === WorkspaceMemberStatus.Accepted &&
-          member.permission === Permission.Admin,
       },
       {
         label: t['com.affine.payment.member.team.change.admin'](),
@@ -306,10 +275,14 @@ export const MemberOptions = ({
       {
         label: t['com.affine.payment.member.team.change.member'](),
         onClick: handleChangeToMember,
+        // #215: 管理者にも出す。オーナーを譲ると元のオーナーは管理者になり、
+        // 通常のメンバーへ戻す手段がこれしか無い（以前の「協力者に変更」は
+        // Collaborator を送り、バックエンドの Permission に無いため必ず失敗した）
         show:
           isOwner &&
           member.status === WorkspaceMemberStatus.Accepted &&
-          member.permission === Permission.Read,
+          (member.permission === Permission.Read ||
+            member.permission === Permission.Admin),
       },
       {
         label: t['com.affine.payment.member.team.change.reader'](),
@@ -329,7 +302,6 @@ export const MemberOptions = ({
     handleApprove,
     handleAssignOwner,
     handleChangeToAdmin,
-    handleChangeToCollaborator,
     handleChangeToMember,
     handleChangeToReader,
     handleDecline,

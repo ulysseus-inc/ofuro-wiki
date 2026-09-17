@@ -14,7 +14,11 @@ import { OthersGroup } from './others';
 import * as styles from './style.css';
 import { SwipeDialog } from './swipe-dialog';
 import { UserProfile } from './user-profile';
-import { UserUsage } from './user-usage';
+
+// #105: 使用量の帯グラフ（旧 UserUsage）は消した。バックエンドが返すのは
+// AFFiNE クラウド版に形を合わせた固定値（上限 100GB・使用量は常に 0）で、
+// セルフホストの実態を表していない。実データは PC 版の
+// ワークスペース設定 → ストレージ（Blob 管理）で見る
 
 const MobileSetting = () => {
   const session = useService(AuthService).session;
@@ -23,7 +27,6 @@ const MobileSetting = () => {
   return (
     <div className={styles.root}>
       <UserProfile />
-      <UserUsage />
       <AppearanceGroup />
       <AboutGroup />
       <ExperimentalFeatureSetting />

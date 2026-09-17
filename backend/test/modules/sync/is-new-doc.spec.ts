@@ -10,7 +10,9 @@ describe('isNewDoc (#90)', () => {
       docSnapshot: { findFirst: jest.fn().mockResolvedValue(snapshot) },
       docUpdate: { findFirst: jest.fn().mockResolvedValue(update) },
     };
-    return { prisma, service: new SyncService(prisma) };
+    // #151: 版数の更新は本テストの関心事ではないため何もしないものを渡す
+    const discovery: any = { bump: jest.fn(), current: jest.fn() };
+    return { prisma, service: new SyncService(prisma, discovery) };
   };
 
   it('スナップショットも更新も無ければ新規', async () => {

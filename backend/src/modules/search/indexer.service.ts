@@ -6,7 +6,30 @@ interface BlockData {
   blockId: string;
   blockType: string;
   content: string;
+  /**
+   * #101: 画面がバックリンクの一覧に出す文。
+   *
+   * ⚠️ **空にしないこと。** 画面は空の参照を表示しない
+   * （`bi-directional-link-panel.tsx`）。リンクは1文字の埋め込みなので、
+   * ブロックの文字だけを入れるとほぼ空になる。
+   */
+  markdownPreview?: string;
+  /** #101: このブロックが参照しているページ。バックリンクに使う */
+  refDocId?: string;
+  parentBlockId?: string;
+  parentFlavour?: string;
 }
+
+/**
+ * #101: ページを埋め込むブロック。`prop:pageId` が参照先。
+ *
+ * ⚠️ `affine:embed-youtube` などの外部の埋め込みと混ぜないこと。
+ * あれは `prop:url` を持つだけで、ページ参照ではない。
+ */
+const EMBED_DOC_FLAVOURS = new Set([
+  'affine:embed-linked-doc',
+  'affine:embed-synced-doc',
+]);
 
 /** #91: 巨大な表で1レコードが肥大化しないための上限 */
 const MAX_DATABASE_TEXT_LENGTH = 10000;
@@ -74,6 +97,11 @@ export class IndexerService {
           title,
           content: block.content,
           blockType: block.blockType,
+          // #101: バックリンク用
+          refDocId: block.refDocId,
+          parentBlockId: block.parentBlockId,
+          parentFlavour: block.parentFlavour,
+          markdownPreview: block.markdownPreview ?? block.content ?? undefined,
         })),
       });
     } else if (title) {
@@ -95,17 +123,34 @@ export class IndexerService {
   }
 
   async indexAllDocuments(workspaceId: string) {
-    // Get all distinct docIds for this workspace from snapshots
-    const snapshots = await this.prisma.docSnapshot.findMany({
-      where: { workspaceId },
-      select: { docId: true },
-    });
+    // ⚠️ **スナップショットだけを見ないこと。**
+    // スナップショットは更新50回ごとにしか作られない（SNAPSHOT_THRESHOLD）。
+    // 見落とすと、それ未満のページが丸ごと索引から漏れる
+    // （開発DB実測: スナップショットあり37 / 更新ログのみ644・#101）
+    const [snapshots, updates] = await Promise.all([
+      this.prisma.docSnapshot.findMany({
+        where: { workspaceId },
+        select: { docId: true },
+      }),
+      this.prisma.docUpdate.findMany({
+        where: { workspaceId },
+        select: { docId: true },
+        distinct: ['docId'],
+      }),
+    ]);
+
+    const docIds = [
+      ...new Set([
+        ...snapshots.map((s) => s.docId),
+        ...updates.map((u) => u.docId),
+      ]),
+    ];
 
     this.logger.log(
-      `Reindexing workspace ${workspaceId}: ${snapshots.length} documents`,
+      `Reindexing workspace ${workspaceId}: ${docIds.length} documents`,
     );
 
-    for (const { docId } of snapshots) {
+    for (const docId of docIds) {
       try {
         await this.indexDocument(workspaceId, docId);
       } catch (err) {
@@ -331,6 +376,10 @@ export class IndexerService {
       const blocks = doc.getMap('blocks');
       if (!blocks) return results;
 
+      // ⚠️ 親は**先に一度だけ**引き当てる。ブロックごとに全体を探すと、
+      // ブロック数の**二乗**に比例して遅くなる（1000ブロックで100万回）
+      const parents = this.buildParentMap(blocks);
+
       for (const [blockId, value] of blocks.entries()) {
         if (!(value instanceof Y.Map)) continue;
 
@@ -345,11 +394,31 @@ export class IndexerService {
         }
         const content = parts.filter(Boolean).join(' ');
 
-        if (content) {
+        // #101: 参照先は1ブロックに複数ありうるため、参照ごとに1行にする。
+        // 1行に詰めると「どのリンクか」を返せず、バックリンクの一覧が作れない
+        const refs = this.extractRefDocIds(value, flavour);
+        const parent = parents.get(blockId);
+
+        for (const refDocId of refs) {
           results.push({
             blockId,
             blockType: flavour,
             content,
+            refDocId,
+            parentBlockId: parent?.blockId,
+            parentFlavour: parent?.flavour,
+            markdownPreview: this.buildLinkPreview(content, flavour),
+          });
+        }
+
+        // 参照が無い場合は、これまでどおり中身がある行だけを載せる
+        if (refs.length === 0 && content) {
+          results.push({
+            blockId,
+            blockType: flavour,
+            content,
+            parentBlockId: parent?.blockId,
+            parentFlavour: parent?.flavour,
           });
         }
       }
@@ -358,6 +427,82 @@ export class IndexerService {
     }
 
     return results;
+  }
+
+  /**
+   * #101: このブロックが参照しているページの一覧。
+   *
+   * | 種類 | どこに入るか |
+   * |---|---|
+   * | 本文中のリンク | 文字（`prop:text`）の装飾 `reference.pageId` |
+   * | 埋め込みページ | `prop:pageId` |
+   */
+  private extractRefDocIds(block: Y.Map<any>, flavour: string): string[] {
+    const refs: string[] = [];
+
+    if (EMBED_DOC_FLAVOURS.has(flavour)) {
+      const pageId = block.get('prop:pageId');
+      if (typeof pageId === 'string' && pageId) refs.push(pageId);
+    }
+
+    const text = block.get('prop:text');
+    if (text instanceof Y.Text) {
+      for (const delta of text.toDelta()) {
+        const reference = delta?.attributes?.reference;
+        const pageId = reference?.pageId;
+        if (typeof pageId === 'string' && pageId) refs.push(pageId);
+      }
+    }
+
+    // 同じページへの複数のリンクは1行にまとめる
+    return [...new Set(refs)];
+  }
+
+  /**
+   * #101: バックリンクの一覧に出す文。
+   *
+   * リンクだけのブロック（本文が無い）でも、何が参照しているか分かるようにする。
+   */
+  private buildLinkPreview(content: string, flavour: string): string {
+    const text = content.trim();
+    if (text) return text;
+    // 本文が無いリンク。ブロックの種類が分かれば、画面で位置を追える
+    return flavour === 'affine:embed-linked-doc' ||
+      flavour === 'affine:embed-synced-doc'
+      ? '（埋め込みページ）'
+      : '（リンク）';
+  }
+
+  /**
+   * 子ブロック → 親ブロック の対応表。
+   * 画面はこれで「どの段落からのリンクか」を示す。
+   *
+   * ```
+   * note-1 ─ sys:children ─▶ [block-1, block-2]
+   *   となれば block-1 → note-1、block-2 → note-1
+   * ```
+   */
+  private buildParentMap(
+    blocks: Y.Map<any>
+  ): Map<string, { blockId: string; flavour: string }> {
+    const parents = new Map<string, { blockId: string; flavour: string }>();
+
+    for (const [parentId, value] of blocks.entries()) {
+      if (!(value instanceof Y.Map)) continue;
+
+      const children = value.get('sys:children');
+      if (!(children instanceof Y.Array)) continue;
+
+      const parent = {
+        blockId: parentId,
+        flavour: (value.get('sys:flavour') as string) ?? '',
+      };
+      for (const childId of children.toArray()) {
+        if (typeof childId === 'string') parents.set(childId, parent);
+      }
+    }
+
+    return parents;
   }
 
   private extractText(block: Y.Map<any>): string | undefined {
