@@ -1,13 +1,18 @@
 # ofuro-wiki
 
 <p align="center">
+  <b>English</b> | <a href="README.ja.md">日本語</a>
+</p>
+
+<p align="center">
   <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
 </p>
 
 <p align="center">
-  <b>セルフホスト型の Notion オルタナティブ。外部送信ゼロ設計、MIT ライセンス。</b><br>
-  アイデアが湧き出てくる、セキュアな社内 Wiki プラットフォーム。<br>
-  お風呂（ofuro）のように、自然とアイデアが出てくる場所をイメージして。
+  <b>A self-hosted, privacy-first Notion alternative.</b><br>
+  <b>Zero external data transmission by design — MIT licensed.</b><br>
+  A secure wiki platform where ideas flow naturally, named after the Japanese bath
+  (<i>ofuro</i>) — a place where ideas come to you.
 </p>
 
 <p align="center">
@@ -17,61 +22,77 @@
 </p>
 
 <p align="center">
-  <b>日本語</b> | <a href="README.en.md">English</a>
-</p>
-
-<p align="center">
-  <img src="images/screenshot-editor.png" width="49%" alt="ofuro-wiki のエディタ画面">
-  <img src="images/screenshot-slash-menu.png" width="49%" alt="スラッシュコマンドによるブロック挿入">
+  <img src="images/screenshot-editor.png" width="49%" alt="The ofuro-wiki editor">
+  <img src="images/screenshot-slash-menu.png" width="49%" alt="Inserting blocks with slash commands">
 </p>
 
 ---
 
-## ライブデモ
+## Live demo
 
-インストール不要で、すぐに触れます。
+Try it right now — no installation required.
 
 **▶ [https://ofuro-wiki-demo.ulysseus.co.jp](https://ofuro-wiki-demo.ulysseus.co.jp)**
 
-| ログイン | |
+| Sign in | |
 |---|---|
-| メールアドレス | `demo@demo.com` |
-| パスワード | `demodemo` |
+| Email | `demo@demo.com` |
+| Password | `demodemo` |
 
-> 共用のデモ環境です。毎晩 3:00（JST）に初期状態へリセットされます。
-> 機密情報は入力しないでください。
+> This is a shared demo environment. It resets to its initial state every night at
+> 3:00 AM (JST). Please do not enter confidential information.
 
 ---
 
-## 特徴
+## Features
 
-- **Notion ライクなブロックエディタ** — BlockSuite による `/` コマンド・ドラッグ&ドロップ
-- **リアルタイム同期** — Yjs + Socket.IO による複数人同時編集
-- **全文検索** — PGroonga による日本語対応の高速検索
-- **シングルサインオン（SSO）** — OIDC 対応。Google・Keycloak 等のアカウントでサインイン（[設定手順](docs/sso-setup.md)）
-- **セルフホスト完結** — Docker 1コマンドで起動、外部サービス依存なし
-- **プライバシー重視** — テレメトリ・外部送信を完全無効化
+- **Notion-like block editor** — `/` commands and drag & drop, powered by BlockSuite
+- **Real-time collaboration** — simultaneous editing via Yjs + Socket.IO
+- **Per-page permissions** — grant read or write access page by page. A page you cannot
+  read does not appear in anyone's list: its **existence is hidden, not just its content**
+- **Full-text search and backlinks** — fast, Japanese-aware search powered by PGroonga.
+  Every page shows which pages link to it
+- **Works on phones** — the mobile build is served automatically based on the browser;
+  no app to install
+- **Audit log** — who did what, and when. Readable from the admin panel
+- **Single sign-on (SSO)** — OIDC support: sign in with Google, Keycloak, and other providers ([setup guide](docs/sso-setup.md))
+- **Fully self-hosted** — start with a single Docker command, no external service dependencies
+- **Privacy-first** — telemetry and outbound data transmission are disabled by design
 
-## 技術スタック
+## What's in v0.1.0
 
-| 区分 | 技術 |
-|------|------|
-| フロントエンド | AFFiNE (MIT) + BlockSuite (MPL-2.0) |
-| バックエンド | NestJS + GraphQL + Socket.IO（※独自開発） |
-| データベース | PostgreSQL + PGroonga（全文検索） |
-| 認証 | JWT |
-| インフラ | Docker / Docker Compose |
+The first release. Everything below ships in the box.
 
-> ※ AFFiNE のバックエンドは商用ライセンス（EE）のため、ofuro-wiki では
-> バックエンドを独自開発しています。これにより全体を MIT ライセンスで提供できます。
+| Area | What you get |
+|---|---|
+| **Writing** | Block editor with `/` commands, drag & drop, tables, code blocks, and a custom multi-column block. Import from Markdown, HTML, and Notion exports; export to PDF, Markdown, and HTML |
+| **Finding** | Japanese-aware full-text search (PGroonga), backlinks on every page, `@`-mentions that link pages and notify people, tags and folders |
+| **Sharing** | Workspaces with invitations and four roles (Admin / Owner / Member / Reader), per-page read and write permissions, read-only protection for pages that must not change |
+| **Privacy** | A page you cannot read never appears in your list — the title is not leaked. No telemetry, no outbound calls unless you turn a feature on |
+| **Operations** | Admin panel with user management, audit log, server settings, and backup / restore. Trash with restore and permanent delete. SSO via OIDC |
+| **Devices** | Desktop browsers and phones. The mobile build is served automatically based on the browser |
 
-## クイックスタート
+## Tech stack
 
-必要なのは **Docker だけ**です。ビルド済みの公開イメージを使うため、
-リポジトリの clone もビルドも不要です（**RAM 1GB + Swap 2GB の GCE e2-micro
-（無料枠）で稼働実績あり**）。
+| Area | Technology |
+|------|------------|
+| Frontend | AFFiNE (MIT) + BlockSuite (MPL-2.0) |
+| Backend | NestJS + GraphQL + Socket.IO (※ built in-house) |
+| Database | PostgreSQL + PGroonga (full-text search) |
+| Auth | JWT |
+| Infra | Docker / Docker Compose |
 
-### 1. ファイルの取得
+> ※ AFFiNE's backend is commercially licensed (EE), so it is not used. ofuro-wiki
+> implements its own backend, which is what makes it possible to offer the whole
+> project under the MIT License.
+
+## Quick start
+
+All you need is **Docker**. Prebuilt public images are used, so there is no
+need to clone the repository or build anything (**proven on a free-tier GCE
+e2-micro with 1GB RAM + 2GB swap**).
+
+### 1. Fetch the files
 
 ```bash
 mkdir ofuro-wiki && cd ofuro-wiki
@@ -79,123 +100,133 @@ curl -O https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/docker-co
 curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/backend/.env.example
 ```
 
-### 2. 環境変数の設定
+### 2. Configure environment variables
 
 ```bash
 cp backend/.env.example .env
 ```
 
-`.env` を開き、最低限以下を設定してください：
+Open `.env` and set at least the following:
 
 ```bash
-JWT_SECRET=<openssl rand -base64 48 で生成>
-POSTGRES_PASSWORD=<openssl rand -base64 24 で生成>
+JWT_SECRET=<generate with: openssl rand -base64 48>
+POSTGRES_PASSWORD=<generate with: openssl rand -base64 24>
 BASE_URL=https://wiki.example.com
 ADMIN_EMAIL=admin@example.com
 ```
 
-さらに、使用するビルド済みイメージを追記します：
+Then append the prebuilt image references:
 
 ```bash
 APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
 POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
 ```
 
-### 3. 起動
+### 3. Start
 
 ```bash
 docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-> DB スキーマは初回起動時に自動構築されます（手動マイグレーション不要）。
+> The database schema is set up automatically on first start (no manual
+> migration needed).
 
-> **ソースからビルドしたい場合**: リポジトリを clone して `docker compose build`
-> （RAM 4GB 以上推奨）。詳細は [デプロイガイド](docs/deploy/README.md) を参照。
+> **Want to build from source?** Clone the repository and run
+> `docker compose build` (4GB+ RAM recommended). See the
+> [deploy guide](docs/deploy/README.md) for details.
 
-### 4. 確認
+### 4. Verify
 
 ```bash
 curl http://localhost:3010/api/health
 ```
 
-ブラウザで `BASE_URL`（ローカルなら `http://localhost:3010`）にアクセスし、
-`ADMIN_EMAIL` のアドレスでサインアップすれば完了です。
+Open `BASE_URL` in your browser (locally, `http://localhost:3010`) and sign up with
+the `ADMIN_EMAIL` address to finish setup.
 
-## ロール体系
+## Roles
 
-| ロール | 権限 |
-|--------|------|
-| **Admin** | サーバー設定・全ユーザー管理 |
-| **Owner** | ワークスペース内ユーザー管理・メンバー招待・各種設定 |
-| **Member** | ドキュメントの読み書き |
-| **Reader** | 読み取り専用 |
+| Role | Permissions |
+|------|-------------|
+| **Admin** | Server settings and management of all users |
+| **Owner** | User management within a workspace, member invitations, settings |
+| **Member** | Read/write documents |
+| **Reader** | Read-only |
 
-Admin は環境変数 `ADMIN_EMAIL` で指定したアドレスで初回サインアップすると付与されます。
+Admin is granted to the address specified by the `ADMIN_EMAIL` environment variable
+when it signs up for the first time.
 
-## デプロイ
+## Deployment
 
-本番デプロイの詳細手順（Nginx / Caddy の設定、Swap、バックアップ等）は
-[docs/deploy/README.md](docs/deploy/README.md) を参照してください。
+For production deployment details (Nginx / Caddy configuration, swap setup,
+backups, etc.), see [docs/deploy/README.md](docs/deploy/README.md).
 
-### HTTP と HTTPS でのクリップボード動作の違い
+### Clipboard behavior: HTTP vs HTTPS
 
-ブラウザのセキュリティ仕様により、`navigator.clipboard` API は **HTTPS（またはlocalhost）でのみ** 利用可能です。
-ofuro-wiki は HTTP 環境でもクリップボードが使えるよう対応していますが、動作に差があります。
+Due to browser security policies, the `navigator.clipboard` API is available **only
+over HTTPS (or on localhost)**. ofuro-wiki supports clipboard use over HTTP as well,
+but the behavior differs:
 
-| 操作 | HTTPS / localhost | HTTP（IPアドレス等） |
-|------|:-----------------:|:--------------------:|
-| エディタ内コピー＆ペースト | ✅ フル機能 | ✅ 動作する |
-| 他アプリ（テキストエディタ等）へのペースト | ✅ フル機能 | ✅ プレーンテキストとして動作 |
-| 他アプリからエディタへのペースト | ✅ フル機能 | ✅ 動作する |
-| 別タブ・別ウィンドウ間のコピー＆ペースト | ✅ フル機能 | ❌ 動作しない |
+| Operation | HTTPS / localhost | HTTP (IP address, etc.) |
+|-----------|:-----------------:|:-----------------------:|
+| Copy & paste within the editor | ✅ Full | ✅ Works |
+| Paste into other apps (text editors, etc.) | ✅ Full | ✅ Works as plain text |
+| Paste from other apps into the editor | ✅ Full | ✅ Works |
+| Copy & paste across tabs/windows | ✅ Full | ❌ Not supported |
 
-> **本番・社内運用では HTTPS を強く推奨します。**
-> HTTP のみで運用する場合は [パターン C](docs/deploy/pattern-C.md) を参照してください。
+> **HTTPS is strongly recommended for production / organizational use.**
+> If you must run over HTTP only, see [Pattern C](docs/deploy/pattern-C.md).
 
-## セキュリティとプライバシー
+## Security & privacy
 
-ofuro-wiki は**外部への一切のデータ送信を行いません**。社内の機密情報を安心して管理できるよう、テレメトリ・トラッキングを設計レベルで完全に排除しています。
+ofuro-wiki **does not send any data to external services**. Telemetry and tracking
+are eliminated by design so that confidential information can be managed safely.
 
-| 対策 | 内容 |
-|------|------|
-| **テレメトリ完全排除** | 上流の AFFiNE に含まれる Mixpanel・Sentry 等のテレメトリコードをすべて no-op スタブに置換。トラッキング関数は呼び出しても何も実行されません |
-| **外部エンドポイントなし** | テレメトリ送信先 URL・API キー・DSN 等の設定値を一切保持しません |
-| **Sentry 無効化** | エラー報告の外部送信を完全に無効化。`sentry.init()` は呼び出されません |
-| **localStorage 汚染なし** | テレメトリ用のクライアント ID・セッション ID 等をブラウザに保存しません |
-| **エアギャップ対応** | インターネット接続なしの完全閉域環境でも動作します |
+| Measure | Details |
+|---------|---------|
+| **Telemetry fully removed** | All telemetry code from upstream AFFiNE (Mixpanel, Sentry, etc.) is replaced with no-op stubs. Tracking functions do nothing when called |
+| **No external endpoints** | No telemetry URLs, API keys, or DSNs are stored |
+| **Sentry disabled** | Error reporting to external services is fully disabled; `sentry.init()` is never called |
+| **No localStorage pollution** | No telemetry client/session IDs are stored in the browser |
+| **Air-gap ready** | Runs in fully offline, closed networks |
 
-> フォーク元の AFFiNE フロントエンドには 100 以上のファイルにトラッキング呼び出しが残っていますが、すべて no-op（何もしない関数）に差し替え済みです。コードパス上でイベント送信は一切発生しません。あわせて、コードプレビューの外部サンドボックス（affine.run）・外部 Web フォント（cdn.affine.pro / Google Fonts）といった**アプリ起因の外部読み込みも削除**しています。
+> Upstream AFFiNE's frontend has tracking calls in 100+ files, but all of them are
+> replaced with no-ops; no events are emitted on any code path. App-initiated external
+> loads — the code-preview external sandbox (affine.run) and external web fonts
+> (cdn.affine.pro / Google Fonts) — have also been removed.
 
-> **補足（ユーザー操作起因の外部読み込みについて）**: 上記の「外部送信ゼロ」は、ユーザーが意図せず発生するテレメトリ・phone-home を設計レベルで排除することを指します。ユーザー自身が文書に外部コンテンツ（YouTube 動画の埋め込み・外部画像 URL 等）を挿入した場合、その表示時には当該コンテンツが提供元から読み込まれます。完全閉域での運用を徹底する場合は、リバースプロキシや CSP（`connect-src`/`frame-src` 等）で外部宛先を制限してください。
+> **Note (user-initiated external loads):** "Zero outbound transmission" refers to
+> eliminating telemetry / phone-home that occurs without the user's intent. If a user
+> embeds external content in a document (e.g. a YouTube video or an external image URL),
+> that content is loaded from its origin when displayed. For strictly closed-network
+> operation, additionally restrict outbound destinations with a reverse proxy or CSP
+> (`connect-src` / `frame-src`, etc.).
 
-### リンクプレビュー・リッチ埋め込み（既定 OFF）
+## Development
 
-ブックマークや埋め込みブロック（YouTube・GitHub・Figma・Loom 等）のリッチ表示（タイトル・サムネイル・説明）には、対象 URL の OGP メタデータ取得が必要です。ofuro-wiki は上流 AFFiNE の**外部 Worker を使わず自サーバー内**（`/api/worker/link-preview`・`/api/worker/image-proxy`）で完結させています。
+For local development setup (dependency installation, database, migrations, dev servers,
+and E2E tests), see [docs/development.md](docs/development.md).
 
-- **既定は OFF**（no-op）で、サーバーから外部への接続は発生しません（**外部送信ゼロを維持**）。この場合、埋め込みの iframe 再生などは動きますが、リッチなプレビューカードは表示されません。
-- **管理者（Admin ロール）が管理画面 →「サーバー設定」→「リンクプレビュー・リッチ埋め込み」を ON** にすると、ユーザーが貼り付けた URL について**サーバーがその外部サイトへ接続**してメタデータ・画像を取得します（＝ユーザー操作起因の外部送信）。Admin 以外のユーザーはこの設定を変更できません。SSRF 対策（内部アドレス遮断・リダイレクト再検証・サイズ/タイムアウト上限）を実装しています。
-- 完全閉域運用を維持したい場合は **OFF のまま**にしてください。
+## Contributing
 
-## 開発
+**Bug reports and feature requests are welcome via [Issues](../../issues).**
+However, to keep things stable in the early stage, **external Pull Requests are not
+being accepted at this time** (code changes are made by the maintainers only; this
+policy may change in the future).
 
-ローカルでの開発環境セットアップ（依存インストール・DB・マイグレーション・dev サーバ起動・E2E）は [docs/development.md](docs/development.md) を参照してください。
+- Details & policy: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- Reporting security vulnerabilities (**do not open a public issue**): [SECURITY.md](SECURITY.md)
 
-## コントリビューション
+## License
 
-**バグ報告・機能提案は [Issue](../../issues) で歓迎します。**
-ただし公開初期は運用安定のため、**外部からの Pull Request は現在受け付けていません**
-（コード変更はメンテナのみ。方針は今後変更される場合があります）。
+ofuro-wiki: **MIT License** — see [LICENSE](LICENSE).
 
-- 詳細・方針: [CONTRIBUTING.md](CONTRIBUTING.md)
-- 行動規範: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- セキュリティ脆弱性の報告（**公開 Issue にしないでください**）: [SECURITY.md](SECURITY.md)
+This project is derived from [AFFiNE](https://github.com/toeverything/AFFiNE) (frontend:
+MIT). Files originating from the [BlockSuite](https://github.com/toeverything/blocksuite)
+editor are licensed under **MPL-2.0** (per file). It also includes components such as
+libvips (LGPL-3.0).
 
-## ライセンス
-
-ofuro-wiki 本体: **MIT License** — 詳細は [LICENSE](LICENSE) を参照。
-
-本プロジェクトは [AFFiNE](https://github.com/toeverything/AFFiNE)（フロントエンド: MIT）の派生で、エディタの [BlockSuite](https://github.com/toeverything/blocksuite) 由来ファイルは **MPL-2.0**（ファイル単位）です。その他、libvips（LGPL-3.0）等を含みます。
-
-- 第三者依存のライセンス監査結果: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)
-- 各コンポーネントの帰属表示: [NOTICE](NOTICE)
+- Third-party dependency license audit: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md)
+- Component attributions: [NOTICE](NOTICE)
