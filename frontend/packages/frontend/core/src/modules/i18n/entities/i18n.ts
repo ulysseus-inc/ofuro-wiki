@@ -10,6 +10,7 @@ import { effect, Entity, fromPromise, LiveData } from '@toeverything/infra';
 import { catchError, EMPTY, exhaustMap } from 'rxjs';
 
 import type { GlobalCache } from '../../storage';
+import { pickInitialLanguage } from '../initial-language';
 
 export type LanguageInfo = {
   key: Language;
@@ -60,7 +61,16 @@ export class I18n extends Entity {
   }
 
   init() {
-    this.changeLanguage(this.currentLanguageKey$.value ?? 'ja');
+    // #245: 保存された設定が無ければ、ブラウザの言語に合わせる。
+    // 既定を 'ja' に固定していたため、英語圏の人が開いても
+    // **日本語の画面で始まっていた**（設定から変えられることに気づけない）
+    this.changeLanguage(
+      pickInitialLanguage(
+        this.currentLanguageKey$.value,
+        typeof navigator === 'undefined' ? [] : (navigator.languages ?? []),
+        Object.keys(SUPPORTED_LANGUAGES)
+      )
+    );
   }
 
   changeLanguage = effect(

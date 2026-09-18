@@ -20,6 +20,12 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     permissions: ['clipboard-read', 'clipboard-write'],
+    // ⚠️ **日本語の利用者として動かす。** 画面の言語は、保存された設定が
+    // 無ければブラウザの言語に従う（#245）。ここを指定しないと実行環境の
+    // 言語で変わり、日本語の文言を見ているテストが落ちる。
+    // 言語そのものを見るテストは、各自で locale を指定すること
+    // （e2e/initial-language.spec.ts）
+    locale: 'ja-JP',
   },
   projects: [
     {
