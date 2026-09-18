@@ -1,15 +1,15 @@
 # ofuro-wiki
 
 <p align="center">
-  <a href="README.md">English</a> | <b>日本語</b>
-</p>
-
-<p align="center">
   <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
 </p>
 
 <p align="center">
-  <b>セルフホスト型の Notion オルタナティブ。外部送信ゼロ設計、MIT ライセンス。</b><br>
+  <a href="README.md">English</a> | <b>日本語</b>
+</p>
+
+<p align="center">
+  <b>セルフホスト型の Notion に代わる新しい選択肢。外部送信ゼロ設計、MIT ライセンス。</b><br>
   アイデアが湧き出てくる、セキュアな社内 Wiki プラットフォーム。<br>
   お風呂（ofuro）のように、自然とアイデアが出てくる場所をイメージして。
 </p>
@@ -21,8 +21,18 @@
 </p>
 
 <p align="center">
-  <img src="images/screenshot-editor.png" width="49%" alt="ofuro-wiki のエディタ画面">
+  <img src="images/screenshot-editor-ja.png" width="49%" alt="ofuro-wiki のエディタ画面">
   <img src="images/screenshot-slash-menu.png" width="49%" alt="スラッシュコマンドによるブロック挿入">
+</p>
+
+<p align="center">
+  <img src="images/screenshot-backlinks.png" width="70%" alt="バックリンク: どのページから参照されているかが出る">
+</p>
+
+<p align="center">
+  <img src="images/screenshot-mobile-ja.png" width="22%" alt="スマホでの表示">
+  <br>
+  <sub>スマホでも使えます。アプリの導入は不要です。</sub>
 </p>
 
 ---
@@ -47,8 +57,8 @@
 
 - **Notion ライクなブロックエディタ** — BlockSuite による `/` コマンド・ドラッグ&ドロップ
 - **リアルタイム同期** — Yjs + Socket.IO による複数人同時編集
-- **ページ単位の権限** — ページごとに読み書きを配れる。読めないページは一覧にも出ない
-  （**中身だけでなく、存在そのものを隠す**）
+- **ページ単位の権限** — ページごとに書き込み・参照の権限を設定できる。
+  権限のない利用者には、そのページは一覧にも出ない（**中身だけでなく、存在そのものを隠す**）
 - **全文検索とバックリンク** — PGroonga による日本語対応の高速検索。
   どのページから参照されているかが各ページに出る
 - **スマホで使える** — ブラウザに応じてスマホ用の画面を自動で配信。アプリの導入は不要
@@ -103,7 +113,14 @@ curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/uly
 cp backend/.env.example .env
 ```
 
-`.env` を開き、最低限以下を設定してください：
+`.env` を開き、最低限この4つを設定してください。
+
+| 変数 | 何を書くか | 決め方 |
+|---|---|---|
+| `JWT_SECRET` | ログイン状態の署名に使う秘密の文字列（32文字以上） | `openssl rand -base64 48` の出力をそのまま |
+| `POSTGRES_PASSWORD` | データベースのパスワード | `openssl rand -base64 24` の出力をそのまま |
+| `BASE_URL` | 利用者がブラウザで開く URL | 例: `https://wiki.example.com`。**末尾に `/` を付けない** |
+| `ADMIN_EMAIL` | 最初の管理者のメールアドレス | このアドレスでサインアップした人が Admin になる |
 
 ```bash
 JWT_SECRET=<openssl rand -base64 48 で生成>
@@ -111,6 +128,9 @@ POSTGRES_PASSWORD=<openssl rand -base64 24 で生成>
 BASE_URL=https://wiki.example.com
 ADMIN_EMAIL=admin@example.com
 ```
+
+> メール送信（SMTP）は任意です。未設定でも運用できます。
+> 設定できる項目の全体は [デプロイガイド](docs/deploy/README.md) を参照してください。
 
 さらに、使用するビルド済みイメージを追記します：
 

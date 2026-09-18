@@ -1,11 +1,11 @@
 # ofuro-wiki
 
 <p align="center">
-  <b>English</b> | <a href="README.ja.md">日本語</a>
+  <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
 </p>
 
 <p align="center">
-  <img src="images/ofuro-wiki_800x800.png" width="120" alt="ofuro-wiki logo" />
+  <b>English</b> | <a href="README.ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -24,6 +24,16 @@
 <p align="center">
   <img src="images/screenshot-editor.png" width="49%" alt="The ofuro-wiki editor">
   <img src="images/screenshot-slash-menu.png" width="49%" alt="Inserting blocks with slash commands">
+</p>
+
+<p align="center">
+  <img src="images/screenshot-backlinks.png" width="70%" alt="Backlinks: every page shows which pages link to it">
+</p>
+
+<p align="center">
+  <img src="images/screenshot-mobile.png" width="22%" alt="ofuro-wiki on a phone">
+  <br>
+  <sub>Works on phones too — no app to install.</sub>
 </p>
 
 ---
@@ -48,8 +58,8 @@ Try it right now — no installation required.
 
 - **Notion-like block editor** — `/` commands and drag & drop, powered by BlockSuite
 - **Real-time collaboration** — simultaneous editing via Yjs + Socket.IO
-- **Per-page permissions** — grant read or write access page by page. A page you cannot
-  read does not appear in anyone's list: its **existence is hidden, not just its content**
+- **Per-page permissions** — set read and write access on each page. A page you do not
+  have access to never appears in your list: its **existence is hidden, not just its content**
 - **Full-text search and backlinks** — fast, Japanese-aware search powered by PGroonga.
   Every page shows which pages link to it
 - **Works on phones** — the mobile build is served automatically based on the browser;
@@ -106,7 +116,14 @@ curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/uly
 cp backend/.env.example .env
 ```
 
-Open `.env` and set at least the following:
+Open `.env` and set at least these four.
+
+| Variable | What it is | How to choose it |
+|---|---|---|
+| `JWT_SECRET` | Secret used to sign sign-in sessions (32+ characters) | Paste the output of `openssl rand -base64 48` |
+| `POSTGRES_PASSWORD` | Database password | Paste the output of `openssl rand -base64 24` |
+| `BASE_URL` | The URL your users open in a browser | e.g. `https://wiki.example.com` — **no trailing slash** |
+| `ADMIN_EMAIL` | Email address of the first administrator | Whoever signs up with this address becomes Admin |
 
 ```bash
 JWT_SECRET=<generate with: openssl rand -base64 48>
@@ -114,6 +131,9 @@ POSTGRES_PASSWORD=<generate with: openssl rand -base64 24>
 BASE_URL=https://wiki.example.com
 ADMIN_EMAIL=admin@example.com
 ```
+
+> Email (SMTP) is optional — ofuro-wiki runs fine without it.
+> See the [deploy guide](docs/deploy/README.md) for every available setting.
 
 Then append the prebuilt image references:
 

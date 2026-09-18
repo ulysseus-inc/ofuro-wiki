@@ -3,6 +3,7 @@ import archiver from 'archiver';
 import * as unzipper from 'unzipper';
 import { PrismaService } from '../../prisma.service';
 // #151: 取り込みで doc が増える＝Index の内容が変わる
+import { isUserDoc } from '../sync/user-doc';
 import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 import { BlobService } from '../blob/blob.service';
 import { mergeUpdates } from '../sync/yjs.utils';
@@ -192,6 +193,9 @@ export class BackupService {
     this.logger.log(`Importing workspace for user ${userId}`);
 
     // 1. Parse ZIP
+    // #241: 取り込んだページは、あとで索引の作り直し待ちに積む
+    const importedDocIds: string[] = [];
+
     const directory = await unzipper.Open.buffer(zipBuffer);
 
     // 2. Read and validate manifest
@@ -295,10 +299,25 @@ export class BackupService {
       const meta = docsMeta.find((m) => m.docId === originalDocId);
       // ⚠️ 版数は取り込みの最後に1回だけ上げる（下記）。
       // doc ごとに上げると取り込み中に何度も失効させることになる
+      importedDocIds.push(docId);
+
+      // ⚠️ #241: 内部データに台帳の行を作らない。
+      // 作ると一覧に「無題」として並ぶ（7月から本番で並んでいた）
+      if (!this.shouldCreateDocMeta(workspaceId, docId)) {
+        docCount++;
+        continue;
+      }
+
+      const { createdAt, updatedAt } = this.docTimestamps(meta);
       await this.prisma.docMeta.create({
         data: {
           workspaceId,
           docId,
+          // ⚠️ #241: 日時は書き出し元のものを引き継ぐ。
+          // 取り込んだ時刻で埋めると、既定の並び（更新日時の降順）が
+          // 取り込みの実行順になり、章の順番が崩れる
+          createdAt,
+          updatedAt,
           title: meta?.title ?? null,
           mode: meta?.mode ?? 'page',
           public: meta?.public ?? false,
@@ -339,6 +358,11 @@ export class BackupService {
     // ⚠️ #151: 取り込みで Index の内容が変わる。ここで1回だけ上げる
     await this.discovery.bump(workspaceId, 'doc-create');
 
+    // #241: 取り込んだページを検索の索引に載せる。
+    // ここを忘れると、取り込んだ内容は**誰かが編集するまで検索に出ない**
+    // （マニュアルもデモも出ていなかった）
+    await this.enqueueForIndexing(workspaceId, importedDocIds);
+
     this.logger.log(
       `Imported workspace ${workspaceId}: ${docCount} docs, ${blobCount} blobs`,
     );
@@ -349,6 +373,81 @@ export class BackupService {
       docCount,
       blobCount,
     };
+  }
+
+  /**
+   * #241: 利用者に見せる doc か（台帳にも索引にも、これが通ったものだけ載せる）。
+   *
+   * ⚠️ 内部データ（ワークスペース自身の doc・`db$...` 等）を通すと、
+   * 一覧に「無題」として並び、索引の巡回もむだに拾う。
+   * **判定はここ1か所**（レビュー指摘・2026-09-18）。
+   */
+  private shouldCreateDocMeta(workspaceId: string, docId: string): boolean {
+    return isUserDoc(workspaceId, docId);
+  }
+
+  /**
+   * #241: 台帳に入れる日時。書き出し元の値を引き継ぐ。
+   *
+   * ⚠️ 取り込んだ時刻で埋めると、既定の並び（更新日時の降順）が
+   * 取り込みの実行順になり、章の順番が崩れる。
+   */
+  private docTimestamps(meta?: { createdAt?: string; updatedAt?: string }): {
+    createdAt: Date;
+    updatedAt: Date;
+  } {
+    const now = new Date();
+    // ⚠️ 壊れた値は Invalid Date になり、そのまま渡すと Prisma が例外を投げて
+    // **取り込み全体が失敗する**。古いバックアップや手で編集された zip でも通す
+    const parse = (v?: string): Date => {
+      // ⚠️ 文字列以外は受け付けない。数値を渡すと `new Date(12345)` が
+      // **1970年の日付として通ってしまう**（型に反する値が黙って残る）
+      if (!v || typeof v !== 'string') return now;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? now : d;
+    };
+    return {
+      createdAt: parse(meta?.createdAt),
+      updatedAt: parse(meta?.updatedAt),
+    };
+  }
+
+  /**
+   * #241: 取り込んだページを「索引の作り直し待ち」に積む。
+   *
+   * 索引そのものはここで作らない。#101 の巡回が静まってから作る仕組みに乗せる
+   * （取り込みの最中に重い索引付けをしない）。
+   *
+   * ⚠️ **失敗しても取り込みは失敗させない。** 索引は後から作り直せるが、
+   * 取り込みの巻き戻しは高くつく。
+   */
+  private async enqueueForIndexing(
+    workspaceId: string,
+    docIds: string[],
+  ): Promise<void> {
+    const now = new Date();
+    for (const docId of docIds) {
+      // ⚠️ 内部データは索引に載らない。印を立てると巡回がむだに拾う
+      if (!this.shouldCreateDocMeta(workspaceId, docId)) continue;
+      try {
+        await this.prisma.searchIndexQueue.upsert({
+          where: { workspaceId_docId: { workspaceId, docId } },
+          create: {
+            workspaceId,
+            docId,
+            pendingGeneration: 1n,
+            indexedGeneration: 0n,
+            pendingAt: now,
+          },
+          update: {
+            pendingGeneration: { increment: 1 },
+            pendingAt: now,
+          },
+        });
+      } catch (e) {
+        this.logger.warn(`索引の作り直し待ちに積めませんでした: ${docId}`, e);
+      }
+    }
   }
 
   /**

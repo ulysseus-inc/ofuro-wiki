@@ -1,3 +1,4 @@
+import { MANUAL_WORKSPACE_ID_PREFIX } from '../../common/manual-workspace-id';
 import { createHash } from 'node:crypto';
 
 import { Injectable } from '@nestjs/common';
@@ -18,7 +19,7 @@ export class ManualWorkspaceService {
   /** システムアカウントの既知メール（ログイン不可）。 */
   static readonly SYSTEM_EMAIL = 'manual-system@ofuro-wiki.local';
   /** マニュアルWSの表示名。 */
-  static readonly WORKSPACE_NAME = '📖 マニュアル';
+  static readonly WORKSPACE_NAME = '📖 Manual';
   /**
    * マニュアルWSの ID を内容バージョンから決める。
    * - 先頭を all-f 固定にし、フロントの workspace.id ソートで常に最下部に来るようにする。
@@ -29,7 +30,7 @@ export class ManualWorkspaceService {
   static workspaceIdForVersion(version: string): string {
     const h = createHash('sha256').update(version).digest('hex');
     // ffffffff-ffff-4fff-bfff-XXXXXXXXXXXX（version=4, variant=b の有効な UUID）
-    return `ffffffff-ffff-4fff-bfff-${h.slice(0, 12)}`;
+    return `${MANUAL_WORKSPACE_ID_PREFIX}${h.slice(0, 12)}`;
   }
 
   constructor(

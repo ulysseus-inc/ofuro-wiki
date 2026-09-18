@@ -152,6 +152,8 @@ test.describe('同期の整合', () => {
       await client.page.waitForTimeout(1_000);
 
       const offline = `offline-${Date.now()}`;
+      // ⚠️ 書いた時刻を控える。サーバーの更新日時がこれに追いついたら「届いた」
+      const offlineWrittenAt = Date.now();
       await typeIntoDoc(client.page, offline);
 
       // 復帰
@@ -167,7 +169,30 @@ test.describe('同期の整合', () => {
       });
 
       // ⚠️ **画面だけでは足りない。** ブラウザの手元に残っているだけで、
-      // サーバーへ届いていない可能性がある。読み込み直して確かめる
+      // サーバーへ届いていない可能性がある。
+      //
+      // ⚠️ **届く前に読み込み直さないこと。** 復帰後の再送がいつ終わるかは
+      // 機械の負荷に左右される。固定の待ち時間で読み込み直すと
+      // **データが消えていないのに落ち**、読み込みを繰り返すと今度は
+      // 未送信のぶんを毎回捨ててしまい**永久に届かない**
+      // （2026-09-18 に両方踏んだ）。
+      //
+      // まずサーバー側の更新日時が進むのを待つ（画面には触らない）。
+      const m = client.page.url().match(/\/workspace\/([^/]+)\/([^/?#]+)/);
+      expect(m).toBeTruthy();
+      const [, wsId, docId] = m as RegExpMatchArray;
+
+      await expect
+        .poll(
+          async () => {
+            const meta = await readUpdated(client.page, wsId, docId);
+            return meta ? new Date(meta.updatedAt).getTime() : 0;
+          },
+          { timeout: 90_000, intervals: [2_000] }
+        )
+        .toBeGreaterThanOrEqual(offlineWrittenAt);
+
+      // 届いたことを確かめたうえで、読み込み直して本文を見る
       await client.page.reload();
       await client.page.waitForLoadState('domcontentloaded');
       await expect(client.page.locator(`text=${offline}`).first()).toBeVisible({

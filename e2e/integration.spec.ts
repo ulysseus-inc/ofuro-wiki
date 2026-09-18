@@ -713,7 +713,8 @@ test.describe('バックエンド API', () => {
     sharedPage: page,
   }) => {
     // #72 マニュアル専用WS。workspaces 取得で各ユーザーが Reader として遅延参加し、
-    // 「📖 マニュアル」が固定 all-f UUID（一覧最下部）で現れ、編集不可であること。
+    // 「📖 Manual」が固定 all-f UUID（一覧最下部）で現れ、編集不可であること。
+    // ⚠️ 名前は #241 で日英併記にしたときに「📖 マニュアル」から変えた。
     // ※ backend/seed/manual.zip がある環境でのみマニュアルWSが作られる。
     const list = await graphqlQuery(page, '{ workspaces { id name } }');
     expect(list.errors).toBeUndefined();
@@ -724,8 +725,8 @@ test.describe('バックエンド API', () => {
     // seed 未投入の環境ではマニュアルWSが無いのでスキップ（機構は他テストで担保）。
     test.skip(!manual, 'マニュアルWSが未シード（backend/seed/manual.zip 無し）');
 
-    // 表示名が「📖 マニュアル」であること。
-    expect(manual!.name).toContain('マニュアル');
+    // 表示名が「📖 Manual」であること。
+    expect(manual!.name).toContain('Manual');
 
     // Reader は編集不可（Doc_Update=false）＝バックエンド強制の読み取り専用。
     //

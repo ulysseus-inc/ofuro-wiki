@@ -57,34 +57,19 @@ docker --version && docker compose version
 > [Docker 公式ドキュメント](https://docs.docker.com/engine/install/) に従い
 > `docker-ce` + `docker-compose-plugin` をインストールしてください。
 
-### 1. リポジトリの取得
+### 1. ファイルの取得
+
+**方法①（ビルド済みイメージ・推奨）を使う場合は、リポジトリの clone は不要です。**
+必要なのは `docker-compose.yml` と設定のひな形だけです。
 
 ```bash
-git clone <your-repo-url> ofuro-wiki
-cd ofuro-wiki
+mkdir ofuro-wiki && cd ofuro-wiki
+curl -O https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/docker-compose.yml
+curl --create-dirs -o backend/.env.example \
+  https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/backend/.env.example
 ```
 
-> **プライベートリポジトリの場合**
->
-> `https://` クローンには認証が必要です。以下のいずれかの方法で認証してください。
->
-> **方法①：Personal Access Token (PAT)**
-> ```bash
-> git clone https://<TOKEN>@github.com/<org>/<repo>.git ofuro-wiki
-> ```
-> PAT は GitHub → Settings → Developer settings → Personal access tokens で発行。
-> 必要スコープ: `repo`（または `read:packages` のみの読み取り専用 PAT）。
->
-> **方法②：SSH Deploy Key**
-> ```bash
-> # Deploy Key を作成
-> ssh-keygen -t ed25519 -C "deploy-key" -f ~/.ssh/ofuro_wiki_deploy
-> # 公開鍵を GitHub リポジトリの Settings → Deploy keys に登録
-> # SSH クローン
-> git clone git@github.com:<org>/<repo>.git ofuro-wiki
-> ```
->
-> PAT はチャット・ログ等に貼り付けた場合、**使用後すぐに失効させる**こと。
+ソースからビルドする（方法②）場合は、代わりにリポジトリを clone します。手順は 3 章の方法②に記載。
 
 ### 2. 環境変数の設定
 
@@ -147,17 +132,25 @@ docker compose pull app postgres
 docker compose up -d --no-build
 ```
 
-> **postgres イメージ（#26）**: pgroonga（全文検索）+ pgvector（意味検索）を同梱した
+> **postgres イメージ**: pgroonga（全文検索）+ pgvector（意味検索）を同梱した
 > 独自イメージです。初期化SQLもイメージに含まれます。
 
 #### 方法②：サーバー上でビルドする
 
-ソースからビルドしたい場合はこちら。
+ソースからビルドしたい場合はこちら。**この方法だけリポジトリの clone が要ります。**
 
 ```bash
+git clone https://github.com/ulysseus-inc/ofuro-wiki.git ofuro-wiki
+cd ofuro-wiki
 docker compose build
 docker compose up -d
 ```
+
+> **スマホ版も一緒にビルドされます。** PC 用とスマホ用は別々のビルドで、
+> 既定では両方作ります（`SKIP_MOBILE=false`）。スマホからの接続では、
+> サーバーがブラウザを見てスマホ用の画面を返します。
+> ビルド時間を詰めたい場合は `docker compose build --build-arg SKIP_MOBILE=true`
+> で省けますが、**その場合スマホからも PC 用の画面が返ります**（エラーにはなりません）。
 
 > **注意（低スペックサーバー）**: webpack ビルドは RAM 2GB 以上を消費します。
 > RAM が 1GB 程度の VPS では OOM でビルドが強制終了します。
@@ -203,6 +196,16 @@ curl http://localhost:3010/api/health
 docker compose logs -f app
 ```
 
+⚠️ **起動には数分かかります**（DB の移行の適用 ＋ アプリの起動）。
+小さなサーバーほど遅く、**RAM 1GB のマシンで約4分**が実測値です。
+その間 `docker compose ps` は **unhealthy** と表示しますが、異常ではありません。
+ログに次の行が出ていれば起動しており、まもなく healthy に変わります。
+
+```
+Nest application successfully started
+ofuro-wiki backend running on port 3010
+```
+
 ブラウザで `BASE_URL` にアクセスし、`ADMIN_EMAIL` でサインアップできれば完了です。
 
 > **DB の初期化について**: スキーマ構築は 2 段階で行われます。
@@ -212,7 +215,7 @@ docker compose logs -f app
 > で適用されます（冪等。未適用のマイグレーションのみ適用されるため、毎回の起動や
 > バージョンアップでも安全です）。手動でのマイグレーション操作は不要です。
 >
-> **最小権限化（#34）を行う場合**: `migrate deploy` は DDL を実行するため DDL 権限が
+> **最小権限化を行う場合**: `migrate deploy` は DDL を実行するため DDL 権限が
 > 必要です。Docker Compose 環境で runtime の接続を非superuser（`ofuro_app`）に絞る場合は、
 > `.env` に **`DOCKER_DATABASE_URL`**（非superuser・`@postgres:5432`）と
 > **`DOCKER_MIGRATE_DATABASE_URL`**（DDL 権限を持つ `ofuro`）を設定してください。
@@ -225,7 +228,7 @@ docker compose logs -f app
 
 ---
 
-## ログイン試行の制限（#93）
+## ログイン試行の制限
 
 パスワードの総当たりを抑止するため、以下が既定で有効です。**設定は不要**です。
 
@@ -261,7 +264,7 @@ Nginx / Caddy 等の背後で動かす場合、既定のままでは**全アク�
 |---|---|
 | **監査ログ** | 発信元がすべてプロキシの IP になり、**誰がどこから操作したか追えない** |
 | **レート制限** | 「利用者ごと」ではなく**全員の合計**で働く。1人の連続失敗で**全員が締め出される** |
-| **攻撃の検知（#117）** | 通知が「攻撃元IPを遮断」と案内するのに、**その IP が取れない** |
+| **攻撃の検知** | 通知が「攻撃元IPを遮断」と案内するのに、**その IP が取れない** |
 
 `.env` に以下を設定してください。
 
@@ -303,12 +306,10 @@ docker compose logs app | grep -E "Failed sign-in|Account locked|ThrottlerExcept
 
 ---
 
-## 不審なログイン試行の検知と通知（#117）
+## 不審なログイン試行の検知と通知
 
-**#93 の制限は攻撃を止めますが、それだけでは誰も気づきません。**
+**ログイン試行の回数制限は攻撃を止めますが、それだけでは誰も気づきません。**
 5分ごとに直近60分を評価し、条件に当てはまれば**管理者全員にメールで通知**します。
-
-設計の詳細は [`docs/intrusion-detection.md`](../intrusion-detection.md) を参照してください。
 
 ### 検知する4パターン
 

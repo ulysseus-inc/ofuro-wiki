@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { isManualWorkspace } from '../../common/manual-workspace-id';
 import { PrismaService } from '../../prisma.service';
 import {
   type DocAction,
@@ -101,6 +102,20 @@ export class PermissionService {
     docId: string,
     userId: string,
   ): Promise<DocRole | null> {
+    // ⚠️ #241: マニュアルは**誰にも書かせない**。Admin のバイパスより先に置く。
+    // 出荷物（backend/seed/manual.zip）であり、更新のたびにワークスペースごと
+    // 作り直される。書けてしまうと、その編集は次の更新で**黙って消える**
+    if (isManualWorkspace(workspaceId)) {
+      // ⚠️ **Admin の読み取りまでは奪わない。** 遅延参加の前や API から直接触る場合に
+      // 読めなくなると、調査・復旧の手段を失う（レビュー指摘・2026-09-18）
+      if (await this.isServerAdmin(userId)) return 'Reader';
+
+      const role = fromWorkspaceRole(
+        await this.getWorkspaceRole(workspaceId, userId),
+      );
+      return role === null ? null : 'Reader';
+    }
+
     // ① バイパス。運用上の最終手段（復旧・調査）
     if (await this.isServerAdmin(userId)) return 'Owner';
 
