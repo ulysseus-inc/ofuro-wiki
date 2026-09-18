@@ -38,6 +38,55 @@
 
 ---
 
+## Why this exists
+
+We needed a **Notion alternative** for our internal knowledge — one we host ourselves, with no company
+documents leaving our own servers.
+
+SaaS was out. Among self-hostable options, [AFFiNE](https://github.com/toeverything/AFFiNE) had the editor
+we wanted, but **its server is licensed commercially**, so a fully permissive stack was not possible.
+
+So we took the MIT-licensed editor and wrote our own backend — NestJS + PostgreSQL + PGroonga — and
+released the whole system under MIT.
+
+Two things set it apart:
+
+- **Nothing is sent outside your server**
+- **A page you may not read is hidden entirely — not just its content, but its existence**
+
+We run it in production for our own team, every day.
+
+> **Status**: v0.1.0 is the first public release. Adoption outside our company is just starting;
+> issues and questions are welcome.
+
+## How it compares to other self-hostable wikis
+
+People who find ofuro-wiki are usually looking for a block-based wiki they can run on their own server.
+These three come up most often in that search: **AFFiNE** is the upstream this project forks, and
+**Outline** and **Docmost** are the established choices in the space.
+(Traditional wikis such as Wiki.js and BookStack are a different kind of editing experience, so they are not listed.)
+
+| | ofuro-wiki | AFFiNE (upstream) | Outline | Docmost |
+|---|---|---|---|---|
+| License (whole stack) | **MIT** | Editor MIT / **server commercial** | **BSL 1.1** (becomes Apache-2.0 in 2030-09) | AGPL-3.0 |
+| Self-host everything | **Yes** | Server needs a commercial license | Yes | Yes |
+| Editor | BlockSuite (from AFFiNE) | BlockSuite | Rich text | Rich text |
+| Per-page permissions | **Yes — a page you cannot read is not listed at all** | Workspace-level | Yes | Yes |
+| Outbound traffic by default | **None** (we measure it) | Telemetry code in the upstream codebase — removed in this fork | `ENABLE_UPDATES=true` by default: sends anonymized statistics to the maintainers | `DISABLE_TELEMETRY=false` by default |
+| Japanese full-text search | **Yes (PGroonga)** | Yes | Depends on setup | Depends on setup |
+
+Checked 2026-09 against each project's own published configuration
+([Outline `.env.sample`](https://github.com/outline/outline/blob/main/.env.sample),
+[Docmost `.env.example`](https://github.com/docmost/docmost/blob/main/.env.example)).
+**Every one of them can be turned off by configuration** — the table shows the *default*.
+These are differences, not verdicts: all of them are good projects, and ofuro-wiki exists because of AFFiNE.
+
+## Hiding existence, not just content
+
+Most wikis hide the *content* of a page you may not read, but still show its title in lists and search.
+ofuro-wiki does not: **a page you cannot read never appears in your list, your search results, or anywhere else.**
+The title never leaks. "Not shared with me" means "does not exist".
+
 ## Live demo
 
 Try it right now — no installation required.
