@@ -10,7 +10,9 @@ type BlockFlavour =
   | 'affine:paragraph'
   | 'affine:divider'
   | 'affine:image'
-  | 'affine:list';
+  | 'affine:list'
+  // #250: キャンバスの入れ物。無いとエッジレスが落ちる
+  | 'affine:surface';
 type ParagraphType = 'text' | 'h1' | 'h2' | 'h3';
 
 interface BlockSpec {
@@ -19,6 +21,26 @@ interface BlockSpec {
   children: string[];
   props: Record<string, unknown>;
 }
+
+/**
+ * #250: BlockSuite の **Boxed** 形式の空の入れ物。
+ *
+ * `prop:elements` はこの形でなければ画面が読まない。
+ * 形が違っても**エラーにならず黙って無視される**ので、気づきにくい。
+ *
+ * ```
+ *   Y.Map { type: '$blocksuite:internal:native$', value: Y.Map {} }
+ * ```
+ */
+function makeBoxedMap(): Y.Map<unknown> {
+  const boxed = new Y.Map<unknown>();
+  boxed.set('type', NATIVE_UNIQ_IDENTIFIER);
+  boxed.set('value', new Y.Map());
+  return boxed;
+}
+
+/** BlockSuite が Boxed を見分けるための印（framework/store/src/consts.ts）。 */
+const NATIVE_UNIQ_IDENTIFIER = '$blocksuite:internal:native$';
 
 function makeId(): string {
   return randomUUID().replace(/-/g, '').slice(0, 16);
@@ -216,11 +238,29 @@ export function markdownToYjsUpdate(title: string, markdown: string): Uint8Array
     }
   }
 
+  // #250: surface ブロック（キャンバスの入れ物）。
+  //
+  // ⚠️ **無いとエッジレスモードが落ちる。** 画面は新規作成のたびに作るが、
+  // ここで作り忘れていたため、内部API で入れたページ（マニュアル・デモ・移行分）は
+  // エッジレスで開くと真っ白になっていた（2026-09-19 に PC とスマホで確認）。
+  //   This doc is missing surface block in edgeless.
+  const surfaceId = makeId();
+  const surfaceBlock = buildBlock({
+    id: surfaceId,
+    flavour: 'affine:surface',
+    children: [],
+    props: {
+      'prop:elements': makeBoxedMap(),
+    },
+  });
+  blocksMap.set(surfaceId, surfaceBlock);
+
   // Page ブロック（ルート）
   const pageBlock = buildBlock({
     id: pageId,
     flavour: 'affine:page',
-    children: [noteId],
+    // ⚠️ surface を先に置く（画面が作る順序と同じ）
+    children: [surfaceId, noteId],
     props: {
       'prop:title': new Y.Text(title),
     },
@@ -240,6 +280,49 @@ export function markdownToYjsUpdate(title: string, markdown: string): Uint8Array
  * @param updates 適用する Yjs バイナリ群（snapshot を先頭、doc_updates を時系列順に渡す）
  * @returns title と markdown。ブロックが無ければ markdown は空文字。
  */
+/**
+ * #250: すでに保存されているページに surface を足すための差分を作る。
+ *
+ * ⚠️ **組み立て側を直しても、保存済みのページは直らない。**
+ * デモのシードや移行したページは、エッジレスで落ちたままになる
+ * （レビュー指摘・2026-09-19）。
+ *
+ * CRDT なので**差分を1つ足すだけ**でよく、既存の内容には触らない。
+ *
+ * @returns 足す差分。すでに surface があるか、page が無ければ `null`
+ */
+export function surfaceBackfillUpdate(doc: Y.Doc): Uint8Array | null {
+  const blocks = doc.getMap('blocks');
+
+  let pageId: string | null = null;
+  for (const [id, value] of blocks.entries()) {
+    const flavour = (value as Y.Map<unknown>).get?.('sys:flavour');
+    // ⚠️ すでにあるなら何もしない（何度流しても同じ結果にする）
+    if (flavour === 'affine:surface') return null;
+    if (flavour === 'affine:page') pageId = id;
+  }
+  if (!pageId) return null;
+
+  const before = Y.encodeStateVector(doc);
+  const surfaceId = makeId();
+
+  doc.transact(() => {
+    const surface = new Y.Map<unknown>();
+    blocks.set(surfaceId, surface);
+    surface.set('sys:id', surfaceId);
+    surface.set('sys:flavour', 'affine:surface');
+    surface.set('sys:children', new Y.Array<string>());
+    surface.set('prop:elements', makeBoxedMap());
+
+    const page = blocks.get(pageId!) as Y.Map<unknown>;
+    const children = page.get('sys:children');
+    // ⚠️ 先頭に入れる（画面が作る順序と同じ）
+    if (children instanceof Y.Array) children.insert(0, [surfaceId]);
+  });
+
+  return Y.encodeStateAsUpdate(doc, before);
+}
+
 export function yjsUpdateToMarkdown(updates: Uint8Array[]): { title: string; markdown: string } {
   const doc = new Y.Doc();
   for (const u of updates) {

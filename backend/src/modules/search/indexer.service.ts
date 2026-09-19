@@ -18,6 +18,13 @@ interface BlockData {
   refDocId?: string;
   parentBlockId?: string;
   parentFlavour?: string;
+  /**
+   * #248: 行の補足。いまはキャンバスの要素の ID を入れる。
+   *
+   * ⚠️ surface の要素は**ブロックではない**ので `blockId` には入れられない。
+   * どの図形が当たったかを画面へ渡せるよう、ここに残しておく。
+   */
+  additional?: string;
 }
 
 /**
@@ -102,6 +109,8 @@ export class IndexerService {
           parentBlockId: block.parentBlockId,
           parentFlavour: block.parentFlavour,
           markdownPreview: block.markdownPreview ?? block.content ?? undefined,
+          // #248: キャンバスの要素の ID
+          additional: block.additional,
         })),
       });
     } else if (title) {
@@ -411,6 +420,13 @@ export class IndexerService {
           });
         }
 
+        // #248: キャンバス（エッジレス）の文字は `surface` の要素に入る。
+        // ブロックではないので、ここで別に拾う
+        if (flavour === 'affine:surface') {
+          results.push(...this.extractSurfaceTexts(blockId, value));
+          continue;
+        }
+
         // 参照が無い場合は、これまでどおり中身がある行だけを載せる
         if (refs.length === 0 && content) {
           results.push({
@@ -427,6 +443,77 @@ export class IndexerService {
     }
 
     return results;
+  }
+
+  /**
+   * #248: キャンバス（エッジレス）の文字を取り出す。
+   *
+   * ⚠️ **`surface` の要素はブロックではない。** ブロックを辿るだけの走査では
+   * 図形のラベルも線のラベルも拾えず、**フロー図の中身がまるごと検索から漏れる**
+   * （2026-09-19 に実機で確認。docs/search-index.md 3-b）。
+   *
+   * ```
+   *   affine:surface
+   *     prop:elements（Y.Map。実データでは value を1段挟むこともある）
+   *       ├─ { type: 'brush' }                    ← 文字なし
+   *       ├─ { type: 'shape', text: Y.Text }      ← 図形のラベル
+   *       └─ { type: 'frame', title: Y.Text }     ← フレーム名
+   * ```
+   *
+   * ⚠️ **要素ごとに1行にする。** まとめると、検索結果でどの図形が当たったのか分からない。
+   */
+  private extractSurfaceTexts(
+    surfaceId: string,
+    surface: Y.Map<any>,
+  ): BlockData[] {
+    const results: BlockData[] = [];
+
+    const raw = surface.get('prop:elements');
+    if (!(raw instanceof Y.Map)) return results;
+    // 実データには prop:elements.value に本体が入る形もある
+    const inner = raw.get('value');
+    const elements = inner instanceof Y.Map ? inner : raw;
+
+    elements.forEach((element: unknown, key: string) => {
+      if (!(element instanceof Y.Map)) return;
+
+      // 文字は text（図形・線）か title（フレーム・グループ）に入る
+      const text = this.readSurfaceText(element, 'text')
+        ?? this.readSurfaceText(element, 'title');
+      if (!text) return;
+
+      const type = element.get('type');
+      results.push({
+        // ⚠️ **実在するブロックの ID を返すこと。** 検索結果を押すと
+        // `openDoc({ blockIds: [blockId] })` に渡されるため、架空の ID だと
+        // **その場所へ移動できない**（レビュー指摘・2026-09-19）。
+        // surface の要素はブロックではないので、surface ブロック自身を指す
+        blockId: surfaceId,
+        blockType: `surface:${typeof type === 'string' ? type : 'unknown'}`,
+        content: text,
+        // どの要素が当たったかは失わない。画面へ渡せるようにするのは今後
+        additional: JSON.stringify({ elementId: key }),
+      });
+    });
+
+    return results;
+  }
+
+  /** surface の要素が持つ文字。Y.Text と素の文字列の両方がありうる。 */
+  private readSurfaceText(
+    element: Y.Map<any>,
+    field: string,
+  ): string | undefined {
+    const value = element.get(field);
+    if (value instanceof Y.Text) {
+      const text = value.toString().trim();
+      return text || undefined;
+    }
+    if (typeof value === 'string') {
+      const text = value.trim();
+      return text || undefined;
+    }
+    return undefined;
   }
 
   /**

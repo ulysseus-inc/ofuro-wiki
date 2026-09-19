@@ -178,6 +178,49 @@ ID 上書き）。これで既存のフロントソートのまま**常に最下
 `db$...$docProperties` にも `doc_meta` を作っていたため、一覧に**「無題」が2つ**並んでいた
 （7月から本番でも並んでいた）。取り込み側で `isUserDoc` により弾く。
 
+### 4.4-d ⚠️ 組み立てたページには surface が要る（#250・2026-09-19）
+
+内部API（`/api/internal/docs/upsert`）でページを作ると、**エッジレスモードで
+開いたときに真っ白になって落ちていた**。`yjs-doc-builder.ts` が
+`affine:surface`（キャンバスの入れ物）を作っていなかったため。
+
+```
+This doc is missing surface block in edgeless.
+TypeError: Cannot read properties of undefined (reading 'children')
+```
+
+⚠️ **スマホ固有ではない。** PC でも同じで、影響を受けるのは
+**内部API で作ったページすべて**（マニュアル・デモのシード・移行分）。
+
+`prop:elements` は BlockSuite の **Boxed** 形式で持つ。
+
+```
+  Y.Map { type: '$blocksuite:internal:native$', value: Y.Map {} }
+```
+
+⚠️ **形を間違えても画面はエラーを出さず、黙って無視して同じ症状になる。**
+直したあとは必ず「実際にエッジレスが開くこと」を目で確かめること
+（`e2e/internal-api-edgeless.spec.ts` が回帰を見張る）。
+
+#### すでに保存されているページの補正（#250）
+
+組み立て側を直しても、**すでに保存済みのページは直らない**（レビュー指摘・2026-09-19）。
+一回限りの補正を用意してある。
+
+```bash
+# 下見（既定・何も書き換えない）
+node dist/src/scripts/backfill-surface.js
+
+# 実行
+node dist/src/scripts/backfill-surface.js --apply
+```
+
+⚠️ **既存の内容には触らない。** CRDT の差分を1行足すだけで、本文・題・履歴はそのまま。
+何度流しても増えない（surface があれば何もしない）。
+⚠️ 本番で流す前にバックアップを取る（docs/backup.md）。
+
+実測（開発環境・2026-09-19）: 679件を検査し15件を補正。2回目の下見は0件。
+
 ### 4.5 ガード（任意・MVP後）
 
 - ユーザーがマニュアルWSから**離脱**しても、次回ロードの遅延参加で自動復帰する（自己修復）。MVP では明示ガード不要。
