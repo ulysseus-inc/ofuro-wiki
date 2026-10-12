@@ -1,6 +1,4 @@
 import type { DocMode, RootBlockModel } from '@blocksuite/affine/model';
-import { NoteDisplayMode } from '@blocksuite/affine/model';
-import { Text } from '@blocksuite/affine/store';
 import { Entity } from '@toeverything/infra';
 import { throttle } from 'lodash-es';
 import type { Transaction } from 'yjs';
@@ -138,42 +136,6 @@ export class Doc extends Entity {
 
   addPriorityLoad(priority: number) {
     return this.store.addPriorityLoad(this.id, priority);
-  }
-
-  /**
-   * ルートページブロックが存在しないドキュメントを、空ページとして開けるよう自己修復する。
-   *
-   * インポート直後の Ctrl-Z などでルートページブロックごと削除されると、`blocks` が
-   * 空になりエディタが描画できず「ページが開かない」状態になる（NoPageRootError）。
-   * その場合に最低限のページ構造（page/surface/note/paragraph）を再生成して復旧する。
-   *
-   * 安全のため以下のゲートを設ける:
-   * - 同期完了を待ってから判定する（同期前の一時的なルート不在での誤発火を防ぐ）
-   * - readonly（Reader 権限・ゴミ箱・共有ビュー）では何もしない
-   * - ルートが既に存在する通常ドキュメントでは何もしない（冪等）
-   */
-  async ensureRootBlock() {
-    await this.waitForSyncReady();
-
-    const doc = this.blockSuiteDoc;
-    if (doc.readonly) return;
-    if (doc.getBlocksByFlavour('affine:page').length > 0) return;
-
-    const title = this.title$.value ?? '';
-    doc.load(() => {
-      const pageId = doc.addBlock('affine:page', {
-        title: new Text(title),
-      });
-      doc.addBlock('affine:surface' as never, {}, pageId);
-      const noteId = doc.addBlock(
-        'affine:note',
-        { displayMode: NoteDisplayMode.DocAndEdgeless },
-        pageId
-      );
-      doc.addBlock('affine:paragraph', {}, noteId);
-    });
-    // 再生成したルートを undo 不可にする（再度 Ctrl-Z で消えないように）
-    doc.history?.undoManager?.clear();
   }
 
   changeDocTitle(newTitle: string) {

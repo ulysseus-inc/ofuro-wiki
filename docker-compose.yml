@@ -13,6 +13,9 @@ services:
         # ローカルビルドでは開発版であることが分かる既定値になる。
         # 明示したい場合: APP_VERSION=0.1.0 docker compose build
         VERSION: ${APP_VERSION:-0.0.0-dev}
+    # サーバー再起動後に自動で起動する。`docker compose stop` で止めたものは起こさない。
+    # ⚠️ 指定が無いと、再起動後はアプリが止まったまま（2026-10-11 デモで発覚）
+    restart: unless-stopped
     ports:
       - "3010:3010"
     depends_on:
@@ -126,6 +129,8 @@ services:
     # 両方記載することで `docker compose build` はローカルビルド、`docker compose pull`
     # は GHCR から取得、と環境に応じて使い分けられる。
     image: ${POSTGRES_IMAGE:-ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest}
+    # app と同じ理由（上の注記を参照）
+    restart: unless-stopped
     build:
       context: ./docker/postgres
       dockerfile: Dockerfile

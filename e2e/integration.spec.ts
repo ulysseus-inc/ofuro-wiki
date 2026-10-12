@@ -23,6 +23,19 @@ import {
   getOwnedWorkspaceId,
 } from './helpers';
 
+/**
+ * #262: 開いたページが一覧へ戻されないか、見張る時間。
+ * 戻されるのは着地から約2秒後（取り込みの完了時）なので、余裕を見る。
+ */
+const BOUNCE_WATCH_MS = 8_000;
+
+/**
+ * #253: 修正前のエディタが、選択の無いコピーで書き込んでいたクリップボードの実物
+ * （2026-10-11 開発環境で採取）。中身は「本文の入れ物（note）だけで、その下が空」。
+ */
+const EMPTY_SLICE_CLIPBOARD_HTML =
+  '<div data-blocksuite-snapshot="N4Iglgtghg5gpgegA4DsYgFwhAGhAIQBkB5AYQGkBlAVQEkAVAUQUoDkBBABUoAlj7MIYAB0QAZxRQkYgBYB7AC6iMIkAoCeSOMtFiANmADG23KIDucgE4BrMUijHaAEx0g4AMwBGARihwoTgC0AJwAbABMAOyBACwArFCegZ5wAMzhyeGeAAzBhpEAHAlxhqI4ovbwzq4AbsEA4k4whDDEAFKhMgBerACONdSeKJSG+GWihnIoCnDTygDaqhparp56cobW4+AumKLb7npQNXIArpauUO7uYChwGCiKJuUgSJZy0srAAL4vhjJgPROSyzBYAXW+EJeazknjEX2+31wajgAA8FAgAPqPBRgKaBGbowJvOROU6GXFTQSqGGbeiaEwYUSEpSmNxOMC4tALeaiViKPEoAAE9DRCiFYDEQpxQrEpyQSCsMycQoUciFKSFaMVlmVQvc7wgQvw602lFOnOe8zBNqR3yAA"></div>';
+
 // ---------------------------------------------------------------------------
 // 共有ブラウザコンテキスト（IndexedDB 等のストレージを全テストで共有）
 // ---------------------------------------------------------------------------
@@ -1161,6 +1174,157 @@ test.describe('コピー＆ペースト', () => {
     // （HTTP環境では clipboardData 経由、HTTPS/localhost では navigator.clipboard 経由）
     expect(clipboardText.length).toBeGreaterThan(0);
   });
+
+  /**
+   * #253: ⚠️ **エディタで何も選んでいないときにコピーしても、クリップボードを壊さないこと。**
+   *
+   * エディタは Ctrl+C でブラウザ標準のコピーを止め、自分で書き込む。選択が無いときも
+   * そのまま書き込むため、**中身ゼロ**がクリップボードに入り、直前のコピーが消えていた。
+   * 画面では文字が選ばれて見えても、エディタ側では選択が外れていることがある
+   * （選んだあと Esc を押したときなど）。そのため「できるときとできないとき」があった。
+   */
+  test('エディタで何も選んでいないときのコピーで、クリップボードを壊さない', async ({ page }) => {
+    const errors: string[] = [];
+    const onError = (e: Error) => errors.push(e.message);
+    page.on('pageerror', onError);
+
+    try {
+      // 単独で動かせるよう、自分でサインインする
+      await signInViaAPI(page);
+      await enterOrCreateWorkspace(page);
+      await ensureSidebarOpen(page);
+      await createNewPage(page);
+      await page.waitForTimeout(2_000);
+
+      const editor = page.locator('[data-block-id] .inline-editor').first();
+      await editor.click();
+      await page.keyboard.type('選択なしコピーの確認', { delay: 20 });
+      await page.waitForTimeout(500);
+
+      const previous = `前のコピー-${Date.now()}`;
+      await page.evaluate(async text => {
+        await navigator.clipboard.writeText(text);
+      }, previous);
+
+      // エディタの選択を外した状態で Ctrl+C
+      await page.evaluate(() => {
+        const host = document.querySelector('editor-host') as any;
+        host.std.selection.clear();
+      });
+      await page.keyboard.press('Control+c');
+      await page.waitForTimeout(500);
+
+      // 直前のコピーが残っていること
+      const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+      expect(clipboardText).toBe(previous);
+
+      // 貼り付けると、その内容が入ること
+      // ⚠️ 貼り付けは、エディタの選択（貼る場所）が決まっていないと何もしない。
+      // 選択を消した直後なので、クリックが選択に反映されるのを待ってから貼る
+      await editor.click();
+      await page.keyboard.press('End');
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => {
+              const host = document.querySelector('editor-host') as any;
+              return host.std.selection.value.some((s: any) => s.type === 'text');
+            }),
+          { timeout: 10_000 }
+        )
+        .toBe(true);
+      await page.keyboard.press('Control+v');
+      await expect(page.locator(`text=${previous}`).first()).toBeVisible({ timeout: 10_000 });
+      expect(errors.filter(m => m.includes('flavour'))).toEqual([]);
+    } finally {
+      page.off('pageerror', onError);
+    }
+  });
+
+  /**
+   * #253: ⚠️ **エディタで何も選んでいないときの切り取りで、何も変えないこと。**
+   *
+   * コピーと違い、ブラウザ標準には任せない。標準の切り取りは画面の文字を直接消すため、
+   * エディタの中身（Yjs）を通らずに画面だけが変わる。修正前は中身ゼロを書き込み、
+   * 直前のコピーが消えていた。
+   */
+  test('エディタで何も選んでいないときの切り取りで、何も変えない', async ({ page }) => {
+    await signInViaAPI(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+
+    const body = `切り取りの確認-${Date.now()}`;
+    const editor = page.locator('[data-block-id] .inline-editor').first();
+    await editor.click();
+    await page.keyboard.type(body, { delay: 20 });
+    await page.waitForTimeout(500);
+
+    const previous = `前のコピー-${Date.now()}`;
+    await page.evaluate(async text => {
+      await navigator.clipboard.writeText(text);
+    }, previous);
+
+    // エディタの選択を外した状態で Ctrl+X
+    await page.evaluate(() => {
+      const host = document.querySelector('editor-host') as any;
+      host.std.selection.clear();
+    });
+    await page.keyboard.press('Control+x');
+    await page.waitForTimeout(500);
+
+    // クリップボードも本文も、そのまま
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toBe(previous);
+    await expect(page.locator(`text=${body}`).first()).toBeVisible();
+  });
+
+  /**
+   * #253: ⚠️ **中身ゼロのクリップボードを貼り付けても、落ちないこと。**
+   *
+   * 修正前のコピーで書き込まれたものが、利用者のクリップボードに残っている。
+   * 貼り付けで `PasteTr` が先頭のブロックを読みにいき、
+   * `Cannot read properties of undefined (reading 'flavour')` で落ちていた。
+   * 落ちても画面には何も出ず、貼り付けだけが黙って失敗する。
+   */
+  test('中身ゼロのクリップボードを貼り付けても落ちない', async ({ page }) => {
+    const errors: string[] = [];
+    const onError = (e: Error) => errors.push(e.message);
+    page.on('pageerror', onError);
+
+    try {
+      await signInViaAPI(page);
+      await enterOrCreateWorkspace(page);
+      await ensureSidebarOpen(page);
+      await createNewPage(page);
+      await page.waitForTimeout(2_000);
+
+      const editor = page.locator('[data-block-id] .inline-editor').first();
+      await editor.click();
+      await page.keyboard.type('中身ゼロ貼り付けの確認', { delay: 20 });
+      await page.waitForTimeout(500);
+
+      // 修正前のコピーが書き込んだ実物（2026-10-11 採取）。text/plain は無い
+      await page.evaluate(async html => {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+        ]);
+      }, EMPTY_SLICE_CLIPBOARD_HTML);
+
+      await page.keyboard.press('End');
+      await page.keyboard.press('Control+v');
+      await page.waitForTimeout(1_500);
+      expect(errors.filter(m => m.includes('flavour'))).toEqual([]);
+
+      // 貼り付けのあとも、そのまま書き続けられること
+      const after = `貼り付け後-${Date.now()}`;
+      await page.keyboard.type(after, { delay: 20 });
+      await expect(page.locator(`text=${after}`).first()).toBeVisible({ timeout: 10_000 });
+    } finally {
+      page.off('pageerror', onError);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1516,6 +1680,45 @@ test.describe('ワークスペース削除', () => {
 // ベースラインにする。本テストはその再発を検知する。
 // ---------------------------------------------------------------------------
 test.describe('インポート × Undo の安全性', () => {
+  /**
+   * #256: ⚠️ **普段の Undo が動き、押し続けてもページが壊れないこと。**
+   *
+   * Undo でページの骨組み（affine:page）を消させないようにした（deleteFilter）。
+   * その副作用で、普段の Undo が効かなくなったり、骨組みが中途半端に残って
+   * 開けなくなったりしないことを見る。
+   */
+  test('本文の入力を Ctrl+Z で戻せて、押し続けてもページは開ける（#256）', async ({ page }) => {
+    await signInViaAPI(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+    await createNewPage(page);
+    await page.waitForTimeout(2_000);
+
+    const body = `Undo確認-${Date.now()}`;
+    const editor = page.locator('[data-block-id] .inline-editor').first();
+    await editor.click();
+    await page.keyboard.type(body, { delay: 20 });
+    await expect(page.locator(`text=${body}`).first()).toBeVisible();
+    // 入力のまとまりを区切る（続けて打つと Undo が次の操作とまとまる）
+    await page.waitForTimeout(1_000);
+
+    // 普段の Undo: 打った本文が消える
+    await page.keyboard.press('Control+z');
+    await expect(page.locator(`text=${body}`)).toHaveCount(0, { timeout: 5_000 });
+
+    // 押し続けても、ページは開いたまま
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press('Control+z');
+    }
+    await page.waitForTimeout(1_000);
+    await expect(page.locator('doc-title')).toHaveCount(1);
+    await expect(page.locator('.affine-note-block-container').first()).toBeVisible();
+
+    // 読み込み直しても開ける
+    await page.reload();
+    await expect(page.locator('doc-title')).toHaveCount(1, { timeout: 30_000 });
+  });
+
   test('Markdown インポート直後に Ctrl-Z してもページが壊れない', async ({ sharedPage: page }) => {
     const marker = `IMPORT_UNDO_${Date.now()}`;
     const markdown = `# 見出しテスト\n\n${marker}\n\n- 箇条書き1\n- 箇条書き2\n`;
@@ -2686,14 +2889,25 @@ test.describe('初期ワークスペースのテンプレート', () => {
       await ensureSidebarOpen(page);
       const gettingStarted = page.locator('text=はじめに').first();
       await gettingStarted.waitFor({ state: 'visible', timeout: 60_000 });
-      await gettingStarted.click();
 
       // 「はじめに」本文中の内部リンク
       const reference = page
         .locator('affine-reference')
         .filter({ hasText: 'フォルダとタグの使い方' })
         .first();
-      await reference.waitFor({ state: 'visible', timeout: 30_000 });
+
+      // ⚠️ サインイン直後の数秒は、開いても一覧へ戻されることがある（#258）。
+      // - アプリが初期設定の途中で、何度か一覧（/all）へ移動する
+      // - テンプレートの取り込みで一覧が並び直され、押した瞬間に行が動く
+      // ページが開いて本文が出るまで、押し直す
+      await expect(async () => {
+        // 本文が見えていれば開けている。見えていなければ、一覧に戻されたか
+        // 開いている途中なので押す（開いている途中に押しても同じページを開くだけ）
+        if (!(await reference.isVisible())) {
+          await gettingStarted.click();
+        }
+        await expect(reference).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 60_000 });
 
       const urlBefore = page.url();
       await reference.click();
@@ -2703,6 +2917,80 @@ test.describe('初期ワークスペースのテンプレート', () => {
       await expect(
         page.locator('[data-block-id]').filter({ hasText: 'フォルダとタグの使い方' }).first()
       ).toBeVisible({ timeout: 30_000 });
+    } finally {
+      // 後片付け: 作成したユーザー（と個人ワークスペース）を Admin 権限で削除する
+      const cleanup = await browser.newContext();
+      const cleanupPage = await cleanup.newPage();
+      try {
+        await signInViaAPI(cleanupPage);
+        const list = await graphqlQuery(
+          cleanupPage,
+          `query ($search: String) { adminUserList(search: $search, take: 20) { items { id email } } }`,
+          { search: email }
+        );
+        const target = list?.data?.adminUserList?.items?.find(
+          (u: any) => u.email === email
+        );
+        if (target) {
+          await graphqlQuery(
+            cleanupPage,
+            `mutation ($id: String!) { adminDeleteUser(userId: $id) }`,
+            { id: target.id }
+          );
+        }
+      } catch {
+        // 後片付けの失敗はテスト結果に影響させない
+      } finally {
+        await cleanupPage.close();
+        await cleanup.close();
+      }
+      await page.close();
+      await context.close();
+    }
+  });
+  /**
+   * #262: ⚠️ **サインイン直後に開いたページが、一覧へ戻されないこと。**
+   *
+   * 新しい利用者は、着地ページがワークスペースを作ってテンプレートを取り込む。
+   * 作られたワークスペースが一覧に現れた時点で別の処理が先に移動するが、
+   * 取り込みが終わったときにもう一度、無条件で一覧へ移動していた
+   * （実測: 着地から約2秒後）。その間に開いたページは一覧へ戻されていた。
+   */
+  test('サインイン直後に開いたページが、一覧へ戻されない（#262）', async ({ browser }) => {
+    test.setTimeout(180_000);
+
+    const email = `onboarding-bounce-${Date.now()}@example.invalid`;
+    const password = 'OnboardingBounce123!';
+
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+    const page = await context.newPage();
+
+    try {
+      await page.goto('/');
+      await dismissDevOverlay(page);
+      await page
+        .locator('input[placeholder*="メールアドレス"], input[placeholder*="email"]')
+        .fill(email);
+      await page.locator('button:has-text("続行"), button:has-text("Continue")').click();
+      await page.locator('input[type="password"]').waitFor({ state: 'visible' });
+      await page.locator('input[type="password"]').fill(password);
+      await page.locator('button:has-text("サインイン"), button:has-text("Sign in")').click();
+      await page.waitForURL(/\/workspace\/[^/]+\/all/, { timeout: 60_000 });
+
+      // ⚠️ 取り込みが終わる前に開くこと。一覧に最初のページが出たらすぐ押す
+      const firstDoc = page.locator('[data-testid="doc-list-item-title"]').first();
+      await firstDoc.waitFor({ state: 'visible', timeout: 60_000 });
+      await expect(async () => {
+        await firstDoc.click({ timeout: 2_000 });
+        await expect(page).not.toHaveURL(/\/all$/, { timeout: 2_000 });
+      }).toPass({ timeout: 30_000 });
+      const docUrl = page.url();
+
+      // 開いたページに留まること（取り込みが終わっても一覧へ戻されない）
+      for (let waited = 0; waited < BOUNCE_WATCH_MS; waited += 500) {
+        expect(page.url()).toBe(docUrl);
+        await page.waitForTimeout(500);
+      }
     } finally {
       // 後片付け: 作成したユーザー（と個人ワークスペース）を Admin 権限で削除する
       const cleanup = await browser.newContext();

@@ -5,6 +5,28 @@ import * as Y from 'yjs';
 import type { Store } from '../../model';
 import { StoreExtension } from '../store-extension';
 
+/** ページの骨組みのブロック。 */
+const PAGE_FLAVOUR = 'affine:page';
+
+/**
+ * 骨組みのブロックそのもの、またはその属性か。
+ *
+ * 例: `blocks` の中の骨組みの Y.Map、その `sys:flavour`・`sys:children`・`prop:title`。
+ * 属性も守るのは、ブロックだけ残っても `sys:flavour` が消えると骨組みとして読まれないため。
+ * 属性の中身（題の文字・子の並び）は守らない。これまでどおり Undo で戻る。
+ */
+function isPageBlockItem(item: Y.Item): boolean {
+  const { content } = item;
+  if (content instanceof Y.ContentType && isPageBlockMap(content.type)) {
+    return true;
+  }
+  return isPageBlockMap(item.parent);
+}
+
+function isPageBlockMap(type: unknown): boolean {
+  return type instanceof Y.Map && type.get('sys:flavour') === PAGE_FLAVOUR;
+}
+
 export class HistoryExtension extends StoreExtension {
   static override readonly key = 'history';
 
@@ -21,6 +43,10 @@ export class HistoryExtension extends StoreExtension {
 
     this._history = new Y.UndoManager([this.store.doc.yBlocks], {
       trackedOrigins: new Set([this.store.doc.spaceDoc.clientID]),
+      // #256: Undo でページの骨組み（affine:page）を消させない。
+      // 骨組みが消えるとページが開けなくなる（2026-06-21 本番、インポート直後の Ctrl-Z）。
+      // 骨組みの作成が Undo の対象に残る経路は、インポート以外にも増え得る
+      deleteFilter: item => !isPageBlockItem(item),
     });
   }
 

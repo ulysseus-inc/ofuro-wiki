@@ -311,7 +311,13 @@ export const BlockSuiteEditor = (props: EditorProps) => {
       return;
     }
 
+    // #254: 骨組みが実際にできるまで待つ。Store.load() は骨組みが無くても
+    // rootAdded を空の ID で通知するため、それで描画を始めると題の欄が
+    // 骨組みの無いまま置かれ、後から本文が届いても題だけ空になる
     const disposable = props.page.slots.rootAdded.subscribe(() => {
+      if (!props.page.root) {
+        return;
+      }
       disposable.unsubscribe();
       setIsLoading(false);
       setLongerLoading(false);

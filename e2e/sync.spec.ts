@@ -26,6 +26,8 @@
  *   cd e2e && BASE_URL=http://localhost:8080 npx playwright test sync.spec.ts
  */
 import { test, expect, type Browser, type Page } from '@playwright/test';
+import { io } from 'socket.io-client';
+import * as Y from 'yjs';
 import {
   TEST_USER,
   ensureTestUser,
@@ -33,6 +35,8 @@ import {
   enterOrCreateWorkspace,
   createNewPage,
   waitForWorkspaceInitialized,
+  getOwnedWorkspaceId,
+  graphqlQuery,
 } from './helpers';
 
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:8080';
@@ -91,6 +95,100 @@ async function readUpdated(
   const body = await res.json();
   const docs = body?.data?.discoverySnapshot?.documents ?? [];
   return docs.find((d: any) => d.id === docId) ?? null;
+}
+
+/** #254: 本文が届く前にエディタが描画を始めないか、見張る時間。 */
+const NO_EDITOR_WATCH_MS = 20_000;
+
+/**
+ * 別の端末が作ったページ（題・本文あり）を、Yjs の更新として組み立てる。
+ *
+ * 画面が新規作成で作るのと同じ形（page の下に surface と note、note の下に段落）。
+ *
+ * ⚠️ BlockSuite の形に手で合わせている（`prop:elements` の Boxed 形式など）。
+ * 上流に追従して形が変わると、題とは関係のない理由で落ちる。追従時はここも確認する
+ * （本番側の組み立ては backend/src/modules/doc/yjs-doc-builder.ts）。
+ */
+function buildPageUpdate(title: string, body: string): string {
+  const doc = new Y.Doc();
+  const blocks = doc.getMap<Y.Map<unknown>>('blocks');
+
+  const addBlock = (
+    id: string,
+    flavour: string,
+    children: string[],
+    props: Record<string, unknown>
+  ) => {
+    const block = new Y.Map<unknown>();
+    blocks.set(id, block);
+    block.set('sys:id', id);
+    block.set('sys:flavour', flavour);
+    const ys = new Y.Array<string>();
+    ys.push(children);
+    block.set('sys:children', ys);
+    for (const [key, value] of Object.entries(props)) {
+      block.set(key, value);
+    }
+  };
+
+  // surface の入れ物（BlockSuite の Boxed 形式）
+  const elements = new Y.Map<unknown>();
+  elements.set('type', '$blocksuite:internal:native$');
+  elements.set('value', new Y.Map());
+
+  addBlock('paragraph', 'affine:paragraph', [], {
+    'prop:type': 'text',
+    'prop:text': new Y.Text(body),
+  });
+  addBlock('note', 'affine:note', ['paragraph'], {
+    'prop:xywh': '[0,0,800,95]',
+    'prop:background': '--affine-background-secondary-color',
+    'prop:index': 'a0',
+    'prop:hidden': false,
+    'prop:displayMode': 'both',
+  });
+  addBlock('surface', 'affine:surface', [], { 'prop:elements': elements });
+  addBlock('page', 'affine:page', ['surface', 'note'], {
+    'prop:title': new Y.Text(title),
+  });
+
+  return Buffer.from(Y.encodeStateAsUpdate(doc)).toString('base64');
+}
+
+/**
+ * 同期サーバーへ直接つなぎ、更新を1つ送る。
+ *
+ * ⚠️ **ブラウザの通信は止められない。** 同期は SharedWorker の中で張られており、
+ * Playwright の routeWebSocket はそこに届かない（開発サーバーの通信しか拾わない）。
+ * 「本文が遅れて届く」を作るには、届けるほうを自分で握るしかない。
+ */
+async function pushFromOtherDevice(
+  token: string,
+  workspaceId: string,
+  docId: string,
+  update: string
+) {
+  const socket = io('http://localhost:3010', {
+    transports: ['websocket'],
+    auth: { token },
+  });
+  try {
+    const space = { spaceType: 'workspace', spaceId: workspaceId };
+    const joined = await socket.emitWithAck('space:join', {
+      ...space,
+      clientVersion: 'e2e',
+    });
+    expect(joined?.error).toBeUndefined();
+
+    const pushed = await socket.emitWithAck('space:push-doc-update', {
+      ...space,
+      docId,
+      update,
+    });
+    expect(pushed?.error).toBeUndefined();
+  } finally {
+    socket.disconnect();
+  }
 }
 
 test.describe('同期の整合', () => {
@@ -307,6 +405,77 @@ test.describe('同期の整合', () => {
 
     } finally {
       await a.close();
+      await b.close();
+    }
+  });
+
+  /**
+   * #254: ⚠️ **初めて使う端末で、本文が届く前にページを開いても、届いたあと題が出ること。**
+   *
+   * 端末に何も無い状態で開くと、自己修復（ensureRootBlock）が `doc.load()` を呼び、
+   * 骨組みが無いまま「骨組みが追加された」通知（空の ID）が出る。エディタがこれを
+   * 読み込み完了と取り違え、**題の欄が骨組みの無い状態で置かれて二度と結び直されない**。
+   * 本文は届けば描き直されるため、「本文は出るのに題だけ空」になる（2026-09-30 本番）。
+   *
+   * ⚠️ 開き直すと端末に保存済みの本文で組み立てるので直る。**初回だけ**の不具合。
+   *
+   * ⚠️ ensureRootBlock は撤去した（効いていなかった）。空の通知はほかの
+   * `load()` からも出得るので、エディタ側の「骨組みができるまで待つ」で守っている。
+   * 題が出るかだけを見ると、空の通知が出ない限り修正を外しても通ってしまう
+   * （2026-10-11 に実測）。そこで「届く前は題の欄を置かない」も確かめる。
+   *
+   * 台帳にだけ載せて中身を持たないページを開き、そのあと別の端末からの更新として
+   * 中身を届ける。これで「本文が届く前に開いた」状態を毎回作れる。
+   */
+  test('初めての端末で本文より先に開いても、届いたあと題が出る', async ({ browser }) => {
+    const b = await openClient(browser);
+
+    try {
+      await enterOrCreateWorkspace(b.page);
+      const wsId = await getOwnedWorkspaceId(b.page);
+      expect(wsId).toBeTruthy();
+
+      // 一覧には載っているが、中身はまだどこにも無いページ
+      const docId = `first-open-${Date.now()}`;
+      const title = `初めて開く題-${Date.now()}`;
+      await graphqlQuery(
+        b.page,
+        `mutation ($w: String!, $d: String!, $t: String) {
+          createDocMeta(workspaceId: $w, docId: $d, title: $t) { status }
+        }`,
+        { w: wsId, d: docId, t: title }
+      );
+
+      await b.page.goto(`/workspace/${wsId}/${docId}`);
+
+      // ⚠️ **本文が届く前は、題の欄（エディタ）を置かないこと。** これが修正の本体。
+      // 骨組みが無いのに描画を始めると、題の欄は骨組みの無いまま固まる。
+      // 一覧の題が見出しに出る（＝ページの画面までは来た）のを待ってから、
+      // しばらく見張る。⚠️ 一瞬だけ見ると、端末内の読み込みが遅い回は
+      // 誤って描画する前に見終わってしまい、修正前でも通る（5秒では3回中1回すり抜けた）
+      await expect(b.page.locator(`text=${title}`).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      for (let waited = 0; waited < NO_EDITOR_WATCH_MS; waited += 500) {
+        expect(await b.page.locator('doc-title').count()).toBe(0);
+        await b.page.waitForTimeout(500);
+      }
+
+      const token = (await b.page.context().cookies()).find(
+        c => c.name === 'affine_token'
+      )?.value;
+      expect(token).toBeTruthy();
+      const body = `後から届いた本文-${Date.now()}`;
+      await pushFromOtherDevice(token!, wsId!, docId, buildPageUpdate(title, body));
+
+      // 本文が出ることを先に確かめる（届いていないのを「題が出ない」と誤診しない）
+      await expect(b.page.locator(`text=${body}`).first()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(b.page.locator('doc-title').first()).toContainText(title, {
+        timeout: 10_000,
+      });
+    } finally {
       await b.close();
     }
   });

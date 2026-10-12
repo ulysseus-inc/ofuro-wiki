@@ -308,15 +308,6 @@ const DetailPageImpl = memo(function DetailPageImpl() {
 
   const readonly = !canEdit || isInTrash || !!isProtected;
 
-  // ルートページブロックが欠落した壊れたドキュメント（インポート直後の Ctrl-Z 等）を
-  // 開けるよう自己修復する。編集可能な場合のみ実行（読み取り専用では何もしない）。
-  useEffect(() => {
-    if (readonly) return;
-    doc.ensureRootBlock().catch(err => {
-      console.error('Failed to ensure root block for doc', doc.id, err);
-    });
-  }, [doc, readonly]);
-
   return (
     <FrameworkScope scope={editor.scope}>
       <ViewHeader>

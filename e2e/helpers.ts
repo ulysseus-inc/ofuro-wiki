@@ -216,28 +216,56 @@ export async function graphqlQuery(page: Page, query: string, variables?: Record
   }, { q: query, v: variables });
 }
 
-/** サイドバーが表示されていることを確認し、非表示ならトグルする */
+/** サイドバーの外枠が描かれるまで待つ時間。サーバー起動直後の同期を見込む。 */
+const SIDEBAR_RENDER_TIMEOUT = 60_000;
+
+/** 開いたサイドバーに「+」ボタンが出るまで待つ時間。 */
+const SIDEBAR_VISIBLE_TIMEOUT = 30_000;
+
+/** サイドバーが表示されていることを確認し、閉じていれば開く */
 export async function ensureSidebarOpen(page: Page) {
   await dismissDevOverlay(page);
   // 「+」ボタンはモード設定によって2種類ある
-  // サーバー起動直後は Yjs 同期に時間がかかるためタイムアウトを長めに取る
-  const sidebar = page.locator(
+  const newPageButton = page.locator(
     '[data-testid="sidebar-new-page-button"], [data-testid="sidebar-new-page-with-ask-button"]'
   );
-  if (await sidebar.first().isVisible({ timeout: 60_000 }).catch(() => false)) return;
 
-  // 左上のトグルボタンをクリック
-  await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('button')];
-    const toggle = btns.find(
-      b =>
-        b.querySelector('svg') &&
-        b.getBoundingClientRect().x < 50 &&
-        b.getBoundingClientRect().y < 50
-    );
-    toggle?.click();
-  });
-  if (await sidebar.first().isVisible({ timeout: 30_000 }).catch(() => false)) return;
+  // #258: ⚠️ isVisible({ timeout }) は待たずに即答する（e2e/README.md「書き方の注意」）。
+  // 以前はサイドバーが出る前に「見えない」と判定し、切り替えボタンを押して
+  // 開きかけのサイドバーを閉じていた。開閉は外枠の data-open で読み、
+  // 閉じているときだけ開く
+  const openOnce = async (): Promise<boolean> => {
+    const wrapper = page.locator('[data-testid="app-sidebar-wrapper"]');
+    // サーバー起動直後は Yjs 同期に時間がかかるため長めに待つ
+    const rendered = await wrapper
+      .waitFor({ state: 'attached', timeout: SIDEBAR_RENDER_TIMEOUT })
+      .then(() => true, () => false);
+    if (!rendered) {
+      return false;
+    }
+
+    // ⚠️ 描かれた直後に、保存済みの開閉状態が反映されて変わることがある。
+    // 押したあと開いたかを確かめ、開いていなければ1回だけ押し直す
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if ((await wrapper.getAttribute('data-open')) === 'true') {
+        break;
+      }
+      await clickSidebarToggle(page);
+      await expect
+        .poll(() => wrapper.getAttribute('data-open'), { timeout: 5_000 })
+        .toBe('true')
+        .catch(() => {});
+    }
+
+    return newPageButton
+      .first()
+      .waitFor({ state: 'visible', timeout: SIDEBAR_VISIBLE_TIMEOUT })
+      .then(() => true, () => false);
+  };
+
+  if (await openOnce()) {
+    return;
+  }
 
   // それでも表示されない場合はリロードして再試行する。
   //
@@ -249,12 +277,28 @@ export async function ensureSidebarOpen(page: Page) {
   for (let attempt = 0; attempt < 3; attempt++) {
     await page.reload();
     await dismissDevOverlay(page);
-    if (await sidebar.first().isVisible({ timeout: 30_000 }).catch(() => false)) return;
+    if (await openOnce()) {
+      return;
+    }
     await page.waitForTimeout(2_000);
   }
 
   // 3回試しても出ない場合は、想定外の状態なので失敗させる
-  await sidebar.first().waitFor({ state: 'visible', timeout: 30_000 });
+  await newPageButton.first().waitFor({ state: 'visible', timeout: SIDEBAR_VISIBLE_TIMEOUT });
+}
+
+/** 左上のサイドバー切り替えボタンを押す。 */
+async function clickSidebarToggle(page: Page) {
+  await page.evaluate(() => {
+    const btns = [...document.querySelectorAll('button')];
+    const toggle = btns.find(
+      b =>
+        b.querySelector('svg') &&
+        b.getBoundingClientRect().x < 50 &&
+        b.getBoundingClientRect().y < 50
+    );
+    toggle?.click();
+  });
 }
 
 /** 新規ページを作成する（ボタンのモードを自動判定） */

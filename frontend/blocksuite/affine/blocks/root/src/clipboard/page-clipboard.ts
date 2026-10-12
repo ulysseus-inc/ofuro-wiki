@@ -69,6 +69,13 @@ export class PageClipboard extends ReadOnlyClipboard {
     const e = ctx.get('clipboardState').raw;
     e.preventDefault();
 
+    // #253: 切り出すものが無ければ、何もしない。
+    // ⚠️ コピーと違い、ブラウザ標準には任せない。標準の切り取りは画面の文字を
+    // 直接消すため、エディタの中身（Yjs）を通らずに画面だけが変わる
+    if (!this._hasSelectedModels()) {
+      return;
+    }
+
     if (!window.isSecureContext && e.clipboardData) {
       const text = window.getSelection()?.toString() ?? '';
       if (text) {

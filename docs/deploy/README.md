@@ -88,7 +88,7 @@ cp backend/.env.example .env
 | `BASE_URL` | 公開URL（例: `https://wiki.example.com`） | — |
 | `ADMIN_EMAIL` | 初回Admin のメールアドレス | — |
 
-**CORS設定（オプション）:**
+**CORS設定（推奨）:**
 ```bash
 # 全許可（デフォルト）
 ALLOWED_ORIGINS=*
@@ -96,6 +96,10 @@ ALLOWED_ORIGINS=*
 # ドメインを絞る場合
 ALLOWED_ORIGINS=https://wiki.example.com
 ```
+
+公開する場合は **`BASE_URL` と同じ値**を指定してください。未設定（`*`）のままだと、
+どのサイトからの要求にもログイン中の資格情報付きで応答するため、起動時に警告が出ます。
+画面とAPIは同じオリジンから配信されるので、絞っても通常の利用には影響しません。
 
 **メール設定（オプション）:**
 未設定の場合、招待メール・パスワードリセットメールは送信されません。
@@ -207,6 +211,14 @@ ofuro-wiki backend running on port 3010
 ```
 
 ブラウザで `BASE_URL` にアクセスし、`ADMIN_EMAIL` でサインアップできれば完了です。
+
+> **サーバーの再起動について**: `app` と `postgres` は `restart: unless-stopped` を指定しており、
+> サーバーを再起動すると自動で起動します。`docker compose stop` で止めた場合は、
+> 再起動しても止まったままです（意図して止めたものを勝手に起こさないため）。
+>
+> ⚠️ 以前の compose にはこの指定が無く、**サーバーが再起動するとアプリが止まったまま**に
+> なっていました（2026-10-11 にデモ環境で発覚）。古い compose を使っている場合は、
+> `git pull` で取り込んでから `docker compose up -d --no-build` を一度実行してください。
 
 > **DB の初期化について**: スキーマ構築は 2 段階で行われます。
 > ① **PostgreSQL 拡張**（pgroonga / pgvector）は、DB ボリュームの初回作成時に

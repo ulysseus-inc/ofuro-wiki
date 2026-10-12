@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as Y from 'yjs';
 import { PrismaService } from '../../prisma.service';
+import { isUserDoc } from '../sync/user-doc';
 
 interface BlockData {
   blockId: string;
@@ -85,6 +86,10 @@ export class IndexerService {
       Y.applyUpdate(doc, new Uint8Array(u.blob));
     }
 
+    // #256: 骨組みが無いページを知らせる（docs/import-undo-root-guard.md 修正4）。
+    // 骨組みが消えるとページが開けない。本文は更新履歴に残るが、気づかなければ復旧されない。
+    this.warnIfRootless(workspaceId, docId, doc);
+
     // Extract blocks from Yjs doc
     const blocks = this.extractBlocks(doc);
     const title = this.extractTitle(doc);
@@ -130,6 +135,39 @@ export class IndexerService {
       `Indexed ${workspaceId}/${docId}: ${blocks.length} blocks`,
     );
   }
+
+  /**
+   * #256: 骨組み（affine:page）の無いページを、アプリケーションログに残す。
+   *
+   * - ⚠️ 条件は「骨組みが無い」に限る。本文が空なのは正常な操作でも起きる
+   * - ブロックに一度も触れていない更新だけのページは対象外。ブロックが全部消えた
+   *   ページは対象（2026-06-21 本番の実例は「ブロックが空」だった）
+   * - 同じページは、サーバーが動いている間に1回だけ出す（保存のたびに同じ行が増えて、
+   *   ほかの警告を埋もれさせないため）
+   * - ⚠️ ID だけを書く。題や本文は書かない（docs/logging.md）
+   */
+  private warnIfRootless(workspaceId: string, docId: string, doc: Y.Doc) {
+    if (!isUserDoc(workspaceId, docId)) {
+      return;
+    }
+    // ⚠️ getMap('blocks') より先に見ること。getMap は無ければ作ってしまう
+    if (!doc.share.has(BLOCKS_KEY) || hasPageBlock(doc)) {
+      return;
+    }
+
+    const key = `${workspaceId}/${docId}`;
+    if (this.warnedRootless.has(key)) {
+      return;
+    }
+    this.warnedRootless.add(key);
+
+    this.logger.warn(
+      `ページの骨組み（affine:page）がありません。開けない状態です: ${key}`,
+    );
+  }
+
+  /** 骨組みが無いと警告済みのページ（`workspaceId/docId`）。 */
+  private readonly warnedRootless = new Set<string>();
 
   async indexAllDocuments(workspaceId: string) {
     // ⚠️ **スナップショットだけを見ないこと。**
@@ -609,4 +647,17 @@ export class IndexerService {
 
     return undefined;
   }
+}
+
+/** Yjs の中で、ブロックを入れている入れ物の名前。 */
+const BLOCKS_KEY = 'blocks';
+
+/** ページの骨組み（affine:page）のブロックがあるか。 */
+function hasPageBlock(doc: Y.Doc): boolean {
+  for (const block of doc.getMap(BLOCKS_KEY).values()) {
+    if (block instanceof Y.Map && block.get('sys:flavour') === 'affine:page') {
+      return true;
+    }
+  }
+  return false;
 }

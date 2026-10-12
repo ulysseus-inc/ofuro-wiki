@@ -64,6 +64,14 @@ export const Component = ({
     createOnceRef.current = true;
     buildShowcaseWorkspace(workspacesService, 'ofuro-cloud', 'ofuro-wiki')
       .then(({ meta, defaultDocId }) => {
+        // #262: 取り込みの途中で、一覧の更新を受けてすでに移動していたら何もしない。
+        // もう一度移動すると、その間に利用者が開いたページから一覧へ戻してしまう
+        // （docs/first-workspace.md）
+        if (navigatedRef.current) {
+          return;
+        }
+        navigatedRef.current = true;
+
         if (defaultDocId) {
           jumpToPage(meta.id, defaultDocId);
         } else {
