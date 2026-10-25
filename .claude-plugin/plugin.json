@@ -1,0 +1,6 @@
+{
+  "name": "ofuro-wiki",
+  "description": "ofuro-wiki のページを AI が人間と同じ経路（同期プロトコル）で読み・直し・書く CLI と Skill",
+  "author": { "name": "ulysseus-inc" },
+  "license": "MIT"
+}

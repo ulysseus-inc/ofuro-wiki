@@ -24,6 +24,8 @@ describe('Discovery Metadata の書き込み', () => {
     canDelete?: boolean;
     /** 読み取り直後に他者の書き込みを割り込ませる */
     onRead?: () => void;
+    /** #276: タグ ID → 名前（ルート文書の定義）。失敗させるなら Error */
+    tagNames?: Map<string, string> | Error;
   }) => {
     const updates: any[] = [];
     const bumps: string[] = [];
@@ -83,6 +85,13 @@ describe('Discovery Metadata の書き込み', () => {
       },
     };
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const tagReader = {
+      readTagNames: jest.fn().mockImplementation(() =>
+        opts.tagNames instanceof Error
+          ? Promise.reject(opts.tagNames)
+          : Promise.resolve(opts.tagNames ?? new Map()),
+      ),
+    };
     const permission = {
       canUpdate: jest.fn().mockResolvedValue(opts.canUpdate ?? true),
       // ⚠️ 削除も PermissionService に委ねる（判定を散らさない）
@@ -110,9 +119,11 @@ describe('Discovery Metadata の書き込み', () => {
         revision as any,
         audit as any,
         gc as any,
+        tagReader as any,
       ),
       updates,
       bumps,
+      prisma,
       permission,
       audit,
       gc,
@@ -295,6 +306,106 @@ describe('Discovery Metadata の書き込み', () => {
       expect(r.revision).toBe(0n);
       expect(updates).toHaveLength(0);
       expect(bumps).toHaveLength(0);
+    });
+  });
+
+  /**
+   * #276: ⚠️ **タグの付け外しは、値が実際に変わったときだけ記録する**（ゴミ箱と同じ理由）。
+   * 台帳はタグの ID しか持たないため、名前はルート文書の定義から引く。
+   */
+  describe('タグの監査ログ（#276）', () => {
+    const NAMES = new Map([
+      ['t1', '仕様書'],
+      ['t2', '調査'],
+    ]);
+    const changeTags = (over: Record<string, unknown> = {}) => ({
+      workspaceId: WS,
+      docId: DOC,
+      userId: USER,
+      add: [] as string[],
+      remove: [] as string[],
+      ...over,
+    });
+
+    it('付けると doc.tags を記録する（前後のタグ名・実行者・題）', async () => {
+      const { service, audit } = makeService({
+        row: row({ tagIds: ['t1'], tagsRevision: 1n }),
+        tagNames: NAMES,
+      });
+
+      await service.changeTags(changeTags({ add: ['t2'] }));
+
+      expect(audit.record).toHaveBeenCalledTimes(1);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'doc.tags',
+          actor: { id: USER, email: 'u1@example.com', name: 'U1' },
+          targetType: 'doc',
+          targetId: DOC,
+          targetName: '元の題',
+          workspaceId: WS,
+          detail: {
+            before: { tags: ['仕様書'] },
+            after: { tags: ['仕様書', '調査'] },
+          },
+        }),
+      );
+    });
+
+    it('⚠️ 変わらなければ記録しない（付いているタグを足す）', async () => {
+      const { service, audit } = makeService({
+        row: row({ tagIds: ['t1'], tagsRevision: 1n }),
+        tagNames: NAMES,
+      });
+
+      await service.changeTags(changeTags({ add: ['t1'] }));
+
+      expect(audit.record).not.toHaveBeenCalled();
+    });
+
+    it('定義に無い ID は ID のまま残す', async () => {
+      const { service, audit } = makeService({
+        row: row({ tagIds: ['gone'], tagsRevision: 1n }),
+        tagNames: NAMES,
+      });
+
+      await service.changeTags(changeTags({ remove: ['gone'] }));
+
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { before: { tags: ['gone'] }, after: { tags: [] } },
+        }),
+      );
+    });
+
+    it('⚠️ 記録の準備（実行者の取得）で失敗しても、タグの書き込みは成功として返す', async () => {
+      const { service, currentRow, prisma } = makeService({
+        row: row({ tagIds: [], tagsRevision: 1n }),
+        tagNames: NAMES,
+      });
+      prisma.user.findUnique.mockRejectedValueOnce(new Error('db down'));
+
+      const r = await service.changeTags(changeTags({ add: ['t1'] }));
+
+      expect(r.status).toBe('ok');
+      expect(currentRow()!.tagIds).toEqual(['t1']);
+    });
+
+    it('⚠️ 名前を引けなくても、タグの書き込みは成功させ、ID で記録する', async () => {
+      const { service, audit, currentRow } = makeService({
+        row: row({ tagIds: [], tagsRevision: 1n }),
+        tagNames: new Error('root doc broken'),
+      });
+
+      const r = await service.changeTags(changeTags({ add: ['t1'] }));
+
+      expect(r.status).toBe('ok');
+      expect(currentRow()!.tagIds).toEqual(['t1']);
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { before: { tags: [] }, after: { tags: ['t1'] } },
+        }),
+      );
     });
   });
 

@@ -94,6 +94,21 @@ jobs:
         working-directory: frontend
         run: yarn graphql:check
 
+      # #265: skills/ の CLI はビルド結果をコミットしている（プラグインは利用者側で
+      # ビルドしないため）。ソースから作り直して差分が出たら、作り直し忘れ
+      - name: AI エージェント用 CLI（単体テスト・skills/ がソースと一致するか）
+        working-directory: frontend/packages/common/agent-cli
+        run: |
+          yarn test
+          yarn build
+          # 未追跡の新しいファイルも拾うため git status で見る
+          changed="$(git status --porcelain -- ../../../../skills)"
+          if [ -n "$changed" ]; then
+            echo "skills/ がソースと一致しない。frontend で node packages/common/agent-cli/esbuild.config.js を実行してコミットする"
+            echo "$changed"
+            exit 1
+          fi
+
       # ⚠️ tsc --noEmit ではなく tsc --build を使う。
       # noEmit だと TS6305 で依存の型が any に落ち、検査にならない（#125）
       - name: Type check (件数が増えていないか)

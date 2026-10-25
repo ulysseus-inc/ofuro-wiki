@@ -1042,6 +1042,10 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.audit.action.doc.untrash"](): string;
     /**
+      * `Document tags changed`
+      */
+    ["com.affine.admin.audit.action.doc.tags"](): string;
+    /**
       * `Server setting changed`
       */
     ["com.affine.admin.audit.action.setting.update"](): string;

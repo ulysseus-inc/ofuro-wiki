@@ -4901,6 +4901,16 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@ofuro/agent-cli@workspace:packages/common/agent-cli":
+  version: 0.0.0-use.local
+  resolution: "@ofuro/agent-cli@workspace:packages/common/agent-cli"
+  dependencies:
+    "@blocksuite/affine": "workspace:*"
+    socket.io-client: "npm:^4.8.3"
+    yjs: "npm:^13.6.27"
+  languageName: unknown
+  linkType: soft
+
 "@ofuro/component@workspace:*, @ofuro/component@workspace:packages/frontend/component":
   version: 0.0.0-use.local
   resolution: "@ofuro/component@workspace:packages/frontend/component"

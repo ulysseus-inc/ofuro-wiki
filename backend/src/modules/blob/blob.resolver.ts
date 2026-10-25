@@ -11,6 +11,8 @@ import {
 import { UseGuards } from '@nestjs/common';
 import { BlobService } from './blob.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 import GraphQLJSON from 'graphql-type-json';
 import GraphQLUpload from 'graphql-upload/GraphQLUpload.mjs';
 
@@ -83,12 +85,15 @@ class BlobUploadInit {
   uploadedParts?: BlobUploadedPart[];
 }
 
+// #285: ⚠️ WorkspaceMemberGuard が要る。JwtAuthGuard だけだと、ログインさえすれば
+// 他のワークスペースの Blob を一覧・書き込み・完全削除できた（H-1 の漏れ）
 @Resolver()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class BlobResolver {
   constructor(private blobService: BlobService) {}
 
   @Query(() => [ListedBlob])
+  @WorkspaceRole('reader')
   async listBlobs(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
   ) {
@@ -102,6 +107,7 @@ export class BlobResolver {
   }
 
   @Mutation(() => BlobUploadInit)
+  @WorkspaceRole('member')
   async createBlobUpload(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('key') key: string,
@@ -127,6 +133,7 @@ export class BlobResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('member')
   async completeBlobUpload(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('key') key: string,
@@ -136,6 +143,7 @@ export class BlobResolver {
   }
 
   @Mutation(() => String)
+  @WorkspaceRole('member')
   async setBlob(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('blob', { type: () => GraphQLUpload }) blob: FileUpload,
@@ -152,6 +160,7 @@ export class BlobResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('member')
   async deleteBlob(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('key') key: string,
@@ -164,6 +173,7 @@ export class BlobResolver {
   }
 
   @Mutation(() => Boolean)
+  @WorkspaceRole('member')
   async releaseDeletedBlobs(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
   ): Promise<boolean> {

@@ -1,0 +1,2 @@
+# #265: AI エージェント用 CLI のビルド結果。差分表示を抑え、GitHub でも生成物として扱う
+skills/**/scripts/ofuro.mjs -diff linguist-generated

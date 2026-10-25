@@ -115,6 +115,7 @@ Try it right now — no installation required.
   no app to install
 - **Audit log** — who did what, and when. Readable from the admin panel
 - **Single sign-on (SSO)** — OIDC support: sign in with Google, Keycloak, and other providers ([setup guide](docs/sso-setup.md))
+- **AI agent access** — AI agents such as Claude Code can search, read, and edit pages as a regular user, with the same permissions and audit log as people. Edits appear live in open browsers ([setup guide](docs/ai-agent-setup.md), Japanese)
 - **Fully self-hosted** — start with a single Docker command, no external service dependencies
 - **Privacy-first** — telemetry and outbound data transmission are disabled by design
 

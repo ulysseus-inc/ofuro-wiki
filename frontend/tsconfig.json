@@ -129,6 +129,7 @@
     { "path": "./packages/common/infra" },
     { "path": "./packages/common/nbstore" },
     { "path": "./packages/common/reader" },
+    { "path": "./packages/common/agent-cli" },
     { "path": "./packages/frontend/apps/mobile" },
     { "path": "./packages/frontend/apps/web" },
     { "path": "./packages/frontend/component" },

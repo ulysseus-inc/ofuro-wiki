@@ -65,17 +65,22 @@ type Row = {
 type Cell = {
   value: { delta: DeltaInsert[] };
 };
+const byOrder = (a: { order: string }, b: { order: string }) => {
+  if (a.order === b.order) {
+    return 0;
+  }
+  return a.order < b.order ? -1 : 1;
+};
+
 export const processTable = (
   columns: Record<string, TableColumn>,
   rows: Record<string, TableRow>,
   cells: Record<string, TableCellSerialized>
 ): Table => {
-  const sortedColumns = Object.values(columns).sort((a, b) =>
-    a.order.localeCompare(b.order)
-  );
-  const sortedRows = Object.values(rows).sort((a, b) =>
-    a.order.localeCompare(b.order)
-  );
+  // ofuro-wiki #279: 画面（TableDataManager）と同じ文字コード順で並べる。
+  // 順序キーは大文字・小文字が混ざるため、localeCompare では画面とずれる
+  const sortedColumns = Object.values(columns).sort(byOrder);
+  const sortedRows = Object.values(rows).sort(byOrder);
   const table: Table = {
     rows: [],
   };

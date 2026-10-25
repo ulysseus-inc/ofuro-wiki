@@ -1041,7 +1041,7 @@ if (role === 'owner' || role === 'manager' || (role === 'editor' && ...)) { ... 
 | `POST /api/internal/docs/upsert` | REST | `Doc_Update` |
 | `POST /api/internal/docs/get-markdown` | REST | `Doc_Read` |
 | `GET /api/workspaces/:workspaceId/blobs/:key` | REST | ワークスペースのメンバー（**→ 6.6**） |
-| `PUT /api/workspaces/:workspaceId/blobs/:key` | REST | ワークスペースのメンバー（同上） |
+| `PUT /api/workspaces/:workspaceId/blobs/:key` | REST | ワークスペースの**書き込み権限のある**メンバー（reader 不可。同上）。⚠️ #285 まで未実装だった（ログインのみで他 WS に書けた） |
 | `POST /api/workspaces/:workspaceId/export` | REST | **ワークスペースの owner/admin のみ**（→ 6.5） |
 | `POST /api/workspaces/import` | REST | 取り込みのため doc 判定なし |
 | `POST /api/admin/restore` | REST | サーバー全体 Admin |

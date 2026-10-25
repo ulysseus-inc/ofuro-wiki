@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { PermissionService } from '../permission/permission.service';
 import { DocGcService } from './doc-gc.service';
 import { DiscoveryRevisionService } from './discovery-revision.service';
+import { IndexReaderService } from './index-reader.service';
 
 /**
  * #151 段階3: Discovery Metadata をサーバーへ書き込む。
@@ -50,6 +51,8 @@ export class DocMetaWriteService {
     private audit: AuditService,
     // #45: 完全削除で消すものは DocGcService が1か所で持つ
     private gc: DocGcService,
+    // #276: タグの監査ログに名前を残すため、ルート文書のタグの定義を読む
+    private tagReader: IndexReaderService,
   ) {}
 
   /**
@@ -225,7 +228,7 @@ export class DocMetaWriteService {
     for (let attempt = 0; attempt < TAG_WRITE_ATTEMPTS; attempt++) {
       const current = await this.prisma.docMeta.findUnique({
         where: { workspaceId_docId: { workspaceId, docId } },
-        select: { tagIds: true, tagsRevision: true },
+        select: { tagIds: true, tagsRevision: true, title: true },
       });
       if (!current) return { status: 'not-found' };
 
@@ -260,6 +263,14 @@ export class DocMetaWriteService {
       // 所有権を取っただけで全員のキャッシュを失効させない
       if (!unchanged) {
         await this.discovery.bump(workspaceId, 'doc-update');
+        // ⚠️ タグはもう書いた。記録の失敗をエラーで返すと、変わったのに
+        // 失敗に見えて再送を招く（docs/logging.md 2.5）
+        await this.recordTags(workspaceId, docId, userId, current.title, {
+          before: current.tagIds,
+          after: next,
+        }).catch((e: unknown) =>
+          this.logger.error(`タグの監査ログを記録できない: ${String(e)}`),
+        );
       }
       return { status: 'ok', revision: current.tagsRevision + 1n };
     }
@@ -394,6 +405,46 @@ export class DocMetaWriteService {
       targetId: docId,
       targetName: title ?? undefined,
       workspaceId,
+    });
+  }
+
+  /**
+   * #276: タグの付け外しを記録する。値が変わったときだけ呼ぶ（ゴミ箱と同じ）。
+   *
+   * 台帳はタグの ID しか持たない。名前はルート文書の定義から引き、
+   * 引けない ID（消されたタグ・読み損ね）は ID のまま残す。
+   * ⚠️ 名前の解決に失敗しても記録はする（ID で残す）
+   */
+  private async recordTags(
+    workspaceId: string,
+    docId: string,
+    userId: string,
+    title: string | null,
+    tags: { before: string[]; after: string[] },
+  ) {
+    const names = await this.tagReader
+      .readTagNames(workspaceId)
+      .catch((e: unknown) => {
+        this.logger.warn(`タグ名を読めない（ID で記録する）: ${String(e)}`);
+        return new Map<string, string>();
+      });
+    const named = (ids: string[]) => ids.map((id) => names.get(id) ?? id);
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
+    await this.audit.record({
+      action: 'doc.tags',
+      actor: { id: userId, email: actor?.email, name: actor?.name },
+      targetType: 'doc',
+      targetId: docId,
+      targetName: title ?? undefined,
+      workspaceId,
+      detail: {
+        before: { tags: named(tags.before) },
+        after: { tags: named(tags.after) },
+      },
     });
   }
 

@@ -1,0 +1,11 @@
+{
+  "name": "ofuro-wiki",
+  "owner": { "name": "ulysseus-inc" },
+  "plugins": [
+    {
+      "name": "ofuro-wiki",
+      "source": "./",
+      "description": "ofuro-wiki のページを読み書きする CLI と Skill"
+    }
+  ]
+}

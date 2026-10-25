@@ -1,0 +1,19 @@
+{
+  "name": "@ofuro/agent-cli",
+  "license": "MIT",
+  "type": "module",
+  "version": "0.26.1",
+  "private": true,
+  "sideEffects": false,
+  "scripts": {
+    "build": "node esbuild.config.js",
+    "test": "node esbuild.config.js --test && node --test --test-force-exit \"dist-test/*.mjs\""
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3",
+    "yjs": "^13.6.27"
+  },
+  "devDependencies": {
+    "@blocksuite/affine": "workspace:*"
+  }
+}

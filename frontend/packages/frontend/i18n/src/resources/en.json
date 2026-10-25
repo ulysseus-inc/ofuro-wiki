@@ -262,6 +262,7 @@
   "com.affine.admin.audit.action.doc.unpublish": "Document unpublished",
   "com.affine.admin.audit.action.doc.trash": "Document moved to trash",
   "com.affine.admin.audit.action.doc.untrash": "Document restored from trash",
+  "com.affine.admin.audit.action.doc.tags": "Document tags changed",
   "com.affine.admin.audit.action.setting.update": "Server setting changed",
   "com.affine.admin.audit.action.sso.config.update": "SSO settings changed",
   "com.affine.admin.audit.action.backup.create": "Backup created",

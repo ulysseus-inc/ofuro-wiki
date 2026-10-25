@@ -141,3 +141,52 @@ describe('共有目次の読み取り', () => {
     expect(await service.readIndex(WS)).toEqual([]);
   });
 });
+
+/**
+ * #276: タグの付け外しを監査ログに残すとき、ID を名前に直すために読む。
+ * 定義はルート文書の `meta.properties.tags.options`（実測: Y.Map > Y.Map > Y.Array<Y.Map>）。
+ */
+describe('タグの名前の読み取り（#276）', () => {
+  const makeRoot = (options: Array<Record<string, unknown>> | null) => {
+    const doc = new Y.Doc();
+    if (options) {
+      const props = new Y.Map<unknown>();
+      const tags = new Y.Map<unknown>();
+      const list = new Y.Array<Y.Map<unknown>>();
+      doc.getMap('meta').set('properties', props);
+      props.set('tags', tags);
+      tags.set('options', list);
+      for (const o of options) {
+        const m = new Y.Map<unknown>();
+        for (const [k, v] of Object.entries(o)) m.set(k, v);
+        list.push([m]);
+      }
+    }
+    return Y.encodeStateAsUpdate(doc);
+  };
+
+  const serviceFor = (root: Uint8Array) =>
+    new IndexReaderService({
+      docSnapshot: {
+        findUnique: jest.fn().mockResolvedValue({ blob: Buffer.from(root) }),
+      },
+      docUpdate: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService);
+
+  test('ID から名前を引ける', async () => {
+    const service = serviceFor(
+      makeRoot([
+        { id: 't1', value: '仕様書', color: 'var(--affine-palette-line-red)' },
+        { id: 't2', value: '調査' },
+      ]),
+    );
+    const names = await service.readTagNames('ws-1');
+    expect(names.get('t1')).toBe('仕様書');
+    expect(names.get('t2')).toBe('調査');
+  });
+
+  test('定義が無ければ空', async () => {
+    const names = await serviceFor(makeRoot(null)).readTagNames('ws-1');
+    expect(names.size).toBe(0);
+  });
+});

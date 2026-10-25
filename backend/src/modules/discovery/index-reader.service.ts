@@ -17,6 +17,7 @@ import { createDocFromUpdates } from '../sync/yjs.utils';
  * |---|---|
  * | `DocMetaAuditService` | 台帳と目次の食い違いを数える |
  * | `IndexRemovalAuditService` | 目次を消してよいかを判定する（7.8.5） |
+ * | `DocMetaWriteService` | タグの付け外しの監査ログに、タグ名を残す（#276） |
  *
  * ⚠️ **書き込みを戻さないこと。** 戻すと、台帳が正という前提が崩れ、
  * 版数 0 の行を黙って書き換える経路が復活する（7.7.2 の移行判定は
@@ -27,24 +28,8 @@ export class IndexReaderService {
   constructor(private prisma: PrismaService) {}
 
   async readIndex(workspaceId: string): Promise<IndexedPage[] | null> {
-    // 目次は docId === workspaceId のドキュメント
-    const [snapshot, updates] = await Promise.all([
-      this.prisma.docSnapshot.findUnique({
-        where: { workspaceId_docId: { workspaceId, docId: workspaceId } },
-        select: { blob: true },
-      }),
-      this.prisma.docUpdate.findMany({
-        where: { workspaceId, docId: workspaceId },
-        select: { blob: true },
-        orderBy: { timestamp: 'asc' },
-      }),
-    ]);
-    if (!snapshot && updates.length === 0) return null;
-
-    const doc = createDocFromUpdates([
-      ...(snapshot ? [new Uint8Array(snapshot.blob)] : []),
-      ...updates.map((u) => new Uint8Array(u.blob)),
-    ]);
+    const doc = await this.readRoot(workspaceId);
+    if (!doc) return null;
 
     const pages = doc.getMap('meta').get('pages') as any;
     if (!pages || typeof pages.length !== 'number') return null;
@@ -68,6 +53,54 @@ export class IndexReaderService {
       });
     }
     return out;
+  }
+
+  /**
+   * #276: タグの ID → 名前。監査ログに名前で残すために使う。
+   *
+   * 定義はルート文書の `meta.properties.tags.options`（ブラウザの TagStore と同じ場所）。
+   * 実測: Y.Map > Y.Map > Y.Array の各要素が Y.Map（`{ id, value, color, ... }`）。
+   */
+  async readTagNames(workspaceId: string): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    const doc = await this.readRoot(workspaceId);
+    const properties = doc?.getMap('meta').get('properties');
+    const options = this.field(this.field(properties, 'tags'), 'options');
+    const list =
+      options && typeof (options as any).toArray === 'function'
+        ? (options as any).toArray()
+        : options;
+    if (!Array.isArray(list)) return names;
+
+    for (const option of list) {
+      const id = this.field(option, 'id');
+      const value = this.field(option, 'value');
+      if (typeof id === 'string' && typeof value === 'string') {
+        names.set(id, value);
+      }
+    }
+    return names;
+  }
+
+  /** ルート文書（docId === workspaceId）。保存されていなければ null */
+  private async readRoot(workspaceId: string) {
+    const [snapshot, updates] = await Promise.all([
+      this.prisma.docSnapshot.findUnique({
+        where: { workspaceId_docId: { workspaceId, docId: workspaceId } },
+        select: { blob: true },
+      }),
+      this.prisma.docUpdate.findMany({
+        where: { workspaceId, docId: workspaceId },
+        select: { blob: true },
+        orderBy: { timestamp: 'asc' },
+      }),
+    ]);
+    if (!snapshot && updates.length === 0) return null;
+
+    return createDocFromUpdates([
+      ...(snapshot ? [new Uint8Array(snapshot.blob)] : []),
+      ...updates.map((u) => new Uint8Array(u.blob)),
+    ]);
   }
 
   /**

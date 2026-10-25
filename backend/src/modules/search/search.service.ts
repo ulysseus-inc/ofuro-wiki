@@ -66,6 +66,20 @@ interface AggregateResultObject {
   pagination: { count: number; hasMore: boolean; nextCursor?: string };
 }
 
+/** 抜粋が複数あるときの区切り。例: `…見出し1… … …見出し2…` */
+const SNIPPET_SEPARATOR = ' … ';
+
+/**
+ * ⚠️ `pgroonga_snippet_html` は **text[]**。GraphQL の String に合わせて繋ぐ（#265）。
+ * 配列のまま返すと、ヒットした検索ほど必ず GraphQL エラーになる。
+ */
+function toSnippet(value: unknown): string {
+  if (Array.isArray(value)) {
+    return value.join(SNIPPET_SEPARATOR);
+  }
+  return typeof value === 'string' ? value : '';
+}
+
 // Column name mapping: camelCase field names → snake_case DB columns
 const FIELD_TO_COLUMN: Record<string, string> = {
   docId: 'doc_id',
@@ -288,7 +302,7 @@ export class SearchService {
       docId: r.doc_id,
       title: r.title ?? '',
       blockId: r.block_id ?? '',
-      highlight: r.highlight ?? '',
+      highlight: toSnippet(r.highlight),
       createdAt: r.created_at?.toISOString() ?? new Date().toISOString(),
       updatedAt: r.updated_at?.toISOString() ?? new Date().toISOString(),
       createdByUser: null,

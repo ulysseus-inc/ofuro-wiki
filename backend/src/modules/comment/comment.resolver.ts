@@ -165,10 +165,14 @@ export class CommentMutationResolver {
 
   @Mutation(() => String)
   async uploadCommentAttachment(
+    @CurrentUser() user: { id: string },
     @Args('workspaceId', { type: () => String }) workspaceId: string,
-    @Args('docId', { type: () => String }) _docId: string,
+    @Args('docId', { type: () => String }) docId: string,
     @Args('attachment', { type: () => GraphQLUpload }) attachment: FileUpload,
   ): Promise<string> {
+    // #285: コメントを書ける人だけ（createComment と同じ）。以前はログインのみで、
+    // 他のワークスペースへ添付を書き込めた
+    await this.commentService.assertCanComment(workspaceId, docId, user.id);
     const { createReadStream, mimetype } = attachment;
     const chunks: Buffer[] = [];
     for await (const chunk of createReadStream()) {

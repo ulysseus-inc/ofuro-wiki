@@ -158,12 +158,7 @@ export class CommentService {
     userId: string,
     input: CommentCreateInput,
   ): Promise<CommentObjectType> {
-    // Permission check: must be writer (member+)
-    const role = await this.permissionService.getWorkspaceRole(input.workspaceId, userId);
-    if (!role || role === 'reader') {
-      throw new ForbiddenException('No permission to create comments');
-    }
-    await this.assertReadable(input.workspaceId, input.docId, userId);
+    await this.assertCanComment(input.workspaceId, input.docId, userId);
 
     const comment = await this.prisma.comment.create({
       data: {
@@ -312,6 +307,15 @@ export class CommentService {
   }
 
   // ───────────────────────────── #223: メンション（docs/mention-notification.md）
+
+  /** コメント（添付を含む）を書けるか。member 以上で、ページを読めること */
+  async assertCanComment(workspaceId: string, docId: string, userId: string) {
+    const role = await this.permissionService.getWorkspaceRole(workspaceId, userId);
+    if (!role || role === 'reader') {
+      throw new ForbiddenException('No permission to create comments');
+    }
+    await this.assertReadable(workspaceId, docId, userId);
+  }
 
   /** 送る人の条件。満たさなければ拒否する */
   async assertReadable(workspaceId: string, docId: string, userId: string) {

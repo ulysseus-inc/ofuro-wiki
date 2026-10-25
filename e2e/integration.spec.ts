@@ -1960,6 +1960,85 @@ test.describe('アクセス制御（ワークスペース越境防止）', () =>
     }
   });
 
+  // #285: Blob（画像・添付）の書き込み・削除・一覧は、H-1 の共通認可ガードから漏れていた。
+  // ログインさえすれば、他人のワークスペースの画像を一覧・上書き・完全削除できた
+  test('非メンバーは他人のワークスペースの画像を一覧・書き込み・削除できない（#285）', async () => {
+    const adminCookie = await authCookie(TEST_USER.email, TEST_USER.password);
+    const created = await gql(
+      adminCookie,
+      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      { name: 'authz-blob-ws' },
+    );
+    const wsId = created.data?.createWorkspace?.id;
+    expect(wsId).toBeTruthy();
+    const KEY = 'authz-blob-key';
+    const blobUrl = `${API}/api/workspaces/${wsId}/blobs/${KEY}`;
+    const ORIGINAL = 'original-bytes';
+
+    /** graphql-upload の multipart（ブラウザの setBlob と同じ形） */
+    async function upload(cookie: string, query: string, variables: Record<string, unknown>, field: string) {
+      const form = new FormData();
+      form.append('operations', JSON.stringify({ query, variables: { ...variables, [field]: null } }));
+      form.append('map', JSON.stringify({ 0: [`variables.${field}`] }));
+      form.append('0', new Blob(['attacker-bytes'], { type: 'image/png' }), KEY);
+      const res = await fetch(`${API}/graphql`, {
+        method: 'POST',
+        headers: { Cookie: cookie, 'apollo-require-preflight': 'true' },
+        body: form,
+      });
+      return res.json();
+    }
+
+    try {
+      // 持ち主（管理者）が画像を置く
+      const put = await fetch(blobUrl, {
+        method: 'PUT',
+        headers: { Cookie: adminCookie, 'Content-Type': 'image/png' },
+        body: ORIGINAL,
+      });
+      expect(put.ok).toBe(true);
+
+      const outsider = await authCookie(OUTSIDER.email, OUTSIDER.password);
+
+      // 1) 一覧
+      const list = await gql(outsider, `query ($w: String!) { listBlobs(workspaceId: $w) { key } }`, { w: wsId });
+      expect(list.data?.listBlobs ?? null).toBeNull();
+      expect(list.errors?.[0]?.message ?? '').toMatch(/denied/i);
+
+      // 2) REST の上書き
+      const overwrite = await fetch(blobUrl, {
+        method: 'PUT',
+        headers: { Cookie: outsider, 'Content-Type': 'image/png' },
+        body: 'attacker-bytes',
+      });
+      expect(overwrite.status).toBe(403);
+
+      // 3) GraphQL の書き込み（setBlob・コメント添付）
+      const set = await upload(outsider, `mutation ($w: String!, $blob: Upload!) { setBlob(workspaceId: $w, blob: $blob) }`, { w: wsId }, 'blob');
+      expect(set.errors?.[0]?.message ?? '').toMatch(/denied/i);
+      const attach = await upload(
+        outsider,
+        `mutation ($w: String!, $d: String!, $attachment: Upload!) { uploadCommentAttachment(workspaceId: $w, docId: $d, attachment: $attachment) }`,
+        { w: wsId, d: 'any-doc' },
+        'attachment',
+      );
+      expect(attach.errors?.[0]?.message ?? '').toMatch(/denied|permission/i);
+
+      // 4) 完全削除・削除済みの解放
+      const del = await gql(outsider, `mutation ($w: String!, $k: String!) { deleteBlob(workspaceId: $w, key: $k, permanently: true) }`, { w: wsId, k: KEY });
+      expect(del.errors?.[0]?.message ?? '').toMatch(/denied/i);
+      const release = await gql(outsider, `mutation ($w: String!) { releaseDeletedBlobs(workspaceId: $w) }`, { w: wsId });
+      expect(release.errors?.[0]?.message ?? '').toMatch(/denied/i);
+
+      // 持ち主の画像はそのまま残っている
+      const after = await fetch(blobUrl, { headers: { Cookie: adminCookie } });
+      expect(after.status).toBe(200);
+      expect(await after.text()).toBe(ORIGINAL);
+    } finally {
+      await gql(adminCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, { id: wsId });
+    }
+  });
+
   test('メンバーは自分のワークスペースにアクセスできる（ポジティブコントロール）', async () => {
     const outsiderCookie = await authCookie(OUTSIDER.email, OUTSIDER.password);
     const created = await gql(

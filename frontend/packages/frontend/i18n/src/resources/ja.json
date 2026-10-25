@@ -251,6 +251,7 @@
   "com.affine.admin.audit.action.doc.unpublish": "ドキュメント公開停止",
   "com.affine.admin.audit.action.doc.trash": "ドキュメントをゴミ箱へ移動",
   "com.affine.admin.audit.action.doc.untrash": "ドキュメントをゴミ箱から戻す",
+  "com.affine.admin.audit.action.doc.tags": "ドキュメントのタグを変更",
   "com.affine.admin.audit.action.setting.update": "サーバー設定の変更",
   "com.affine.admin.audit.action.sso.config.update": "SSO 設定の変更",
   "com.affine.admin.audit.action.backup.create": "バックアップ作成",

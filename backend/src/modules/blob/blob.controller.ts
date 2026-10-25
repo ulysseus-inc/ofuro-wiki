@@ -3,9 +3,11 @@ import type { Request, Response } from 'express';
 import { BlobService } from './blob.service';
 import { WorkspaceService } from '../workspace/workspace.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { WorkspaceMemberGuard } from '../../common/guards/workspace-member.guard';
+import { WorkspaceRole } from '../../common/decorators/workspace-role.decorator';
 
 @Controller('api/workspaces/:workspaceId/blobs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, WorkspaceMemberGuard)
 export class BlobController {
   constructor(
     private blobService: BlobService,
@@ -63,7 +65,9 @@ export class BlobController {
     res.send(blob.data);
   }
 
+  // #285: 書き込み権限（reader 以外のメンバー）。以前はログインのみで、他の WS に書けた
   @Put(':key')
+  @WorkspaceRole('member')
   async putBlob(
     @Param('workspaceId') workspaceId: string,
     @Param('key') key: string,
