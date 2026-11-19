@@ -40,21 +40,20 @@
 
 ## Why this exists
 
-We needed a **Notion alternative** for our internal knowledge — one we host ourselves, with no company
-documents leaving our own servers.
+We wanted a tool for building up and sharing what our company knows — as easy to use as Notion, but with our data kept in our own environment.
 
-SaaS was out. Among self-hostable options, [AFFiNE](https://github.com/toeverything/AFFiNE) had the editor
-we wanted, but **its server is licensed commercially**, so a fully permissive stack was not possible.
+SaaS means handing our data to someone else, which does not fit our requirements. So we looked for a wiki we could run in-house, but nothing felt right in terms of licensing or features.
 
-So we took the MIT-licensed editor and wrote our own backend — NestJS + PostgreSQL + PGroonga — and
-released the whole system under MIT.
+So we decided to build our own. We used open-source editor technology (the [AFFiNE](https://github.com/toeverything/AFFiNE) frontend) and developed our own backend. The result — a wiki platform built on NestJS, PostgreSQL, and PGroonga — is ofuro-wiki.
 
-Two things set it apart:
+The parts we developed ourselves are released under the MIT License. Third-party libraries follow their own licenses.
 
-- **Nothing is sent outside your server**
-- **A page you may not read is hidden entirely — not just its content, but its existence**
+Two things matter most to us:
 
-We run it in production for our own team, every day.
+- **Designed from the ground up so that company data is not sent outside**
+- **Pages you have no permission to read do not appear in lists or search results**
+
+We use it in our own production environment every day.
 
 > **Status**: v0.3.0 is the current release. Issues and questions are welcome.
 
