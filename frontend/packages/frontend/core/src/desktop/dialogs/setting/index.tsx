@@ -205,6 +205,7 @@ const SettingModalInner = ({
                   ) : isAdminSetting(settingState.activeTab) ? (
                     <AdminSetting
                       activeTab={settingState.activeTab}
+                      onCloseSetting={onCloseSetting}
                       onChangeSettingState={setSettingState}
                     />
                   ) : isWorkspaceSetting(settingState.activeTab) ? (

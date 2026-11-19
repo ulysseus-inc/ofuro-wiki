@@ -1,7 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import {
+  TEST_USER,
+  addToShared,
+  deleteWorkspaceAsAdmin,
   dismissDevOverlay,
-  getOwnedWorkspaceId,
+  importSharedWorkspace,
   waitForWorkspaceInitialized,
 } from './helpers';
 
@@ -60,21 +63,6 @@ async function gql(cookie: string, query: string, variables?: Record<string, unk
   return res.json();
 }
 
-/** ブラウザで指定のユーザーとしてサインインし、自分のワークスペース（無ければ作られる）を開く */
-async function openOwnWorkspaceAs(page: Page, user: typeof OWNER) {
-  const res = await page.request.post('/api/auth/sign-in', {
-    data: { email: user.email, password: user.password },
-    headers: { 'Content-Type': 'application/json' },
-  });
-  expect(res.ok()).toBe(true);
-
-  await page.goto('/');
-  await page.waitForURL(/\/workspace\//, { timeout: 30_000 });
-  await dismissDevOverlay(page);
-  // ⚠️ 中身の書き込みが終わるまで待つ。途中で離れると中身の無いワークスペースが残る
-  await waitForWorkspaceInitialized(page);
-}
-
 /** ブラウザで指定のユーザーとしてサインインし、ワークスペースを開く */
 async function openWorkspaceAs(page: Page, user: typeof OWNER, workspaceId: string) {
   const res = await page.request.post('/api/auth/sign-in', {
@@ -100,58 +88,33 @@ async function permissionOf(cookie: string, workspaceId: string, email: string) 
     ?.permission;
 }
 
+/** システム管理者（共有を素通りで管理できる） */
+const ADMIN = TEST_USER;
+
 test.describe('ワークスペースのメンバーの役割（#215）', () => {
-  test('⚠️ オーナーを譲ったあと、元のオーナーをメンバーに戻せる', async ({ page }) => {
+  /**
+   * #297: 共有の持ち主は root に固定で、譲れない。以前の「オーナーを譲ったあと、
+   * 元のオーナー（管理者）をメンバーに戻す」は、「ワークスペース管理者をメンバーに戻す」になった。
+   * #215 で直した「戻す手段が無い（協力者に変更する、が必ず失敗する）」はそのまま見る。
+   */
+  test('⚠️ ワークスペース管理者を、メンバーに戻せる', async ({ page }) => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
-
-    // --- 準備: 元のオーナーがブラウザでサインインし、自分のワークスペースを作らせる
-    // ⚠️ API の createWorkspace は行だけで中身を作らない。画面で開くと
-    // 「ワークスペースを読み込めませんでした」になる（中身は画面が作るときに書き込む）
-    await openOwnWorkspaceAs(page, OWNER);
-    const wsId = await getOwnedWorkspaceId(page);
-    expect(wsId).toBeTruthy();
-    if (!wsId) {
-      return;
-    }
+    const wsId = await importSharedWorkspace(API, `e2e-roles-${Date.now()}`);
 
     try {
-      const invited = await gql(
-        ownerCookie,
-        `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { inviteId } }`,
-        { w: wsId, e: [MEMBER.email] },
-      );
-      const inviteId = invited.data?.inviteMembers?.[0]?.inviteId;
-      expect(inviteId).toBeTruthy();
-
-      const accepted = await gql(
-        memberCookie,
-        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
-        { w: wsId, i: inviteId },
-      );
-      expect(accepted.errors).toBeUndefined();
-
-      // --- 準備: オーナーを譲る → 元のオーナーは管理者になる
-      const granted = await gql(
-        ownerCookie,
-        `mutation ($w: String!, $u: String!, $p: Permission!) { grantMember(workspaceId: $w, userId: $u, permission: $p) }`,
-        {
-          w: wsId,
-          u: (await gql(memberCookie, `{ currentUser { id } }`)).data.currentUser.id,
-          p: 'Owner',
-        },
-      );
-      expect(granted.errors).toBeUndefined();
+      // --- 準備: OWNER をワークスペース管理者、MEMBER をメンバーにする
+      await addToShared(API, wsId, ownerCookie, 'Admin');
+      await addToShared(API, wsId, memberCookie, 'Write');
       expect(await permissionOf(memberCookie, wsId, OWNER.email)).toBe('Admin');
 
-      // --- 画面: 新しいオーナーが、メンバー一覧を開く
-      await page.context().clearCookies();
-      await openWorkspaceAs(page, MEMBER, wsId);
+      // --- 画面: システム管理者が、メンバー一覧を開く
+      await openWorkspaceAs(page, ADMIN, wsId);
       await page.locator('[data-testid="slider-bar-workspace-setting-button"]').click();
       await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({ timeout: 10_000 });
       await page.locator('[data-testid="workspace-setting:members"]').click();
 
-      // 元のオーナー（管理者）の行の「︙」を開く
+      // ワークスペース管理者の行の「︙」を開く
       const row = page.locator('[data-testid="member-item"]', { hasText: OWNER.email });
       await row.waitFor({ state: 'visible', timeout: 15_000 });
       await row.locator('button').last().click();
@@ -161,14 +124,13 @@ test.describe('ワークスペースのメンバーの役割（#215）', () => {
 
       await page.getByRole('menuitem', { name: CHANGE_TO_MEMBER }).click();
 
-      // --- 結果: サーバー上で、元のオーナーがメンバー（Write）になっている
+      // --- 結果: サーバー上で、ワークスペース管理者がメンバー（Write）になっている
       await expect
         .poll(() => permissionOf(memberCookie, wsId, OWNER.email), { timeout: 10_000 })
         .toBe('Write');
       await expect(page.getByText('Operation failed')).toHaveCount(0);
     } finally {
-      // 後片付け: いまのオーナー（元メンバー）が消す
-      await gql(memberCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, { id: wsId });
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 });
@@ -183,42 +145,25 @@ test.describe('メンバーの見出しの人数（#221）', () => {
   test('⚠️ 見出しに実際の人数が出る（0/Infinity にならない）', async ({ page }) => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
-
-    // --- 準備: オーナーのワークスペース（画面で作らせる）に、もう1人を参加させる → 2人
-    await openOwnWorkspaceAs(page, OWNER);
-    const wsId = await getOwnedWorkspaceId(page);
-    expect(wsId).toBeTruthy();
-    if (!wsId) {
-      return;
-    }
+    const wsId = await importSharedWorkspace(API, `e2e-count-${Date.now()}`);
 
     try {
-      const invited = await gql(
-        ownerCookie,
-        `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { inviteId } }`,
-        { w: wsId, e: [MEMBER.email] },
-      );
-      const accepted = await gql(
-        memberCookie,
-        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
-        { w: wsId, i: invited.data?.inviteMembers?.[0]?.inviteId },
-      );
-      expect(accepted.errors).toBeUndefined();
+      // --- 準備: root（持ち主）＋ OWNER（ワークスペース管理者）＋ MEMBER → 3 人
+      await addToShared(API, wsId, ownerCookie, 'Admin');
+      await addToShared(API, wsId, memberCookie, 'Write');
 
-      // --- 画面: 設定 → メンバー を開く
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await waitForWorkspaceInitialized(page);
+      // --- 画面: ワークスペース管理者が、設定 → メンバー を開く
+      await openWorkspaceAs(page, OWNER, wsId);
       await page.locator('[data-testid="slider-bar-workspace-setting-button"]').click();
       await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({ timeout: 10_000 });
       await page.locator('[data-testid="workspace-setting:members"]').click();
 
-      // --- 結果: 見出しが「メンバー (2)」（一覧を読み込むと人数が入る）
+      // --- 結果: 見出しが「メンバー (3)」（一覧を読み込むと人数が入る）
       const modal = page.locator('[data-testid="setting-modal"]');
-      await expect(modal.getByText('メンバー (2)', { exact: true })).toBeVisible({ timeout: 15_000 });
+      await expect(modal.getByText('メンバー (3)', { exact: true })).toBeVisible({ timeout: 15_000 });
       await expect(modal.getByText(/Infinity/)).toHaveCount(0);
     } finally {
-      // 後片付け: ワークスペースごと消す
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, { id: wsId });
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 });

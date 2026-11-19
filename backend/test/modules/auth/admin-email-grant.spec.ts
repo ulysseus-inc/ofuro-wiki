@@ -73,6 +73,7 @@ describe('AuthService — ADMIN_EMAIL の付与 (#77)', () => {
       'admin@example.com',
       'password123',
       '203.0.113.20',
+      { create: true },
     );
 
     expect(createdWith().isAdmin).toBe(true);

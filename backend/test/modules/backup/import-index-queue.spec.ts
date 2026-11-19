@@ -23,7 +23,7 @@ describe('取り込んだページを索引に載せる（#241）', () => {
         }),
       },
     };
-    const service = new BackupService(prisma as any, {} as any, {} as any);
+    const service = new BackupService(prisma as any, {} as any, {} as any, {} as any);
     return { service, prisma, upserts };
   };
 

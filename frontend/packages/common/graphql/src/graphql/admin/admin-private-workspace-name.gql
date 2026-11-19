@@ -1,0 +1,3 @@
+query adminPrivateWorkspaceName($userId: String!) {
+  adminPrivateWorkspaceName(userId: $userId)
+}

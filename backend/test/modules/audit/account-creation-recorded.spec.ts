@@ -100,7 +100,7 @@ describe('アカウント作成が経路によらず記録される (#90)', () =
    */
   describe('サインイン経由の自動作成', () => {
     it('自動作成であることを区別して記録する', async () => {
-      await service.signInOrSignUp('auto@example.com', 'StrongPass123!', IP);
+      await service.signInOrSignUp('auto@example.com', 'StrongPass123!', IP, { create: true });
 
       const entry = entryOf('user.create');
       expect(entry).toBeDefined();

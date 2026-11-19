@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "",
   "author": "",
   "private": true,
@@ -22,6 +22,8 @@
     "schema:gql": "ts-node --transpile-only src/scripts/print-schema.ts",
     "purge:index": "npx tsx src/scripts/purge-index.ts",
     "purge:index:prod": "node dist/src/scripts/purge-index.js",
+    "migrate:workspace-kind": "npx tsx src/scripts/migrate-workspace-kind.ts",
+    "migrate:workspace-kind:prod": "node dist/src/scripts/migrate-workspace-kind.js",
     "audit:index-removal": "npx tsx src/scripts/audit-index-removal.ts",
     "audit:index-removal:prod": "node dist/src/scripts/audit-index-removal.js",
     "audit:doc-meta": "npx tsx scripts/audit-doc-meta.ts"

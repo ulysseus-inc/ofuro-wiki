@@ -12,13 +12,13 @@ import {
 } from '@ofuro/core/modules/dialogs';
 import { WorkspacesService } from '@ofuro/core/modules/workspace';
 import { buildShowcaseWorkspace } from '@ofuro/core/utils/first-app-data';
+import { WorkspaceKind } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import track from '@ofuro/track';
 import { FrameworkScope, useLiveData, useService } from '@toeverything/infra';
 import { useCallback, useState } from 'react';
 
 import * as styles from './index.css';
-import { ServerSelector } from './server-selector';
 
 const FormSection = ({
   label,
@@ -43,9 +43,8 @@ export const CreateWorkspaceDialog = ({
   const t = useI18n();
 
   const [workspaceName, setWorkspaceName] = useState('');
-  const [inputServerId, setInputServerId] = useState(
-    serverId ?? 'ofuro-cloud'
-  );
+  // #297: 作り先は常に ofuro-wiki。ローカルは選ばせない（docs/workspace-model.md 12.3）
+  const inputServerId = serverId ?? 'ofuro-cloud';
 
   const serversService = useService(ServersService);
   const server = useLiveData(
@@ -100,17 +99,6 @@ export const CreateWorkspaceDialog = ({
           />
         }
       />
-
-      <FormSection
-        label={t['com.affine.nameWorkspace.subtitle.workspace-type']()}
-        input={
-          <ServerSelector
-            className={styles.select}
-            selectedId={inputServerId}
-            onChange={setInputServerId}
-          />
-        }
-      />
     </ConfirmModal>
   );
 };
@@ -138,18 +126,25 @@ const CustomConfirmButton = ({
 
   const handleConfirm = useAsyncCallback(async () => {
     if (loading) return;
+    // #297: サーバーの情報が揃う前はローカルに作られてしまうため作らない（docs/workspace-model.md 12.3）
+    if (!server) {
+      return;
+    }
     setLoading(true);
     track.$.$.$.createWorkspace({
-      flavour: !server ? 'local' : 'ofuro-cloud',
+      flavour: 'ofuro-cloud',
     });
 
     // this will be the last step for web for now
     // fix me later
     try {
+      // #297: このダイアログで作るのは共有（システム管理者だけが開ける。docs/workspace-model.md 12.3）。
+      // プライベートは着地で自動で作る
       const res = await buildShowcaseWorkspace(
         workspacesService,
-        server?.id ?? 'local',
-        workspaceName
+        server.id,
+        workspaceName,
+        { kind: WorkspaceKind.Shared }
       );
       onCreated(res);
     } catch (e) {
@@ -172,7 +167,7 @@ const CustomConfirmButton = ({
 
   return (
     <Button
-      disabled={!workspaceName}
+      disabled={!workspaceName || !server}
       data-testid="create-workspace-create-button"
       variant="primary"
       onClick={handleCheckSessionAndConfirm}

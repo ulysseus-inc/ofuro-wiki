@@ -11,12 +11,19 @@ type AdminUserItem {
   emailVerified: Boolean!
   id: String!
   isAdmin: Boolean!
+  isRoot: Boolean!
   name: String
 }
 
 type AdminUserList {
   items: [AdminUserItem!]!
   totalCount: Int!
+}
+
+type AdminWorkspaceItem {
+  id: String!
+  memberCount: Int!
+  updatedAt: DateTime!
 }
 
 type AggregateBucketHitsObjectType {
@@ -362,6 +369,12 @@ type InviteLink {
   link: String!
 }
 
+enum InviteOutcome {
+  Added
+  AlreadyMember
+  Invited
+}
+
 type InviteUserType {
   accepted: Boolean!
   avatarUrl: String
@@ -370,6 +383,7 @@ type InviteUserType {
   id: ID!
   inviteId: String!
   name: String
+  outcome: InviteOutcome!
   permission: Permission!
   sentSuccess: Boolean! @deprecated(reason: "Notification will be sent asynchronously")
   status: WorkspaceMemberStatus
@@ -425,7 +439,7 @@ type Mutation {
   createDocMeta(docId: String!, mode: String, title: String, workspaceId: String!): DocMetaWriteResult!
   createInviteLink(expireTime: WorkspaceInviteLinkExpireTime!, workspaceId: String!): InviteLink!
   createReply(input: ReplyCreateInput!): ReplyObjectType!
-  createWorkspace(name: String): WorkspaceType!
+  createWorkspace(kind: WorkspaceKind, name: String): WorkspaceType!
   deleteAccount: DeleteAccountResult!
   deleteBlob(key: String!, permanently: Boolean, workspaceId: String!): Boolean!
   deleteComment(id: String!): Boolean!
@@ -583,8 +597,10 @@ type Query {
   adminAuditLogs(action: String, actor: String, from: String, skip: Int = 0, take: Int = 50, to: String): AuditLogList!
   adminAuditLogsCsv(action: String, actor: String, from: String, to: String): String!
   adminBackupList(skip: Int = 0, take: Int = 20): BackupRecordList!
+  adminPrivateWorkspaceName(userId: String!): String
   adminServerSettings: [ServerSettingType!]!
   adminUserList(search: String, skip: Int = 0, take: Int = 20): AdminUserList!
+  adminWorkspaceList: [AdminWorkspaceItem!]!
   currentUser: UserType
   discoveryRevision(workspaceId: String!): String!
   discoverySnapshot(workspaceId: String!): DiscoverySnapshot!
@@ -592,6 +608,7 @@ type Query {
   isPasswordTokenValid(token: String!): Boolean!
   listBlobs(workspaceId: String!): [ListedBlob!]!
   listHistory(docId: String!, take: Int, workspaceId: String!): [DocHistoryType!]!
+  myPrivateWorkspaceId: String
   oidcConfig: OidcConfigType!
   publicUserById(id: String!): UserType
   serverConfig: ServerConfigType!
@@ -884,6 +901,11 @@ enum WorkspaceInviteLinkExpireTime {
   ThreeDays
 }
 
+enum WorkspaceKind {
+  Private
+  Shared
+}
+
 enum WorkspaceMemberStatus {
   Accepted
   AllocatingSeat
@@ -957,6 +979,7 @@ type WorkspaceType {
   initialized: Boolean!
   inviteLink: InviteLink
   isOwner: Boolean!
+  kind: WorkspaceKind!
   memberCount: Int!
   members(query: String, skip: Int, take: Int): [InviteUserType!]!
   name: String

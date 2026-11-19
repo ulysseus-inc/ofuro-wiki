@@ -184,12 +184,8 @@ export const SettingSidebar = ({
         title: t['com.affine.settingSidebar.settings.general'](),
         items: generalList,
       },
-      {
-        key: 'setting:workspace',
-        title: t['com.affine.settingSidebar.settings.workspace'](),
-        items: workspaceSettingList,
-      },
     ];
+    // #297: 管理（サーバー全体）はワークスペースより上位のため、先に並べる（docs/workspace-model.md 12.8.2）
     if (adminSettingList.length > 0) {
       sections.push({
         key: 'setting:admin',
@@ -197,6 +193,11 @@ export const SettingSidebar = ({
         items: adminSettingList,
       });
     }
+    sections.push({
+      key: 'setting:workspace',
+      title: t['com.affine.settingSidebar.settings.workspace'](),
+      items: workspaceSettingList,
+    });
     const res = sections.map(group => {
       return {
         ...group,

@@ -17,7 +17,6 @@ import { PermissionService } from '../permission/permission.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import {
   markdownToYjsUpdate,
-  upsertWorkspaceRootDoc,
   upsertFoldersDoc,
   yjsUpdateToMarkdown,
 } from './yjs-doc-builder';
@@ -123,34 +122,9 @@ export class InternalDocController {
     // 差分アップデートをクリア（スナップショット再構築済みのため不要）
     await this.prisma.docUpdate.deleteMany({ where: { workspaceId, docId } });
 
-    // ワークスペース root doc の meta.pages を更新してサイドバーに表示させる
-    const rootDocId = workspaceId;
-    const rootSnapshot = await this.prisma.docSnapshot.findUnique({
-      where: { workspaceId_docId: { workspaceId, docId: rootDocId } },
-    });
-
-    const updatedRoot = upsertWorkspaceRootDoc(
-      rootSnapshot ? Buffer.from(rootSnapshot.blob) : null,
-      docId,
-      title,
-    );
-
-    await this.prisma.docSnapshot.upsert({
-      where: { workspaceId_docId: { workspaceId, docId: rootDocId } },
-      create: {
-        workspaceId,
-        docId: rootDocId,
-        blob: Buffer.from(updatedRoot),
-        timestamp: new Date(),
-      },
-      update: {
-        blob: Buffer.from(updatedRoot),
-        timestamp: new Date(),
-      },
-    });
-
-    // root doc の差分アップデートもクリア
-    await this.prisma.docUpdate.deleteMany({ where: { workspaceId, docId: rootDocId } });
+    // ⚠️ #266: ルート文書の共有目次（meta.pages）には書かない。ルート文書は
+    // 全メンバーへ配られるため、ページ単位の権限で読めない人にも題が届く。
+    // 一覧は台帳（上の doc_meta）から作る（#151 段階3。docs/manual-workspace.md 4.4-e）
 
     // db$<workspaceId>$folders を更新してサイドバーのフォルダ構造に配置
     const foldersDocId = `db$${workspaceId}$folders`;

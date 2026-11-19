@@ -1,0 +1,7 @@
+query adminWorkspaceList {
+  adminWorkspaceList {
+    id
+    memberCount
+    updatedAt
+  }
+}

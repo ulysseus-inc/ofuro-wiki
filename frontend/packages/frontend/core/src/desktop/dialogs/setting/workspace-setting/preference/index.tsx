@@ -11,6 +11,7 @@ import { ArrowRightSmallIcon } from '@blocksuite/icons/rc';
 import { FrameworkScope, useLiveData, useService } from '@toeverything/infra';
 import { useCallback, useEffect } from 'react';
 
+import { CurrentWorkspaceNote } from '../current-workspace-note';
 import { DeleteLeaveWorkspace } from './delete-leave-workspace';
 import { ProfilePanel } from './profile';
 import { TemplateDocSetting } from './template';
@@ -46,6 +47,7 @@ export const WorkspaceSettingDetail = ({
         title={t['com.affine.settings.workspace.preferences']()}
         subtitle={t['com.affine.settings.workspace.description']()}
       />
+      <CurrentWorkspaceNote />
       <SettingWrapper title={t['Info']()}>
         <SettingRow
           name={t['Workspace Profile']()}

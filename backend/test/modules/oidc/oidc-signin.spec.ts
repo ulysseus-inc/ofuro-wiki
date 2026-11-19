@@ -98,6 +98,14 @@ describe('AuthService — OIDC サインイン (#89)', () => {
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
+    it('#294: root は自動作成が無効でも作られ、Admin になる', async () => {
+      process.env.ADMIN_EMAIL = 'root@example.com';
+
+      await signIn({ email: 'root@example.com' });
+
+      expect(prisma.user.create.mock.calls[0][0].data.isAdmin).toBe(true);
+    });
+
     it('既存の利用者はサインインできる', async () => {
       existingUser = {
         id: 'user-1',

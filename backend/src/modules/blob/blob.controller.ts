@@ -25,7 +25,8 @@ export class BlobController {
     const userId = user?.id;
 
     // ユーザーがこのワークスペースにアクセス権があるか確認
-    const role = await this.workspaceService.getMemberRole(workspaceId, userId);
+    // #297: メンバーでなくても、共有ならシステム管理者は読める（入口のガードと同じ扱い）
+    const role = await this.workspaceService.effectiveRole(workspaceId, userId);
     if (!role) {
       throw new ForbiddenException('Access denied to this workspace');
     }

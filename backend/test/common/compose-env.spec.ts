@@ -166,6 +166,7 @@ describe('.env.example が設定可能な変数を網羅する', () => {
     'BACKUP_HOST_PATH', // ホスト側のパス。compose の既定で足りる
     'APP_IMAGE', // イメージ運用（デモ等）でのみ使う
     'POSTGRES_IMAGE', // 同上
+    'ADMIN_EMAIL', // #297: ROOT_EMAIL の古い名前。古い .env のために渡すだけで、新しく書かせない
   ]);
 
   it('compose が .env から受け取る変数がすべて載っている', () => {

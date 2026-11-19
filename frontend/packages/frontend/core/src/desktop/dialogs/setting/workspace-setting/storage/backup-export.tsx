@@ -3,15 +3,14 @@ import { SettingRow } from '@ofuro/component/setting-components';
 import { Button } from '@ofuro/component/ui/button';
 import { useAsyncCallback } from '@ofuro/core/components/hooks/affine-async-hooks';
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
-import { ExportIcon, ImportIcon } from '@blocksuite/icons/rc';
+import { ExportIcon } from '@blocksuite/icons/rc';
 import { useService } from '@toeverything/infra';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
+// #297: 取り込みは管理画面「ワークスペース」へ移した（docs/workspace-model.md 12.6）
 export const BackupExportPanel = () => {
   const workspace = useService(WorkspaceService).workspace;
   const [exporting, setExporting] = useState(false);
-  const [importing, setImporting] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const onExport = useAsyncCallback(async () => {
     if (exporting) return;
@@ -59,65 +58,6 @@ export const BackupExportPanel = () => {
     }
   }, [exporting, workspace]);
 
-  const onImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const onFileSelected = useAsyncCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-
-      if (!file.name.endsWith('.zip')) {
-        notify.error({
-          title: 'Invalid file',
-          message: 'Please select a .ofuro-backup.zip file',
-        });
-        return;
-      }
-
-      setImporting(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const res = await fetch('/api/workspaces/import', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const error = await res.text();
-          throw new Error(error || `Import failed: ${res.status}`);
-        }
-
-        const result = await res.json();
-        notify.success({
-          title: 'Workspace imported successfully',
-          message: `Created workspace "${result.name}" with ${result.docCount} docs and ${result.blobCount} blobs`,
-        });
-
-        // Reload page to show the new workspace
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } catch (e: any) {
-        notify.error({
-          title: 'Import failed',
-          message: e.message,
-        });
-      } finally {
-        setImporting(false);
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-      }
-    },
-    []
-  );
-
   return (
     <>
       <SettingRow
@@ -133,27 +73,6 @@ export const BackupExportPanel = () => {
           prefix={<ExportIcon />}
         >
           Export
-        </Button>
-      </SettingRow>
-      <SettingRow
-        name="Import Workspace"
-        desc="Restore a workspace from a backup file. This creates a new workspace."
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".zip"
-          style={{ display: 'none' }}
-          onChange={onFileSelected}
-        />
-        <Button
-          data-testid="import-workspace-backup"
-          onClick={onImportClick}
-          loading={importing}
-          disabled={importing}
-          prefix={<ImportIcon />}
-        >
-          Import
         </Button>
       </SettingRow>
     </>

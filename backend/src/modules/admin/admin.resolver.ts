@@ -2,13 +2,14 @@ import { Resolver, Query, Mutation, Args, Int } from '@nestjs/graphql';
 import { BadRequestException, Logger } from '@nestjs/common';
 import { AdminOnly } from '../../common/decorators/admin.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { AdminService } from './admin.service';
+import { AdminService, assertRootTouchedOnlyByRoot } from './admin.service';
 import { ScheduledBackupService } from '../backup/scheduled-backup.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../../prisma.service';
 import {
   AdminUserList,
   AdminUserItem,
+  AdminWorkspaceItem,
   AdminCreateUserInput,
   ServerSettingType,
   BackupRecordType,
@@ -45,6 +46,12 @@ export class AdminResolver {
     take?: number,
   ) {
     return this.adminService.listUsers(search, skip, take);
+  }
+
+  @AdminOnly()
+  @Query(() => [AdminWorkspaceItem])
+  async adminWorkspaceList() {
+    return this.adminService.listSharedWorkspaces();
   }
 
   @AdminOnly()
@@ -94,6 +101,15 @@ export class AdminResolver {
     return { rows, okCount, ngCount: rows.length - okCount };
   }
 
+  /** #297: ユーザー削除の確認に出す、一緒に消えるプライベートの名前。無ければ null */
+  @AdminOnly()
+  @Query(() => String, { nullable: true })
+  async adminPrivateWorkspaceName(
+    @Args('userId', { type: () => String }) userId: string,
+  ) {
+    return this.adminService.privateWorkspaceName(userId);
+  }
+
   @AdminOnly()
   @Mutation(() => Boolean)
   async adminDeleteUser(
@@ -117,8 +133,9 @@ export class AdminResolver {
   @Mutation(() => Boolean)
   async adminRevokeUserSessions(
     @Args('userId', { type: () => String }) userId: string,
+    @CurrentUser() actor: { id: string; email: string },
   ) {
-    return this.adminService.revokeUserSessions(userId);
+    return this.adminService.revokeUserSessions(userId, actor.id);
   }
 
   @AdminOnly()
@@ -182,7 +199,7 @@ export class AdminResolver {
     @Args('password', { type: () => String }) password: string,
     @CurrentUser() actor: { id: string; email: string },
   ): Promise<boolean> {
-    return this.adminService.setUserPassword(userId, password, actor.email);
+    return this.adminService.setUserPassword(userId, password, actor);
   }
 
   @AdminOnly()
@@ -196,6 +213,8 @@ export class AdminResolver {
       where: { id: userId },
     });
     if (!user) throw new BadRequestException('User not found');
+    // #297: root のパスワードを変えられる URL は、root 本人にしか出さない
+    assertRootTouchedOnlyByRoot(user, actor.id);
 
     // #115: 管理者が手渡す URL なので 24時間有効（メール送信の1時間とは別）。
     const token = await this.mailService.createEmailToken(

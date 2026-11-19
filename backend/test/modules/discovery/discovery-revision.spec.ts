@@ -169,15 +169,16 @@ describe('Index を書き換える経路の網羅', () => {
       '復元で総入れ替え。最後にまとめて上げる',
     'modules/backup/backup.service.ts::importWorkspace':
       '取り込みの最後に1回だけ上げる',
-    'modules/workspace/workspace.service.ts::createWorkspace':
+    // #297: 作成の書き込みは insertWorkspace に移った（createWorkspace は種類の判定だけ）
+    'modules/workspace/workspace.service.ts::insertWorkspace':
       '作りたての空ワークスペース。まだ誰も Snapshot を持たない',
     'modules/workspace/workspace.service.ts::inviteByEmail':
       '招待しただけでは参加していない（受諾時に上げる）',
-    // #151 段階3（7.10.6）。⚠️ ここで上げると**打鍵のたびに全員が
-    // 一覧を取り直す**。書き換えるのは updated_at だけで、影響は
-    // 並び順と鮮度表示にとどまる（誰が何を見られるかは変わらない）
+    // #151 段階3（7.10.6・2026-11-11 改訂）。直接 bump すると打鍵のたびに
+    // 全員が一覧を取り直すので、DocContentRevisionService.touch で
+    // 30 秒に 1 回まで間引いて上げる（後追いあり）
     'modules/sync/sync.service.ts::pushUpdate':
-      '本文の保存ごとに走る。上げると打鍵のたびに全クライアントが取り直す',
+      '本文の保存ごとに走る。contentRevision.touch で間引いて上げる',
   };
 
   it('Index を書き換えるメソッドが版数を上げている', () => {

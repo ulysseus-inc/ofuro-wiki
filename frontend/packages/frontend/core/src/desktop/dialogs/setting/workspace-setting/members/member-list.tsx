@@ -22,10 +22,12 @@ import * as styles from './styles.css';
 export const MemberList = ({
   isOwner,
   isAdmin,
+  isShared,
   goToTeamBilling,
 }: {
   isOwner: boolean;
   isAdmin: boolean;
+  isShared: boolean;
   goToTeamBilling: () => void;
 }) => {
   const membersService = useService(WorkspaceMembersService);
@@ -84,6 +86,7 @@ export const MemberList = ({
             member={member}
             isOwner={isOwner}
             isAdmin={isAdmin}
+            isShared={isShared}
             goToTeamBilling={goToTeamBilling}
           />
         ))
@@ -129,12 +132,14 @@ const MemberItem = ({
   member,
   isOwner,
   isAdmin,
+  isShared,
   currentAccount,
   goToTeamBilling,
 }: {
   member: Member;
   isAdmin: boolean;
   isOwner: boolean;
+  isShared: boolean;
   currentAccount: AuthAccountInfo;
   goToTeamBilling: () => void;
 }) => {
@@ -185,7 +190,10 @@ const MemberItem = ({
       });
   }, [member, t, membersService]);
 
-  const memberStatus = useMemo(() => getMemberStatus(member), [member]);
+  const memberStatus = useMemo(
+    () => getMemberStatus(member, isShared),
+    [member, isShared]
+  );
 
   return (
     <div
@@ -209,6 +217,7 @@ const MemberItem = ({
         )}
       </div>
       <div
+        data-testid="member-role"
         className={clsx(styles.roleOrStatus, {
           pending:
             member.status !== WorkspaceMemberStatus.Accepted &&
@@ -253,7 +262,7 @@ const MemberItem = ({
   );
 };
 
-const getMemberStatus = (member: Member): I18nString => {
+const getMemberStatus = (member: Member, isShared: boolean): I18nString => {
   switch (member.status) {
     case WorkspaceMemberStatus.NeedMoreSeat:
     case WorkspaceMemberStatus.NeedMoreSeatAndReview:
@@ -266,14 +275,17 @@ const getMemberStatus = (member: Member): I18nString => {
       return 'Allocating Seat';
     case WorkspaceMemberStatus.Accepted:
       switch (member.permission) {
+        // #297: 持ち主は、共有では root、プライベートでは本人（docs/workspace-member-roles.md 1 章）
         case Permission.Owner:
-          return 'Workspace Owner';
+          return isShared
+            ? 'com.ofuro.workspace.role.root'
+            : 'com.ofuro.workspace.role.owner';
         case Permission.Admin:
-          return 'Admin';
+          return 'com.ofuro.workspace.role.admin';
         case Permission.Write:
           return 'Member';
         case Permission.Read:
-          return 'Reader';
+          return 'com.ofuro.workspace.role.reader';
         default:
           return 'Member';
       }

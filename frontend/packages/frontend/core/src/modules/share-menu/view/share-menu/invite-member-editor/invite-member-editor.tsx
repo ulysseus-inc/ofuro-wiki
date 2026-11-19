@@ -63,8 +63,10 @@ export const InviteMemberEditor = ({
   const t = useI18n();
   const [selectedMembers, setSelectedMembers] = useState<Member[]>([]);
   const docGrantedUsersService = useService(DocGrantedUsersService);
+  // #298: 編集可能から始める。管理可能だと、選ばれた人がさらに別の人へページを見せられる
+  // （絞ったページが知らないうちに広がる）。docs/doc-sharing.md 7 章
   const [inviteDocRoleType, setInviteDocRoleType] = useState<DocRole>(
-    DocRole.Manager
+    DocRole.Editor
   );
 
   const memberSearchService = useService(MemberSearchService);

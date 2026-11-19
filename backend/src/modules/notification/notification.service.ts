@@ -24,6 +24,7 @@ interface DocInfo {
   elementId?: string;
 }
 
+import { IndexReaderService } from '../discovery/index-reader.service';
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
@@ -31,6 +32,8 @@ export class NotificationService {
   constructor(
     private prisma: PrismaService,
     private mailService: MailService,
+    // #319: 名前はルート文書が正（DB の workspaces.name は作った時のまま）
+    private names: IndexReaderService,
   ) {}
 
   async listNotifications(
@@ -129,7 +132,7 @@ export class NotificationService {
       select: { id: true, name: true, avatarKey: true },
     });
     return ws
-      ? { id: ws.id, name: ws.name ?? 'Workspace', avatarUrl: ws.avatarKey }
+      ? { id: ws.id, name: (await this.names.workspaceName(ws)) ?? 'Workspace', avatarUrl: ws.avatarKey }
       : null;
   }
 

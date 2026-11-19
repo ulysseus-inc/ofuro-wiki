@@ -71,6 +71,7 @@ import {
 import type { GlobalState } from '../../storage';
 import type {
   Workspace,
+  CreateWorkspaceOptions,
   WorkspaceFlavourProvider,
   WorkspaceFlavoursProvider,
   WorkspaceMetadata,
@@ -160,13 +161,16 @@ class CloudWorkspaceFlavourProvider implements WorkspaceFlavourProvider {
       docCollection: WorkspaceImpl,
       blobStorage: BlobStorage,
       docStorage: DocStorage
-    ) => Promise<void>
+    ) => Promise<void>,
+    options?: CreateWorkspaceOptions
   ): Promise<WorkspaceMetadata> {
     // create workspace on cloud, get workspace id
+    // #297: 種類を省くとプライベート。共有はシステム管理者だけが作れる（サーバーが判定する）
     const {
       createWorkspace: { id: workspaceId },
     } = await this.graphqlService.gql({
       query: createWorkspaceMutation,
+      variables: { kind: options?.kind },
     });
 
     // save the initial state to local storage, then sync to cloud

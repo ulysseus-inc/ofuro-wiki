@@ -2,6 +2,7 @@ import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { DOCS_ROUTE } from '../static-files';
 
 const MOBILE_UA_REGEX = /Mobile|Android|iPhone|iPad/i;
 
@@ -12,6 +13,8 @@ const PASSTHROUGH_PREFIXES = [
   '/api/',
   '/assets/',
   '/static/',
+  // #324: ガイド。スマホでも VitePress のページを返す
+  `${DOCS_ROUTE}/`,
 ];
 
 // File extensions that indicate static asset requests
@@ -47,7 +50,10 @@ export class MobileRedirectMiddleware implements NestMiddleware {
 
     // Skip API, GraphQL, Socket.IO, and static asset paths
     const path = req.path;
-    if (PASSTHROUGH_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    if (
+      path === DOCS_ROUTE ||
+      PASSTHROUGH_PREFIXES.some((prefix) => path.startsWith(prefix))
+    ) {
       return next();
     }
 

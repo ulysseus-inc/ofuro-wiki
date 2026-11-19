@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { type Page, expect } from '@playwright/test';
 
 /** テスト用ユーザー情報 */
@@ -109,12 +111,168 @@ export async function signInViaAPI(page: Page) {
   await enterOrCreateWorkspace(page);
 }
 
+// ---------------------------------------------------------------------------
+// #297: 共有ワークスペース（docs/workspace-model.md 12 章）
+//
+// 共有を作れるのはシステム管理者だけ（持ち主は root）。一般ユーザーが作って人を
+// 招待する、という準備はもうできない。代わりに TEST_USER（システム管理者）が作り、
+// テストの「所有者」役をワークスペース管理者（admin）にする。
+//
+// ⚠️ API だけで作った共有は中身（ルート文書）が空で、画面では開けない。
+// 画面の検査に使うときは、中身のあるワークスペースを取り込んで作ること。
+// ---------------------------------------------------------------------------
+
+/** TEST_USER（システム管理者）の認証クッキー */
+export async function adminCookieFor(api: string): Promise<string> {
+  const res = await fetch(`${api}/api/auth/sign-in`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
+  });
+  if (!res.ok) {
+    throw new Error(`admin sign-in failed: ${res.status} ${await res.text()}`);
+  }
+  const cookies = res.headers.getSetCookie?.() ?? [];
+  return cookies.map((c) => c.split(';')[0]).join('; ');
+}
+
+async function gqlAt(
+  api: string,
+  cookie: string,
+  query: string,
+  variables?: Record<string, unknown>,
+) {
+  const res = await fetch(`${api}/graphql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ query, variables }),
+  });
+  return res.json();
+}
+
+/**
+ * 共有ワークスペースを作り、`managerCookie` の人をワークスペース管理者にする。
+ * 管理者は招待・メンバーの管理ができる（今までの「所有者」の代わり）。
+ */
+export async function createManagedSharedWorkspace(
+  api: string,
+  managerCookie: string,
+  name: string,
+): Promise<string> {
+  const admin = await adminCookieFor(api);
+  const created = await gqlAt(
+    api,
+    admin,
+    `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
+    { name },
+  );
+  const wsId: string | undefined = created.data?.createWorkspace?.id;
+  if (!wsId) {
+    throw new Error(`共有を作れない: ${JSON.stringify(created)}`);
+  }
+
+  const me = await gqlAt(api, managerCookie, `{ currentUser { id email } }`);
+  const { id, email } = me.data.currentUser;
+  await gqlAt(
+    api,
+    admin,
+    `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { email } }`,
+    { w: wsId, e: [email] },
+  );
+  const granted = await gqlAt(
+    api,
+    admin,
+    `mutation ($w: String!, $u: String!) { grantMember(workspaceId: $w, userId: $u, permission: Admin) }`,
+    { w: wsId, u: id },
+  );
+  if (granted.errors) {
+    throw new Error(`管理者にできない: ${JSON.stringify(granted)}`);
+  }
+  return wsId;
+}
+
+/**
+ * 画面で開ける共有ワークスペースを作る（中身のあるワークスペースの書き出しを取り込む）。
+ *
+ * API の createWorkspace は行だけで中身（ルート文書）を作らず、画面では開けない。
+ * 取り込みはシステム管理者だけ（共有として作られ、持ち主は root）。
+ * 元の zip は `fixtures/shared-workspace.ofuro-backup.zip`（画面で作ったワークスペースの書き出し）。
+ *
+ * 作り直すとき（書き出しの形式が変わったなど）:
+ *   1. 新しいユーザーで画面からサインインし、最初のワークスペースが作られるのを待つ
+ *   2. `POST /api/workspaces/<その ID>/export` の応答を、上のファイル名で保存する
+ * 中身はテンプレートのページだけでよい（テストのページを積もらせない）。
+ */
+export async function importSharedWorkspace(api: string, name: string): Promise<string> {
+  const admin = await adminCookieFor(api);
+  const zip = fs.readFileSync(path.join(__dirname, 'fixtures', 'shared-workspace.ofuro-backup.zip'));
+  const form = new FormData();
+  form.append('file', new Blob([zip]), 'shared-workspace.ofuro-backup.zip');
+  form.append('name', name);
+  const res = await fetch(`${api}/api/workspaces/import`, {
+    method: 'POST',
+    headers: { Cookie: admin },
+    body: form,
+  });
+  if (!res.ok) {
+    throw new Error(`取り込めない: ${res.status} ${await res.text()}`);
+  }
+  const { workspaceId } = await res.json();
+  return workspaceId;
+}
+
+/** 共有に人を入れる（アカウントがある人はその場でメンバーになる）。`Admin` ならワークスペース管理者にする */
+export async function addToShared(
+  api: string,
+  wsId: string,
+  cookie: string,
+  permission: 'Admin' | 'Write' | 'Read' = 'Write',
+): Promise<void> {
+  const admin = await adminCookieFor(api);
+  const me = await gqlAt(api, cookie, `{ currentUser { id email } }`);
+  const { id, email } = me.data.currentUser;
+  await gqlAt(
+    api,
+    admin,
+    `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { email } }`,
+    { w: wsId, e: [email] },
+  );
+  if (permission === 'Write') {
+    return;
+  }
+  const granted = await gqlAt(
+    api,
+    admin,
+    `mutation ($w: String!, $u: String!, $p: Permission!) { grantMember(workspaceId: $w, userId: $u, permission: $p) }`,
+    { w: wsId, u: id, p: permission },
+  );
+  if (granted.errors) {
+    throw new Error(`役割を変えられない: ${JSON.stringify(granted)}`);
+  }
+}
+
+/** 共有ワークスペースを消す（消せるのはシステム管理者だけ） */
+export async function deleteWorkspaceAsAdmin(api: string, wsId: string): Promise<void> {
+  const admin = await adminCookieFor(api);
+  await gqlAt(api, admin, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, { id: wsId });
+}
+
 /** webpack dev server の overlay iframe を除去する */
 export async function dismissDevOverlay(page: Page) {
   await page.evaluate(() => {
     const iframe = document.getElementById('webpack-dev-server-client-overlay');
     if (iframe) iframe.remove();
   });
+}
+
+/**
+ * M3（#293）: 未登録のアドレスでサインインすると、作る前に確かめる画面が出る。
+ * 「アカウントを作成」を押して作る（docs/signin-registration.md 4.1）
+ */
+export async function confirmCreateAccount(page: Page) {
+  const button = page.getByTestId('sign-in-button');
+  await expect(button).toHaveText(/アカウントを作成|Create account/, { timeout: 15_000 });
+  await button.click();
 }
 
 /** サインインしてワークスペースに到達するまで待機 */

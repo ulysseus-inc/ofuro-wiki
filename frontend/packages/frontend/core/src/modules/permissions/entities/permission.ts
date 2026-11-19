@@ -1,4 +1,4 @@
-import { Permission } from '@ofuro/graphql';
+import { Permission, WorkspaceKind } from '@ofuro/graphql';
 import {
   backoffRetry,
   effect,
@@ -25,6 +25,8 @@ export class WorkspacePermission extends Entity {
     cache => (cache?.isOwner ?? null) || (cache?.isAdmin ?? null)
   );
   isTeam$ = this.cache$.map(cache => cache?.isTeam ?? null);
+  /** #297: 共有ワークスペースか（docs/workspace-model.md 12.8.3）。画面の出し分けに使う */
+  isShared$ = this.cache$.map(cache => cache?.isShared ?? null);
   isRevalidating$ = new LiveData(false);
 
   constructor(
@@ -50,19 +52,21 @@ export class WorkspacePermission extends Entity {
             isOwner: info.workspace.role === Permission.Owner,
             isAdmin: info.workspace.role === Permission.Admin,
             isTeam: info.workspace.team,
+            isShared: info.workspace.kind === WorkspaceKind.Shared,
           };
         } else {
-          return { isOwner: true, isAdmin: false, isTeam: false };
+          return { isOwner: true, isAdmin: false, isTeam: false, isShared: false };
         }
       }).pipe(
         backoffRetry({
           count: Infinity,
         }),
-        tap(({ isOwner, isAdmin, isTeam }) => {
+        tap(({ isOwner, isAdmin, isTeam, isShared }) => {
           this.store.setWorkspacePermissionCache({
             isOwner,
             isAdmin,
             isTeam,
+            isShared,
           });
         }),
         onStart(() => this.isRevalidating$.setValue(true)),

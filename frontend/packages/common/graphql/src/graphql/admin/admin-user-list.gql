@@ -6,6 +6,7 @@ query adminUserList($search: String, $skip: Int, $take: Int) {
       name
       avatarUrl
       isAdmin
+      isRoot
       emailVerified
       createdAt
     }

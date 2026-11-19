@@ -1,8 +1,10 @@
 import {
+  IsBoolean,
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -19,6 +21,16 @@ export class SignInDto {
   @IsString()
   @IsNotEmpty({ message: 'パスワードを入力してください' })
   password: string;
+
+  /** #293: 「作りますか」で承認した。無ければアカウントを作らない */
+  @IsOptional()
+  @IsBoolean()
+  create?: boolean;
+
+  /** #195: 招待のページから来た（本人宛てのメール招待なら、閉じた環境でも作れる） */
+  @IsOptional()
+  @IsUUID()
+  inviteId?: string;
 }
 
 export class SignUpDto {

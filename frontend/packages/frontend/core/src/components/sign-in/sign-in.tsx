@@ -29,6 +29,8 @@ import {
 import { useSelfhostLoginVersionGuard } from '../hooks/affine/use-selfhost-login-version-guard';
 import type { SignInState } from '.';
 import * as style from './style.css';
+import { userGuideUrl } from '@ofuro/core/utils/user-guide';
+import { I18nService } from '@ofuro/core/modules/i18n';
 
 const emailRegex =
   /^(?:(?:[^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@(?:(?:\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|((?:[a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
@@ -49,6 +51,8 @@ export const SignInStep = ({
   onAuthenticated?: (status: AuthSessionStatus) => void;
 }) => {
   const t = useI18n();
+  const language =
+    useLiveData(useService(I18nService).i18n.currentLanguageKey$) ?? '';
   const serverService = useService(ServerService);
   const versionError = useSelfhostLoginVersionGuard(serverService.server);
   const isSelfhosted = useLiveData(
@@ -85,7 +89,8 @@ export const SignInStep = ({
     setIsMutating(true);
 
     try {
-      const { hasPassword, registered, name } = await authService.checkUserByEmail(email);
+      const { hasPassword, registered, name } =
+        await authService.checkUserByEmail(email);
 
       if (hasPassword) {
         changeState(prev => ({
@@ -129,9 +134,7 @@ export const SignInStep = ({
   if (versionError && isSelfhosted) {
     return (
       <AuthContainer>
-        <AuthHeader
-          title={t['com.affine.auth.sign.in']()}
-        />
+        <AuthHeader title={t['com.affine.auth.sign.in']()} />
         <AuthContent>
           <div>{versionError}</div>
         </AuthContent>
@@ -141,9 +144,7 @@ export const SignInStep = ({
 
   return (
     <AuthContainer>
-      <AuthHeader
-        title={t['com.affine.auth.sign.in']()}
-      />
+      <AuthHeader title={t['com.affine.auth.sign.in']()} />
 
       <AuthContent>
         <OAuth redirectUrl={state.redirectUrl} />
@@ -173,6 +174,18 @@ export const SignInStep = ({
         >
           {t['com.affine.auth.sign.email.continue']()}
         </Button>
+
+        {/* #324: サインインできない人もガイド（トラブル対応）を読めるように */}
+        <div className={style.authMessage}>
+          <a
+            href={userGuideUrl(language)}
+            target="_blank"
+            rel="noreferrer"
+            data-testid="sign-in-user-guide-link"
+          >
+            {t['com.ofuro.userGuide']()}
+          </a>
+        </div>
 
         {!isSelfhosted && (
           <>

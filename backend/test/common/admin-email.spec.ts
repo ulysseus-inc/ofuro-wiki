@@ -1,4 +1,8 @@
-import { getAdminEmail, isAdminEmail } from '../../src/common/admin-email';
+import {
+  checkRootEmailEnv,
+  getAdminEmail,
+  isAdminEmail,
+} from '../../src/common/admin-email';
 
 /** #77: ADMIN_EMAIL のユーザーがサインアップしても Admin にならない問題の回帰テスト */
 describe('admin-email (#77)', () => {
@@ -57,5 +61,75 @@ describe('admin-email (#77)', () => {
     // 部分一致で誤判定しないこと
     expect(isAdminEmail('admin@example.com.evil.test')).toBe(false);
     expect(isAdminEmail('xadmin@example.com')).toBe(false);
+  });
+});
+
+/** #297: ADMIN_EMAIL → ROOT_EMAIL の改名（docs/workspace-model.md 12.1.1） */
+describe('ROOT_EMAIL と古い名前 ADMIN_EMAIL', () => {
+  const original = {
+    root: process.env.ROOT_EMAIL,
+    legacy: process.env.ADMIN_EMAIL,
+  };
+
+  /** 未定義は消す（undefined を代入すると文字列 "undefined" になる） */
+  function setEnv(name: string, value: string | undefined) {
+    if (value === undefined) {
+      delete process.env[name];
+      return;
+    }
+    process.env[name] = value;
+  }
+
+  afterEach(() => {
+    setEnv('ROOT_EMAIL', original.root);
+    setEnv('ADMIN_EMAIL', original.legacy);
+  });
+
+  it('ROOT_EMAIL だけなら、それを使う。警告なし', () => {
+    setEnv('ROOT_EMAIL', 'root@example.com');
+    setEnv('ADMIN_EMAIL', undefined);
+
+    expect(getAdminEmail()).toBe('root@example.com');
+    expect(isAdminEmail('root@example.com')).toBe(true);
+    expect(checkRootEmailEnv()).toBeUndefined();
+  });
+
+  it('【重要】ADMIN_EMAIL だけでも root は居なくならない。改名を促す', () => {
+    setEnv('ROOT_EMAIL', undefined);
+    setEnv('ADMIN_EMAIL', 'root@example.com');
+
+    expect(getAdminEmail()).toBe('root@example.com');
+    expect(checkRootEmailEnv()).toMatch(/ROOT_EMAIL/);
+  });
+
+  it('同じ値なら ROOT_EMAIL を使い、ADMIN_EMAIL を消すよう促す', () => {
+    setEnv('ROOT_EMAIL', 'root@example.com');
+    setEnv('ADMIN_EMAIL', ' root@example.com ');
+
+    expect(getAdminEmail()).toBe('root@example.com');
+    expect(checkRootEmailEnv()).toMatch(/ADMIN_EMAIL/);
+  });
+
+  it('【重要】違う値なら起動させない（どちらが root か決められない）', () => {
+    setEnv('ROOT_EMAIL', 'root@example.com');
+    setEnv('ADMIN_EMAIL', 'other@example.com');
+
+    expect(() => checkRootEmailEnv()).toThrow(/ROOT_EMAIL/);
+  });
+
+  it('空白だけの ROOT_EMAIL は無いものとして ADMIN_EMAIL を使う', () => {
+    setEnv('ROOT_EMAIL', '  ');
+    setEnv('ADMIN_EMAIL', 'root@example.com');
+
+    expect(getAdminEmail()).toBe('root@example.com');
+    expect(() => checkRootEmailEnv()).not.toThrow();
+  });
+
+  it('両方なければ root なし。警告なし', () => {
+    setEnv('ROOT_EMAIL', undefined);
+    setEnv('ADMIN_EMAIL', undefined);
+
+    expect(getAdminEmail()).toBeUndefined();
+    expect(checkRootEmailEnv()).toBeUndefined();
   });
 });

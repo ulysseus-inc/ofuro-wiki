@@ -82,6 +82,24 @@ export class IndexReaderService {
     return names;
   }
 
+  /**
+   * #297: ワークスペースの名前。画面に出る名前はルート文書の `meta.name` にある
+   * （サーバーの `workspaces.name` は作った時の値のまま）。無ければ null
+   */
+  async readWorkspaceName(workspaceId: string): Promise<string | null> {
+    const doc = await this.readRoot(workspaceId);
+    const name = doc?.getMap('meta').get('name');
+    return typeof name === 'string' && name ? name : null;
+  }
+
+  /**
+   * #319: 画面に出るワークスペース名。ルート文書から読み、無ければ DB の値（作った時の名前）。
+   * 名前が要る所（監査ログ・招待・通知）はここを使う（docs/workspace-model.md 12.13）
+   */
+  async workspaceName(workspace: { id: string; name: string | null }): Promise<string | null> {
+    return (await this.readWorkspaceName(workspace.id)) ?? workspace.name ?? null;
+  }
+
   /** ルート文書（docId === workspaceId）。保存されていなければ null */
   private async readRoot(workspaceId: string) {
     const [snapshot, updates] = await Promise.all([

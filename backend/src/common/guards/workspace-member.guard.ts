@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { PrismaService } from '../../prisma.service';
+import { systemAdminBypasses } from '../workspace-kind';
 import { AuditService } from '../../modules/audit/audit.service';
 import { recordDenial } from './audit-denial.util';
 import {
@@ -73,7 +74,7 @@ export class WorkspaceMemberGuard implements CanActivate {
     const [workspaceExists, dbUser, member] = await Promise.all([
       this.prisma.workspace.findUnique({
         where: { id: workspaceId },
-        select: { id: true },
+        select: { id: true, kind: true },
       }),
       this.prisma.user.findUnique({
         where: { id: user.id },
@@ -90,8 +91,8 @@ export class WorkspaceMemberGuard implements CanActivate {
       throw new NotFoundException('Workspace not found');
     }
 
-    // サーバ全体 Admin は全ワークスペースにアクセス可能。
-    if (dbUser?.isAdmin) {
+    // #297: システム管理者が素通りするのは共有だけ。プライベートは本人だけの場
+    if (systemAdminBypasses(dbUser?.isAdmin, workspaceExists.kind)) {
       return true;
     }
 

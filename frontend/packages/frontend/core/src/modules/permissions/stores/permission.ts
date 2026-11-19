@@ -47,6 +47,7 @@ export class WorkspacePermissionStore extends Store {
       isOwner: boolean;
       isAdmin: boolean;
       isTeam: boolean;
+      isShared: boolean;
     }>('permission');
   }
 
@@ -54,6 +55,7 @@ export class WorkspacePermissionStore extends Store {
     isOwner: boolean;
     isAdmin: boolean;
     isTeam: boolean;
+    isShared: boolean;
   }) {
     this.workspaceLocalState.set('permission', permission);
   }

@@ -11,10 +11,13 @@ export function registerAffineCreationCommands({
   pageHelper,
   t,
   globalDialogService,
+  isAdmin,
 }: {
   t: ReturnType<typeof useI18n>;
   pageHelper: ReturnType<typeof usePageHelper>;
   globalDialogService: GlobalDialogService;
+  /** #297: システム管理者か。新しいワークスペース（共有）を作れるのはシステム管理者だけ */
+  isAdmin: boolean;
 }) {
   const unsubs: Array<() => void> = [];
   unsubs.push(
@@ -59,6 +62,9 @@ export function registerAffineCreationCommands({
       category: 'affine:creation',
       icon: <PlusIcon />,
       label: t['com.affine.cmdk.affine.new-workspace'](),
+      // #297: 共有を作れるのはシステム管理者だけ（docs/workspace-model.md 12.3）。
+      // 以前は誰にでも出ていて、2 つ目のワークスペースを作る抜け道だった
+      preconditionStrategy: () => isAdmin,
       run() {
         track.$.cmdk.workspace.createWorkspace();
 

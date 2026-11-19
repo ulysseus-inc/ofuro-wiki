@@ -11,6 +11,7 @@
   "type": "module",
   "exports": {
     "./onboarding.zip": "./onboarding/onboarding.zip",
+    "./onboarding-en.zip": "./onboarding/onboarding-en.zip",
     "./edgeless": "./edgeless-templates.gen.ts",
     "./stickers": "./stickers-templates.gen.ts",
     "./build-edgeless": "./build-edgeless.mjs"

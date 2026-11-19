@@ -1,3 +1,4 @@
+import type { WorkspaceKind } from '@ofuro/graphql';
 import type {
   BlobStorage,
   DocStorage,
@@ -11,6 +12,11 @@ import type { WorkspaceProfileInfo } from '../entities/profile';
 import type { Workspace } from '../entities/workspace';
 import type { WorkspaceMetadata } from '../metadata';
 
+/** #297: 作るワークスペースの種類など。省くとプライベート（docs/workspace-model.md 12.3） */
+export interface CreateWorkspaceOptions {
+  kind?: WorkspaceKind;
+}
+
 export interface WorkspaceFlavourProvider {
   flavour: string;
 
@@ -21,7 +27,8 @@ export interface WorkspaceFlavourProvider {
       docCollection: BSWorkspace,
       blobStorage: BlobStorage,
       docStorage: DocStorage
-    ) => Promise<void>
+    ) => Promise<void>,
+    options?: CreateWorkspaceOptions
   ): Promise<WorkspaceMetadata>;
 
   workspaces$: LiveData<WorkspaceMetadata[]>;

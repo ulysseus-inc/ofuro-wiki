@@ -4,9 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { GqlThrottlerGuard } from './common/guards/throttler.guard';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
-import { ServeStaticModule } from '@nestjs/serve-static';
 import { ScheduleModule } from '@nestjs/schedule';
-import { existsSync } from 'fs';
 import { join } from 'path';
 import { LoggingModule } from './modules/logging/logging.module';
 import { AuditModule } from './modules/audit/audit.module';
@@ -28,53 +26,28 @@ import { WorkerModule } from './modules/worker/worker.module';
 import { HealthModule } from './modules/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BackupModule } from './modules/backup/backup.module';
-import { ManualSeedModule } from './modules/manual-workspace/manual-seed.module';
+import { ManualRemovalModule } from './modules/manual-removal/manual-removal.module';
 import { CommentModule } from './modules/comment/comment.module';
 import { NotificationModule } from './modules/notification/notification.module';
 import { MailModule } from './modules/mail/mail.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AuthzModule } from './common/authz.module';
 import { PrismaService } from './prisma.service';
+import { staticImports } from './common/static-files';
 import { MobileRedirectMiddleware } from './common/middleware/mobile-redirect.middleware';
 
 const gqlLogger = new Logger('GraphQL');
 
-// Serve frontend static files in production when dist exists
-const FRONTEND_DIST = join(__dirname, '..', '..', 'public');
-const MOBILE_DIST = join(__dirname, '..', '..', 'public-mobile');
-const API_EXCLUDES = ['/graphql{*path}', '/socket.io{*path}', '/api{*path}'];
-
-const staticImports = [
-  // Mobile static assets (js/css with unique hashed names) — registered first
-  // so mobile-specific assets are found. renderPath is set to a non-matching
-  // path to prevent SPA fallback from this module. The MobileRedirectMiddleware
-  // handles HTML (SPA route) requests for mobile UA instead.
-  ...(existsSync(MOBILE_DIST)
-    ? [
-        ServeStaticModule.forRoot({
-          rootPath: MOBILE_DIST,
-          exclude: API_EXCLUDES,
-          renderPath: '/__mobile_no_fallback__',
-          serveStaticOptions: {
-            index: false,
-          },
-        }),
-      ]
-    : []),
-  // Desktop (web) static files — serves assets and SPA fallback (index.html)
-  ...(existsSync(FRONTEND_DIST)
-    ? [
-        ServeStaticModule.forRoot({
-          rootPath: FRONTEND_DIST,
-          exclude: API_EXCLUDES,
-        }),
-      ]
-    : []),
-];
+// 画面とガイド（#324）のビルド結果。あるものだけを配る
+const staticDirs = {
+  frontend: join(__dirname, '..', '..', 'public'),
+  mobile: join(__dirname, '..', '..', 'public-mobile'),
+  docs: join(__dirname, '..', '..', 'public-docs'),
+};
 
 @Module({
   imports: [
-    ...staticImports,
+    ...staticImports(staticDirs),
     AuthzModule,
     ScheduleModule.forRoot(),
     LoggingModule,
@@ -173,7 +146,7 @@ const staticImports = [
     HealthModule,
     AdminModule,
     BackupModule,
-    ManualSeedModule,
+    ManualRemovalModule,
     CommentModule,
     NotificationModule,
     MailModule,

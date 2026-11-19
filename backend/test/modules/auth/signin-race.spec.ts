@@ -58,6 +58,7 @@ describe('サインインの競合 (#90 の作業中に発見)', () => {
       'race@example.com',
       'RacePass123!',
       '10.0.0.1',
+      { create: true },
     );
 
     expect(result).toBeDefined();
@@ -86,7 +87,7 @@ describe('サインインの競合 (#90 の作業中に発見)', () => {
     prisma.user.create.mockRejectedValue(duplicate);
 
     await expect(
-      service.signInOrSignUp('race@example.com', 'RacePass123!', '10.0.0.1'),
+      service.signInOrSignUp('race@example.com', 'RacePass123!', '10.0.0.1', { create: true }),
     ).rejects.toThrow(UnauthorizedException);
   });
 
@@ -114,6 +115,7 @@ describe('サインインの競合 (#90 の作業中に発見)', () => {
       'race@example.com',
       'RacePass123!',
       '10.0.0.1',
+      { create: true },
     );
 
     expect(result).toBeDefined();
@@ -126,7 +128,7 @@ describe('サインインの競合 (#90 の作業中に発見)', () => {
     prisma.user.create.mockRejectedValue(new Error('DB down'));
 
     await expect(
-      service.signInOrSignUp('x@example.com', 'RacePass123!', '10.0.0.1'),
+      service.signInOrSignUp('x@example.com', 'RacePass123!', '10.0.0.1', { create: true }),
     ).rejects.toThrow('DB down');
   });
 });

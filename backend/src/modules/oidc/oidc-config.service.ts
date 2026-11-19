@@ -146,6 +146,23 @@ export class OidcConfigService {
     };
   }
 
+  /**
+   * #330: 接続テスト用。保存済みの発行者 URL・クライアント ID・シークレット（有効かどうかに関係なく）。
+   * ID かシークレットが無ければ null。発行者 URL は、送り先を確かめるために返す
+   */
+  async getCredentials(): Promise<{
+    issuer: string;
+    clientId: string;
+    clientSecret: string;
+  } | null> {
+    const values = await this.readAll();
+    const issuer = values[OIDC_SETTING_KEYS.issuer]?.trim() ?? '';
+    const clientId = values[OIDC_SETTING_KEYS.clientId]?.trim() ?? '';
+    const clientSecret =
+      decryptSecret(values[OIDC_SETTING_KEYS.clientSecret])?.trim() ?? '';
+    return clientId && clientSecret ? { issuer, clientId, clientSecret } : null;
+  }
+
   /** 管理画面向け。シークレットは「設定済みか」だけを返す。 */
   async getConfigView(): Promise<OidcConfigView> {
     const values = await this.readAll();
@@ -230,6 +247,13 @@ export class OidcConfigService {
       ]);
     }
 
+    // #330: シークレットは保存したときの発行者に結び付ける。発行者を別の値に変えたら、
+    // 同じ保存で新しいシークレットを入れない限り消す。残すと、システム管理者が自分のサーバーを
+    // 発行者にするだけで、サインインの度に画面に出さないシークレットを受け取れる
+    // （発行者がまだ無いときに入れるのは変更とみなさない。先にシークレットを入れる手順があるため）
+    const clearSecret =
+      input.issuer != null && !trimmedSecret && (await this.issuerChanges(input.issuer));
+
     for (const [key, value] of updates) {
       await this.prisma.serverSetting.upsert({
         where: { key },
@@ -238,10 +262,24 @@ export class OidcConfigService {
       });
     }
 
+    if (clearSecret) {
+      await this.prisma.serverSetting.deleteMany({
+        where: { key: OIDC_SETTING_KEYS.clientSecret },
+      });
+      this.logger.warn('OIDC issuer changed: the stored client secret was cleared');
+    }
+
     this.logger.log(
       `OIDC settings updated: ${updates.map(([key]) => key).join(', ')}`,
     );
 
     return this.getConfigView();
+  }
+
+  /** 保存済みの発行者があり、それと違う値か（前後の空白・末尾のスラッシュは無視） */
+  private async issuerChanges(next: string): Promise<boolean> {
+    const saved = (await this.readAll())[OIDC_SETTING_KEYS.issuer]?.trim() ?? '';
+    const norm = (url: string) => url.trim().replace(/\/+$/, '');
+    return saved !== '' && norm(saved) !== norm(next);
   }
 }

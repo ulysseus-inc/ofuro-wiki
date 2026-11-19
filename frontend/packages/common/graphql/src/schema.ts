@@ -47,6 +47,7 @@ export interface AdminUserItem {
   emailVerified: Scalars['Boolean']['output'];
   id: Scalars['String']['output'];
   isAdmin: Scalars['Boolean']['output'];
+  isRoot: Scalars['Boolean']['output'];
   name: Maybe<Scalars['String']['output']>;
 }
 
@@ -54,6 +55,13 @@ export interface AdminUserList {
   __typename?: 'AdminUserList';
   items: Array<AdminUserItem>;
   totalCount: Scalars['Int']['output'];
+}
+
+export interface AdminWorkspaceItem {
+  __typename?: 'AdminWorkspaceItem';
+  id: Scalars['String']['output'];
+  memberCount: Scalars['Int']['output'];
+  updatedAt: Scalars['DateTime']['output'];
 }
 
 export interface AggregateBucketHitsObjectType {
@@ -431,6 +439,12 @@ export interface InviteLink {
   link: Scalars['String']['output'];
 }
 
+export enum InviteOutcome {
+  Added = 'Added',
+  AlreadyMember = 'AlreadyMember',
+  Invited = 'Invited',
+}
+
 export interface InviteUserType {
   __typename?: 'InviteUserType';
   accepted: Scalars['Boolean']['output'];
@@ -440,6 +454,7 @@ export interface InviteUserType {
   id: Scalars['ID']['output'];
   inviteId: Scalars['String']['output'];
   name: Maybe<Scalars['String']['output']>;
+  outcome: InviteOutcome;
   permission: Permission;
   /** @deprecated Notification will be sent asynchronously */
   sentSuccess: Scalars['Boolean']['output'];
@@ -647,6 +662,7 @@ export interface MutationCreateReplyArgs {
 }
 
 export interface MutationCreateWorkspaceArgs {
+  kind?: InputMaybe<WorkspaceKind>;
   name?: InputMaybe<Scalars['String']['input']>;
 }
 
@@ -954,8 +970,10 @@ export interface Query {
   adminAuditLogs: AuditLogList;
   adminAuditLogsCsv: Scalars['String']['output'];
   adminBackupList: BackupRecordList;
+  adminPrivateWorkspaceName: Maybe<Scalars['String']['output']>;
   adminServerSettings: Array<ServerSettingType>;
   adminUserList: AdminUserList;
+  adminWorkspaceList: Array<AdminWorkspaceItem>;
   currentUser: Maybe<UserType>;
   discoveryRevision: Scalars['String']['output'];
   discoverySnapshot: DiscoverySnapshot;
@@ -963,6 +981,7 @@ export interface Query {
   isPasswordTokenValid: Scalars['Boolean']['output'];
   listBlobs: Array<ListedBlob>;
   listHistory: Array<DocHistoryType>;
+  myPrivateWorkspaceId: Maybe<Scalars['String']['output']>;
   oidcConfig: OidcConfigType;
   publicUserById: Maybe<UserType>;
   serverConfig: ServerConfigType;
@@ -991,6 +1010,10 @@ export interface QueryAdminAuditLogsCsvArgs {
 export interface QueryAdminBackupListArgs {
   skip?: InputMaybe<Scalars['Int']['input']>;
   take?: InputMaybe<Scalars['Int']['input']>;
+}
+
+export interface QueryAdminPrivateWorkspaceNameArgs {
+  userId: Scalars['String']['input'];
 }
 
 export interface QueryAdminUserListArgs {
@@ -1347,6 +1370,11 @@ export enum WorkspaceInviteLinkExpireTime {
   ThreeDays = 'ThreeDays',
 }
 
+export enum WorkspaceKind {
+  Private = 'Private',
+  Shared = 'Shared',
+}
+
 export enum WorkspaceMemberStatus {
   Accepted = 'Accepted',
   AllocatingSeat = 'AllocatingSeat',
@@ -1425,6 +1453,7 @@ export interface WorkspaceType {
   initialized: Scalars['Boolean']['output'];
   inviteLink: Maybe<InviteLink>;
   isOwner: Scalars['Boolean']['output'];
+  kind: WorkspaceKind;
   memberCount: Scalars['Int']['output'];
   members: Array<InviteUserType>;
   name: Maybe<Scalars['String']['output']>;
@@ -1565,6 +1594,15 @@ export type AdminDeleteUserMutation = {
   adminDeleteUser: boolean;
 };
 
+export type AdminPrivateWorkspaceNameQueryVariables = Exact<{
+  userId: Scalars['String']['input'];
+}>;
+
+export type AdminPrivateWorkspaceNameQuery = {
+  __typename?: 'Query';
+  adminPrivateWorkspaceName: string | null;
+};
+
 export type AdminServerSettingsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type AdminServerSettingsQuery = {
@@ -1629,10 +1667,23 @@ export type AdminUserListQuery = {
       name: string | null;
       avatarUrl: string | null;
       isAdmin: boolean;
+      isRoot: boolean;
       emailVerified: boolean;
       createdAt: string;
     }>;
   };
+};
+
+export type AdminWorkspaceListQueryVariables = Exact<{ [key: string]: never }>;
+
+export type AdminWorkspaceListQuery = {
+  __typename?: 'Query';
+  adminWorkspaceList: Array<{
+    __typename?: 'AdminWorkspaceItem';
+    id: string;
+    memberCount: number;
+    updatedAt: string;
+  }>;
 };
 
 export type AdminAuditLogsQueryVariables = Exact<{
@@ -2061,7 +2112,9 @@ export type UploadCommentAttachmentMutation = {
   uploadCommentAttachment: string;
 };
 
-export type CreateWorkspaceMutationVariables = Exact<{ [key: string]: never }>;
+export type CreateWorkspaceMutationVariables = Exact<{
+  kind?: InputMaybe<WorkspaceKind>;
+}>;
 
 export type CreateWorkspaceMutation = {
   __typename?: 'Mutation';
@@ -2560,6 +2613,7 @@ export type GetWorkspaceInfoQuery = {
     __typename?: 'WorkspaceType';
     role: string;
     team: boolean;
+    kind: WorkspaceKind;
     permissions: {
       __typename?: 'WorkspacePermissionsType';
       Workspace_Administrators_Manage: boolean;
@@ -2838,6 +2892,15 @@ export type MentionUserMutationVariables = Exact<{
 export type MentionUserMutation = {
   __typename?: 'Mutation';
   mentionUser: boolean;
+};
+
+export type MyPrivateWorkspaceIdQueryVariables = Exact<{
+  [key: string]: never;
+}>;
+
+export type MyPrivateWorkspaceIdQuery = {
+  __typename?: 'Query';
+  myPrivateWorkspaceId: string | null;
 };
 
 export type NotificationCountQueryVariables = Exact<{ [key: string]: never }>;
@@ -3151,6 +3214,7 @@ export type InviteByEmailsMutation = {
     email: string | null;
     inviteId: string;
     sentSuccess: boolean;
+    outcome: InviteOutcome;
   }>;
 };
 
@@ -3247,6 +3311,11 @@ export type Queries =
       response: AdminBackupListQuery;
     }
   | {
+      name: 'adminPrivateWorkspaceNameQuery';
+      variables: AdminPrivateWorkspaceNameQueryVariables;
+      response: AdminPrivateWorkspaceNameQuery;
+    }
+  | {
       name: 'adminServerSettingsQuery';
       variables: AdminServerSettingsQueryVariables;
       response: AdminServerSettingsQuery;
@@ -3255,6 +3324,11 @@ export type Queries =
       name: 'adminUserListQuery';
       variables: AdminUserListQueryVariables;
       response: AdminUserListQuery;
+    }
+  | {
+      name: 'adminWorkspaceListQuery';
+      variables: AdminWorkspaceListQueryVariables;
+      response: AdminWorkspaceListQuery;
     }
   | {
       name: 'adminAuditLogsQuery';
@@ -3420,6 +3494,11 @@ export type Queries =
       name: 'listNotificationsQuery';
       variables: ListNotificationsQueryVariables;
       response: ListNotificationsQuery;
+    }
+  | {
+      name: 'myPrivateWorkspaceIdQuery';
+      variables: MyPrivateWorkspaceIdQueryVariables;
+      response: MyPrivateWorkspaceIdQuery;
     }
   | {
       name: 'notificationCountQuery';

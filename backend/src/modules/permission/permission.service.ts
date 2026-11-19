@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { isManualWorkspace } from '../../common/manual-workspace-id';
 import { PrismaService } from '../../prisma.service';
+import { systemAdminBypasses } from '../../common/workspace-kind';
 import {
   type DocAction,
   type DocRole,
@@ -83,6 +83,26 @@ export class PermissionService {
     return user?.isAdmin === true;
   }
 
+  /** #297: システム管理者として、このワークスペースを素通りするか（共有だけ）。 */
+  private async adminBypasses(
+    workspaceId: string,
+    userId: string,
+  ): Promise<boolean> {
+    // 一般の利用者ではワークスペースを引かない（一覧・検索・同期で頻繁に通る経路）
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isAdmin: true },
+    });
+    if (!user?.isAdmin) {
+      return false;
+    }
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { kind: true },
+    });
+    return systemAdminBypasses(user.isAdmin, workspace?.kind);
+  }
+
   // ───────────────────────────── 実効ロール
 
   /**
@@ -102,22 +122,9 @@ export class PermissionService {
     docId: string,
     userId: string,
   ): Promise<DocRole | null> {
-    // ⚠️ #241: マニュアルは**誰にも書かせない**。Admin のバイパスより先に置く。
-    // 出荷物（backend/seed/manual.zip）であり、更新のたびにワークスペースごと
-    // 作り直される。書けてしまうと、その編集は次の更新で**黙って消える**
-    if (isManualWorkspace(workspaceId)) {
-      // ⚠️ **Admin の読み取りまでは奪わない。** 遅延参加の前や API から直接触る場合に
-      // 読めなくなると、調査・復旧の手段を失う（レビュー指摘・2026-09-18）
-      if (await this.isServerAdmin(userId)) return 'Reader';
-
-      const role = fromWorkspaceRole(
-        await this.getWorkspaceRole(workspaceId, userId),
-      );
-      return role === null ? null : 'Reader';
-    }
-
     // ① バイパス。運用上の最終手段（復旧・調査）
-    if (await this.isServerAdmin(userId)) return 'Owner';
+    // #297: 共有だけ。プライベートは本人だけの場（docs/workspace-model.md 3.3・12.2）
+    if (await this.adminBypasses(workspaceId, userId)) return 'Owner';
 
     // ⓪ ⚠️ 前提。ワークスペースに居ないなら、doc に設定があっても通さない。
     // ここを省くと「doc の設定が置換する」の素直な実装で外部の人が入れてしまう。
@@ -197,7 +204,8 @@ export class PermissionService {
     userId: string,
   ): Promise<string[]> {
     if (docIds.length === 0) return [];
-    if (await this.isServerAdmin(userId)) return docIds;
+    // #297: Admin の素通りは共有だけ（getDocRole の ① と同じ）
+    if (await this.adminBypasses(workspaceId, userId)) return docIds;
 
     const workspaceRole = fromWorkspaceRole(
       await this.getWorkspaceRole(workspaceId, userId),
@@ -254,8 +262,8 @@ export class PermissionService {
     userId: string,
     nextParamIndex: number,
   ): Promise<DocFilter> {
-    // Admin は全件。条件を足さない
-    if (await this.isServerAdmin(userId)) return ALLOW_ALL;
+    // Admin は全件。条件を足さない。#297: 共有だけ（getDocRole の ① と同じ）
+    if (await this.adminBypasses(workspaceId, userId)) return ALLOW_ALL;
 
     const workspaceRole = fromWorkspaceRole(
       await this.getWorkspaceRole(workspaceId, userId),

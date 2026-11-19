@@ -18,8 +18,11 @@ import { PermissionService } from '../permission/permission.service';
 import type { DocAction } from '../permission/doc-role';
 import { DocEditAggregator } from '../audit/doc-edit-aggregator';
 import { AuditService } from '../audit/audit.service';
+import { DocViewRecorder } from '../audit/doc-view-recorder';
+import { FolderAuditService } from '../audit/folder-audit.service';
 import { LogFileService } from '../logging/log-file.service';
 import { parseAllowedOrigins } from '../../common/cors';
+import { systemAdminBypasses } from '../../common/workspace-kind';
 import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
 
 // AFFiNE protocol: response wrapper
@@ -58,6 +61,11 @@ function awarenessRoom(
  */
 function isInternalDoc(spaceId: string, docId: string): boolean {
   return docId === spaceId || docId.includes('$');
+}
+
+/** #283: サイドバーのフォルダの文書（ワークスペースに 1 つ） */
+function foldersDocId(spaceId: string): string {
+  return `db$${spaceId}$folders`;
 }
 
 interface ConnectionState {
@@ -164,6 +172,10 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Express を通らないため、ミドルウェアでは記録できない
     private logFile: LogFileService,
     private audit: AuditService,
+    // #100: ページを開いたことを、設定で有効なときだけ 1 日 1 件残す
+    private docViews: DocViewRecorder,
+    // #283: フォルダの差分を操作に直して残す
+    private folderAudit: FolderAuditService,
   ) {
     // #97: 権限が変わったら即座に判定キャッシュを捨てる（7章）
     this.permission.onInvalidate((workspaceId, docId, userId) =>
@@ -517,6 +529,9 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 監査ログのために利用者のデータを失うのは本末転倒（fail-open の方針）。
     await this.recordEditAudit(conn, data.spaceType, data.spaceId, data.docId);
 
+    // #283: フォルダは差分を当てる前の状態と比べる。当てる前に読む
+    const foldersBefore = await this.loadFoldersBefore(conn, data);
+
     try {
       const update = Buffer.from(data.update, 'base64');
       const { spaceType, spaceId, docId } = data;
@@ -554,6 +569,16 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Schedule search index update (debounced)
       this.indexerService.scheduleIndex(spaceId, docId);
+
+      if (foldersBefore) {
+        void this.folderAudit.record({
+          actor: { id: conn.userId, email: conn.userEmail, name: conn.userName },
+          workspaceId: spaceId,
+          ip: conn.ip,
+          before: foldersBefore,
+          update,
+        });
+      }
 
 
       return ok({ timestamp });
@@ -754,6 +779,36 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  /**
+   * #283: フォルダの文書（`db$<ws>$folders`）なら、差分を当てる前の状態を読む。
+   * それ以外は null。読めなくても同期は止めない（docs/logging.md 2.5）。
+   */
+  private async loadFoldersBefore(
+    conn: ConnectionState,
+    data: { spaceType: string; spaceId: string; docId: string },
+  ): Promise<Uint8Array | null> {
+    if (
+      !conn.userId ||
+      data.spaceType !== 'workspace' ||
+      data.docId !== foldersDocId(data.spaceId)
+    ) {
+      return null;
+    }
+
+    try {
+      const { missing } = await this.syncService.loadDoc(
+        data.spaceId,
+        data.docId,
+      );
+      return missing;
+    } catch (e) {
+      this.logger.error(
+        `フォルダの記録のための読み込みに失敗しました (ws=${data.spaceId}): ${(e as Error).message}`,
+      );
+      return null;
+    }
+  }
+
   /** #90: ドキュメント操作の監査ログ。当時の利用者を残すため email を補う。 */
   private async recordDocAudit(
     conn: ConnectionState,
@@ -823,6 +878,22 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.join(room);
     conn.awarenessDocs.add(key);
     this.awarenessService.join(room, client.id, conn.userId);
+
+    // #100: 画面でページを開いた合図（docs/logging.md 2.11）。開く処理を待たせない
+    if (
+      conn.userId &&
+      spaceType === 'workspace' &&
+      !isInternalDoc(spaceId, docId)
+    ) {
+      void this.docViews.record({
+        actorId: conn.userId,
+        actorEmail: conn.userEmail ?? 'unknown',
+        actorName: conn.userName,
+        workspaceId: spaceId,
+        docId,
+        ip: conn.ip,
+      });
+    }
 
     return ok({ clientId: client.id });
   }
@@ -1049,7 +1120,15 @@ export class SyncGateway implements OnGatewayConnection, OnGatewayDisconnect {
         where: { id: userId },
         select: { isAdmin: true },
       });
-      if (dbUser?.isAdmin) return true;
+      // #297: システム管理者が素通りするのは共有だけ。プライベートは本人だけの場。
+      // 一般の利用者ではワークスペースを引かない（同期の入口で頻繁に通る）
+      if (dbUser?.isAdmin) {
+        const workspace = await this.prisma.workspace.findUnique({
+          where: { id: spaceId },
+          select: { kind: true },
+        });
+        if (systemAdminBypasses(dbUser.isAdmin, workspace?.kind)) return true;
+      }
 
       const member = await this.prisma.workspaceMember.findUnique({
         where: { workspaceId_userId: { workspaceId: spaceId, userId } },

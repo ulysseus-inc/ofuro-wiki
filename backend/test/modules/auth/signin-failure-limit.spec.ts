@@ -151,7 +151,7 @@ describe('AuthService — 自動作成時の失敗記録クリア (#93)', () => 
     }
 
     // 自動作成が成立
-    await expect(service.signInOrSignUp(email, 'password123', IP)).resolves.toBeDefined();
+    await expect(service.signInOrSignUp(email, 'password123', IP, { create: true })).resolves.toBeDefined();
 
     // 記録がクリアされているので、再び上限まで失敗できる
     prisma.user.findUnique.mockResolvedValue(null);

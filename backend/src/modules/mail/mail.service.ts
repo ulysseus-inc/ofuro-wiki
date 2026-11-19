@@ -284,12 +284,12 @@ export class MailService {
     await this.transporter.sendMail({
       from: this.sender,
       to: params.recipientEmail,
-      subject: `ofuro-wiki: ${params.actorName} さんが「${params.docTitle}」にコメントしました`,
+      subject: `ofuro-wiki: ${this.oneLine(params.actorName)} さんが「${this.oneLine(params.docTitle)}」にコメントしました`,
       html: `
         <h2>新しいコメント</h2>
-        <p><strong>${params.actorName}</strong> さんが <strong>${params.workspaceName}</strong> の「<strong>${params.docTitle}</strong>」にコメントしました。</p>
+        <p><strong>${this.escapeHtml(params.actorName)}</strong> さんが <strong>${this.escapeHtml(params.workspaceName)}</strong> の「<strong>${this.escapeHtml(params.docTitle)}</strong>」にコメントしました。</p>
         ${params.contentPreview ? `<blockquote style="border-left: 3px solid #ccc; padding-left: 12px; color: #555;">${this.escapeHtml(params.contentPreview)}</blockquote>` : ''}
-        <p><a href="${params.docUrl}">ドキュメントを開く</a></p>
+        <p><a href="${this.escapeHtml(params.docUrl)}">ドキュメントを開く</a></p>
       `,
     });
 
@@ -309,24 +309,35 @@ export class MailService {
     await this.transporter.sendMail({
       from: this.sender,
       to: params.recipientEmail,
-      subject: `ofuro-wiki: ${params.actorName} さんが「${params.docTitle}」であなたをメンションしました`,
+      subject: `ofuro-wiki: ${this.oneLine(params.actorName)} さんが「${this.oneLine(params.docTitle)}」であなたをメンションしました`,
       html: `
         <h2>メンション通知</h2>
-        <p><strong>${params.actorName}</strong> さんが <strong>${params.workspaceName}</strong> の「<strong>${params.docTitle}</strong>」であなたをメンションしました。</p>
+        <p><strong>${this.escapeHtml(params.actorName)}</strong> さんが <strong>${this.escapeHtml(params.workspaceName)}</strong> の「<strong>${this.escapeHtml(params.docTitle)}</strong>」であなたをメンションしました。</p>
         ${params.contentPreview ? `<blockquote style="border-left: 3px solid #ccc; padding-left: 12px; color: #555;">${this.escapeHtml(params.contentPreview)}</blockquote>` : ''}
-        <p><a href="${params.docUrl}">ドキュメントを開く</a></p>
+        <p><a href="${this.escapeHtml(params.docUrl)}">ドキュメントを開く</a></p>
       `,
     });
 
     this.logger.log(`Mention notification email sent to ${params.recipientEmail}`);
   }
 
+  /**
+   * HTML に埋め込む値をエスケープする。
+   * 人の名前・ワークスペース名・ページの題は利用者が決められるため、必ず通す
+   * （そのまま埋めると、メールにリンクやフォームを差し込める）
+   */
   private escapeHtml(text: string): string {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /** 件名に埋め込む値。改行を空白にし、ヘッダーを差し込ませない */
+  private oneLine(text: string): string {
+    return text.replace(/[\r\n]+/g, ' ');
   }
 
   /**
@@ -394,10 +405,10 @@ export class MailService {
     await this.transporter!.sendMail({
       from: this.sender,
       to: inviteeEmail,
-      subject: `ofuro-wiki: ${inviterName} さんが「${workspaceName}」に招待しました`,
+      subject: `ofuro-wiki: ${this.oneLine(inviterName)} さんが「${this.oneLine(workspaceName)}」に招待しました`,
       html: `
         <h2>ofuro-wiki ワークスペースへの招待</h2>
-        <p>${inviterName} さんがあなたを ofuro-wiki のワークスペース「${workspaceName}」に招待しました。</p>
+        <p>${this.escapeHtml(inviterName)} さんがあなたを ofuro-wiki のワークスペース「${this.escapeHtml(workspaceName)}」に招待しました。</p>
         <p><a href="${url}">招待を確認する</a></p>
       `,
     });

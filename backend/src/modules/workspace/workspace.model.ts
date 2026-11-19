@@ -5,6 +5,7 @@ import {
   Int,
   registerEnumType,
 } from '@nestjs/graphql';
+import { WorkspaceKind } from '../../common/workspace-kind';
 // #97: 権限まわりの型（docs/doc-permission.md 8章）
 import {
   DocRoleEnum,
@@ -46,6 +47,24 @@ export enum WorkspaceMemberStatus {
 
 registerEnumType(WorkspaceMemberStatus, { name: 'WorkspaceMemberStatus' });
 
+// #297: GraphQL では Private / Shared（値は 'private' / 'shared'）
+registerEnumType(WorkspaceKind, { name: 'WorkspaceKind' });
+
+/**
+ * #299: メールで招待したとき、宛先ごとに何が起きたか。画面の通知はこれで数える。
+ * ⚠️ `sentSuccess`（メールを送れたか）で成否を数えない（docs/workspace-invitation.md 4.1）
+ */
+export enum InviteOutcome {
+  /** アカウントがあり、その場でメンバーにした */
+  Added = 'Added',
+  /** もともとメンバーだった（何も変えない） */
+  AlreadyMember = 'AlreadyMember',
+  /** アカウントが無く、招待だけを作った */
+  Invited = 'Invited',
+}
+
+registerEnumType(InviteOutcome, { name: 'InviteOutcome' });
+
 @ObjectType('InviteUserType')
 export class InviteUserType {
   @Field(() => ID)
@@ -77,6 +96,9 @@ export class InviteUserType {
 
   @Field({ deprecationReason: 'Notification will be sent asynchronously' })
   sentSuccess: boolean;
+
+  @Field(() => InviteOutcome)
+  outcome: InviteOutcome;
 }
 
 @ObjectType('InvitationWorkspaceType')
@@ -348,6 +370,10 @@ export class WorkspaceType {
 
   @Field()
   initialized: boolean;
+
+  /** #297: プライベート（本人だけ）か共有か。画面はこれで招待などを出し分ける */
+  @Field(() => WorkspaceKind)
+  kind: WorkspaceKind;
 
   @Field()
   createdAt: Date;

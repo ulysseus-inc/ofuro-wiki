@@ -5,7 +5,7 @@
  *   - PostgreSQL が起動済み (docker compose up -d)
  *   - バックエンド (port 3010) が起動済み
  *   - フロントエンド (port 8080) が起動済み
- *   - 環境変数 ADMIN_EMAIL=e2e-test@ofuro-wiki.local でバックエンド起動
+ *   - 環境変数 ROOT_EMAIL=e2e-test@ofuro-wiki.local でバックエンド起動
  *
  * 実行方法:
  *   cd e2e && npx playwright test backup.spec.ts
@@ -348,11 +348,18 @@ test.describe('Admin Restore API', () => {
     const marker = `restore-marker-${Date.now()}`;
     const madeAfter = await graphqlQuery(
       page,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      // #297: TEST_USER（システム管理者）が作れるのは共有。持ち主は root なので、
+      // 一覧（workspaces）に出るよう自分も参加する
+      `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
       { name: marker }
     );
     const markerWsId = madeAfter.data?.createWorkspace?.id;
     expect(markerWsId).toBeTruthy();
+    await graphqlQuery(
+      page,
+      `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { email } }`,
+      { w: markerWsId, e: [TEST_USER.email] }
+    );
 
     // 目印が確かに存在すること（ポジティブコントロール）
     const before = await graphqlQuery(page, '{ workspaces { id name } }');

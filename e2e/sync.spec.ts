@@ -410,6 +410,90 @@ test.describe('同期の整合', () => {
   });
 
   /**
+   * ⚠️ **本文だけの編集でも、もう一方の「すべてのドキュメント」の並びが変わること。**
+   *
+   * 台帳の更新日時は進んでいた（上のテスト）のに、一覧の版数が動かないため、
+   * 相手の画面は一覧を取り直さず、再読み込みしても古い順のままだった
+   * （2026-11-11 社内本番 0.3.0-rc.1 で発覚）。本文の保存でも、30 秒に 1 回まで
+   * 間引いて版数を上げる（docs/discovery-stage3-comparison.md 7.10.6）。
+   */
+  test('本文だけの編集でも、もう一方の一覧の並びが変わる（30 秒以内）', async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const a = await openClient(browser);
+    const b = await openClient(browser);
+
+    /** 一覧の題を上から読む */
+    const listTitles = async (page: Page) =>
+      (await page.locator('[data-testid="doc-list-item-title"]').allInnerTexts()).map(t =>
+        t.trim()
+      );
+
+    try {
+      await enterOrCreateWorkspace(a.page);
+      const stamp = Date.now();
+      const older = `並び-古-${stamp}`;
+      const newer = `並び-新-${stamp}`;
+
+      // 古いほうを先に作り、そのあと新しいほうを作る
+      const urls: string[] = [];
+      for (const title of [older, newer]) {
+        await createNewPage(a.page);
+        const titleBox = a.page.locator('doc-title .inline-editor').first();
+        await titleBox.click({ timeout: 30_000 });
+        await a.page.keyboard.type(title, { delay: 30 });
+        await expect(a.page.locator(`text=${title}`).first()).toBeVisible({ timeout: 15_000 });
+        await a.page.waitForTimeout(2_500);
+        urls.push(a.page.url());
+      }
+
+      // もう一方で一覧を開く。新しいほうが上
+      await enterOrCreateWorkspace(b.page);
+      await b.page.locator('text=すべてのドキュメント').first().click();
+      await expect(b.page.locator(`text=${newer}`).first()).toBeVisible({ timeout: 30_000 });
+      await expect(b.page.locator(`text=${older}`).first()).toBeVisible({ timeout: 30_000 });
+      // ⚠️ 出だしの並びは、落ち着くまで待つ。古いほうを離れるときの最後の保存が、
+      // 新しいほうを作った後に届くことがあり、一度だけ見ると順番が揺れる
+      await expect
+        .poll(
+          async () => {
+            const t = await listTitles(b.page);
+            return t.indexOf(newer) >= 0 && t.indexOf(newer) < t.indexOf(older);
+          },
+          { timeout: 60_000, intervals: [2_000] }
+        )
+        .toBe(true);
+
+      // 古いほうの**本文だけ**を書き換える
+      await a.page.goto(urls[0]);
+      await a.page.waitForLoadState('domcontentloaded');
+      await a.page.waitForTimeout(3_000);
+      await typeIntoDoc(a.page, `本文-${Date.now()}`);
+
+      // 相手は何もしないまま、古いほうが上に来る（間引きの 30 秒＋取り直し）
+      await expect
+        .poll(
+          async () => {
+            const t = await listTitles(b.page);
+            return t.indexOf(older) >= 0 && t.indexOf(older) < t.indexOf(newer);
+          },
+          { timeout: 60_000, intervals: [2_000] }
+        )
+        .toBe(true);
+
+      // 再読み込みしても、古い順に戻らない
+      await b.page.reload();
+      await expect(b.page.locator(`text=${older}`).first()).toBeVisible({ timeout: 30_000 });
+      const reloaded = await listTitles(b.page);
+      expect(reloaded.indexOf(older)).toBeLessThan(reloaded.indexOf(newer));
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  /**
    * #254: ⚠️ **初めて使う端末で、本文が届く前にページを開いても、届いたあと題が出ること。**
    *
    * 端末に何も無い状態で開くと、自己修復（ensureRootBlock）が `doc.load()` を呼び、

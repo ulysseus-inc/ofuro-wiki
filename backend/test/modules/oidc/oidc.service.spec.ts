@@ -25,6 +25,8 @@ describe('OidcService — ログインCSRF対策とクレーム検証 (#89)', ()
     const configService = {
       getConfig: jest.fn().mockResolvedValue(config),
       getRedirectUri: jest.fn().mockReturnValue('https://wiki.example.com/oauth/callback'),
+      // #330: クライアントの確かめは oidc-client-check.spec で見る。ここでは未保存にする
+      getCredentials: jest.fn().mockResolvedValue(null),
     };
     service = new OidcService(configService as unknown as OidcConfigService);
   });
@@ -37,6 +39,21 @@ describe('OidcService — ログインCSRF対策とクレーム検証 (#89)', ()
       createdAt: Date.now(),
     });
   };
+
+  describe('認可 URL (#129)', () => {
+    it('prompt=select_account を付ける（IdP のアカウントを選び直せる）', async () => {
+      jest.spyOn(service, 'getDiscovery').mockResolvedValue({
+        issuer: 'https://idp.example.com',
+        authorization_endpoint: 'https://idp.example.com/authorize',
+        token_endpoint: 'https://idp.example.com/token',
+        jwks_uri: 'https://idp.example.com/jwks',
+      } as never);
+
+      const { url } = await service.createAuthorizationUrl();
+
+      expect(new URL(url).searchParams.get('prompt')).toBe('select_account');
+    });
+  });
 
   describe('ディスカバリ文書の検証', () => {
     const mockDiscovery = (doc: Record<string, unknown>) => {

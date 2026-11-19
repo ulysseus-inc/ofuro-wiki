@@ -112,13 +112,11 @@ const WithQueryList = () => {
 
   const docs = useMemo(
     () =>
-      docList
-        .filter(item => item.id !== 'search-locally')
-        .map(item => ({
-          id: item.payload.docId,
-          icon: item.icon,
-          title: <SearchResLabel item={item} />,
-        })),
+      docList.map(item => ({
+        id: item.payload.docId,
+        icon: item.icon,
+        title: <SearchResLabel item={item} />,
+      })),
     [docList]
   );
 

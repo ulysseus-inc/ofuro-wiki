@@ -1,0 +1,144 @@
+/*
+ * ofuro-wiki の配色。ロゴ（湯気のオレンジ・浴槽の茶）と、
+ * 製品紹介ページ https://www.ulysseus.co.jp/ofuro-wiki に合わせる。
+ *
+ *   オレンジ   #d9772f（濃い #c4671f）  … リンク・ボタン・強調
+ *   クリーム   #fdf9f3 / #f7f0e8        … 背景
+ *   ピーチ     #f6e3cf                  … 薄い面（ボタンの淡色・ヒントの枠）
+ *   ベージュ   #e7d9c8                  … 罫線
+ *   墨         #2f2f2f / #444444        … 本文
+ *   茶         #4a3a33                  … 見出し（ロゴの浴槽）
+ *
+ * ⚠️ 外部のフォントは読み込まない（エアギャップ・外部送信ゼロ）。
+ */
+
+:root {
+  --vp-c-brand-1: #c4671f;
+  --vp-c-brand-2: #d9772f;
+  --vp-c-brand-3: #d9772f;
+  --vp-c-brand-soft: rgba(217, 119, 47, 0.14);
+
+  --vp-c-bg: #fdf9f3;
+  --vp-c-bg-alt: #f7f0e8;
+  --vp-c-bg-elv: #fffdf9;
+  --vp-c-bg-soft: #f6e3cf;
+
+  --vp-c-divider: #e7d9c8;
+  --vp-c-border: #e7d9c8;
+  --vp-c-gutter: #e7d9c8;
+
+  --vp-c-text-1: #2f2f2f;
+  --vp-c-text-2: #444444;
+  --vp-c-text-3: #6b6b6b;
+
+  --vp-c-heading: #4a3a33;
+
+  --vp-button-brand-bg: #d9772f;
+  --vp-button-brand-border: #d9772f;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-bg: #c4671f;
+  --vp-button-brand-hover-border: #c4671f;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-bg: #b8563a;
+  --vp-button-brand-active-border: #b8563a;
+
+  --vp-home-hero-name-color: #4a3a33;
+
+  /* 2 番目のボタン（導入と運用・デモ）はピーチの面にする */
+  --vp-button-alt-bg: #f6e3cf;
+  --vp-button-alt-border: #f6e3cf;
+  --vp-button-alt-text: #4a3a33;
+  --vp-button-alt-hover-bg: #efd3b6;
+  --vp-button-alt-hover-border: #efd3b6;
+  --vp-button-alt-hover-text: #4a3a33;
+}
+
+/* ダーク: 背景は茶系の暗色、オレンジは明るめにして読みやすくする */
+.dark {
+  --vp-c-brand-1: #f0a466;
+  --vp-c-brand-2: #e8955a;
+  --vp-c-brand-3: #d9772f;
+  --vp-c-brand-soft: rgba(232, 149, 90, 0.16);
+
+  --vp-c-bg: #1d1916;
+  --vp-c-bg-alt: #171411;
+  --vp-c-bg-elv: #241f1b;
+  --vp-c-bg-soft: #2a231e;
+
+  --vp-c-divider: #3a312a;
+  --vp-c-border: #4a3f36;
+  --vp-c-gutter: #120f0d;
+
+  --vp-c-text-1: #f1e7db;
+  --vp-c-text-2: #d6c8b8;
+  --vp-c-text-3: #a39484;
+
+  --vp-c-heading: #f6e3cf;
+
+  --vp-button-brand-bg: #c4671f;
+  --vp-button-brand-border: #c4671f;
+  --vp-button-brand-hover-bg: #d9772f;
+  --vp-button-brand-hover-border: #d9772f;
+
+  --vp-home-hero-name-color: #f6e3cf;
+
+  --vp-button-alt-bg: #2a231e;
+  --vp-button-alt-border: #4a3f36;
+  --vp-button-alt-text: #f1e7db;
+  --vp-button-alt-hover-bg: #3a312a;
+  --vp-button-alt-hover-border: #5a4d42;
+  --vp-button-alt-hover-text: #f6e3cf;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  color: var(--vp-c-heading);
+}
+
+/* 本文のリンクは、下線で本文と見分ける（色だけに頼らない） */
+.vp-doc a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ヒントの枠を、ブランドの淡い色に寄せる */
+.custom-block.tip {
+  --vp-custom-block-tip-bg: var(--vp-c-brand-soft);
+  --vp-custom-block-tip-border: transparent;
+  --vp-custom-block-tip-text: var(--vp-c-text-1);
+}
+
+/* トップ: 特徴のカードの下に、機能一覧（導入ガイドの「特徴」）への入口を置く。
+   置き場（本文の枠）がカードの並びと同じ幅なので、右寄せだけで右端が揃う */
+.home-more {
+  margin: 8px 0 64px;
+  text-align: right;
+}
+
+.home-more a {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/*
+ * 左のサイドバー: 分類（はじめに・導入・付録など）と、その中の章を見分けられるようにする。
+ * 既定では同じ太さ・同じ位置に並び、分類も章の 1 つに見えていた
+ */
+/* 分類の名前: 日本語のフォントは太さの差が出にくいため、小さくブランドの色にして見出しらしくする */
+/* 既定の「開いているページを含む分類」の色より強くするため、.VPSidebar を前に付ける */
+.VPSidebar .VPSidebarItem.level-0 > .item > .text,
+.VPSidebar .VPSidebarItem.level-0.has-active > .item > .text {
+  color: var(--vp-c-brand-1);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.VPSidebarItem.level-0 > .items {
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 1px solid var(--vp-c-divider);
+}

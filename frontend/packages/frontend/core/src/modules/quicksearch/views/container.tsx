@@ -69,6 +69,10 @@ export const QuickSearchContainer = () => {
     [quickSearch]
   );
 
+  const handleExited = useCallback(() => {
+    quickSearch.notifyClosed();
+  }, [quickSearch]);
+
   const handleSubmit = useCallback(
     (item: QuickSearchItem) => {
       quickSearch.submit(item);
@@ -77,7 +81,11 @@ export const QuickSearchContainer = () => {
   );
 
   return (
-    <QuickSearchModal open={open} onOpenChange={onToggleQuickSearch}>
+    <QuickSearchModal
+      open={open}
+      onOpenChange={onToggleQuickSearch}
+      onExited={handleExited}
+    >
       <CMDK
         query={query}
         groups={groups}

@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import type { Response } from 'express';
+import { SESSION_TTL_MS } from './session-ttl';
 
 /**
  * #89: 認証クッキーの設定を1箇所に集約する。
@@ -19,7 +20,8 @@ export const COOKIE_OPTIONS = {
   secure: cookieSecure,
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  // #332: トークンの期限と揃える
+  maxAge: SESSION_TTL_MS,
 };
 
 /** 認証トークンと CSRF トークンのクッキーを発行する。 */

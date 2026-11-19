@@ -41,7 +41,7 @@ describe('索引の印と本文の保存（#101）', () => {
       $transaction: jest.fn().mockImplementation((fn: any) => fn(tx)),
     };
     const discovery: any = { bump: jest.fn(), current: jest.fn() };
-    return { prisma, tx, calls, service: new SyncService(prisma, discovery) };
+    return { prisma, tx, calls, service: new SyncService(prisma, discovery, { touch: jest.fn() } as never) };
   };
 
   const someUpdate = () => new Uint8Array([1, 2, 3]);

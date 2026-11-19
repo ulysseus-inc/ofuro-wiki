@@ -23,6 +23,8 @@ import { BackupService } from './backup.service';
 import { ScheduledBackupService } from './scheduled-backup.service';
 import { AdminGuard } from '../../common/guards/admin.guard';
 import { SyncGateway } from '../sync/sync.gateway';
+import { getAdminEmail } from '../../common/admin-email';
+import { WorkspaceKind } from '../../common/workspace-kind';
 
 @Controller('api')
 export class BackupController {
@@ -46,20 +48,20 @@ export class BackupController {
       throw new ForbiddenException('Authentication required');
     }
 
-    // Check workspace ownership
     const workspace = await this.prisma.workspace.findUnique({
       where: { id: workspaceId },
     });
     if (!workspace) {
       throw new BadRequestException('Workspace not found');
     }
-    if (workspace.ownerId !== userId) {
-      throw new ForbiddenException('Only workspace owner can export');
+    if (!(await this.canExport(workspace, userId))) {
+      throw new ForbiddenException('Not allowed to export this workspace');
     }
 
-    const zipBuffer = await this.backupService.exportWorkspace(workspaceId);
+    const { zip: zipBuffer, name } =
+      await this.backupService.exportWorkspace(workspaceId);
 
-    const filename = `${workspace.name || 'workspace'}.ofuro-backup.zip`;
+    const filename = `${name || 'workspace'}.ofuro-backup.zip`;
     res.set({
       'Content-Type': 'application/zip',
       'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
@@ -68,7 +70,9 @@ export class BackupController {
     res.send(zipBuffer);
   }
 
+  // #297: 取り込みは共有ワークスペースを作ることにあたる。システム管理者だけ（12.3）
   @Post('workspaces/import')
+  @UseGuards(AdminGuard)
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max
@@ -110,13 +114,49 @@ export class BackupController {
       nameOverride = trimmed;
     }
 
+    // #297: 共有として作る。持ち主は root
+    const rootEmail = getAdminEmail();
+    const root = rootEmail
+      ? await this.prisma.user.findUnique({ where: { email: rootEmail } })
+      : null;
+    if (!root) {
+      throw new ForbiddenException('The root user (ROOT_EMAIL) has not signed in yet');
+    }
+
     const result = await this.backupService.importWorkspace(
       userId,
       file.buffer,
       nameOverride,
+      undefined,
+      root.id,
     );
 
     res.json(result);
+  }
+
+  /**
+   * #297: 書き出せる人（12.6）。
+   * 共有: システム管理者とワークスペース管理者（owner / admin）。プライベート: 本人。
+   */
+  private async canExport(
+    workspace: { id: string; ownerId: string; kind: string },
+    userId: string,
+  ): Promise<boolean> {
+    if (workspace.kind !== WorkspaceKind.Shared) {
+      return workspace.ownerId === userId;
+    }
+
+    const [user, member] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { isAdmin: true } }),
+      this.prisma.workspaceMember.findUnique({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
+        select: { role: true, status: true },
+      }),
+    ]);
+    if (user?.isAdmin) {
+      return true;
+    }
+    return member?.status === 'accepted' && (member.role === 'owner' || member.role === 'admin');
   }
 
   @Post('admin/restore')

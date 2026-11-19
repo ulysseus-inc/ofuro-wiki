@@ -19,6 +19,10 @@ export interface AuthProvider {
     password: string;
     verifyToken?: string;
     challenge?: string;
+    /** #293: 「作りますか」で承認した。無ければサーバーは作らない */
+    create?: boolean;
+    /** #195: 招待のページから来た */
+    inviteId?: string;
   }): Promise<void>;
 
   signOut(): Promise<void>;

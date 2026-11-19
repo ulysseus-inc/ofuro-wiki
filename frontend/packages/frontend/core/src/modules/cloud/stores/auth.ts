@@ -96,6 +96,10 @@ export class AuthStore extends Store {
     password: string;
     verifyToken?: string;
     challenge?: string;
+    /** #293: 「作りますか」で承認した。無ければサーバーは作らない */
+    create?: boolean;
+    /** #195: 招待のページから来た */
+    inviteId?: string;
   }) {
     await this.authProvider.signInPassword(credential);
   }

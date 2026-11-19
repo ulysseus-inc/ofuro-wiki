@@ -51,8 +51,8 @@
   3. git tag v0.1.0 && git push origin v0.1.0    ← ここで確定
 
   4. CI（.github/workflows/build-push.yml）
-        タグ push      → APP_VERSION=0.1.0、イメージに :0.1.0 / :0.1.0 系 / :latest
-        ブランチ push  → APP_VERSION=0.0.0-dev+<コミット7桁>
+        タグ push      → APP_VERSION=0.1.0、イメージに :0.1.0 / :0.1（候補版 -rc.N は :0.1.0-rc.N だけ）
+        ブランチ push  → APP_VERSION=0.0.0-dev+<コミット7桁>。master なら :latest も
 ```
 
 ⚠️ **タグを打たずに master へ入れたものは、ずっと `0.0.0-dev+<コミット>`。**

@@ -14,6 +14,7 @@ import {
 } from '@ofuro/core/modules/cloud';
 import type { AuthSessionStatus } from '@ofuro/core/modules/cloud/entities/session';
 import { Unreachable } from '@ofuro/env/constant';
+import { UserFriendlyError } from '@ofuro/error';
 import { ServerDeploymentType } from '@ofuro/graphql';
 import { useI18n } from '@ofuro/i18n';
 import { useLiveData, useService } from '@toeverything/infra';
@@ -22,6 +23,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { SignInState } from '.';
 import { Captcha } from './captcha';
+import { inviteIdFromRedirect } from './invite-redirect';
 import * as styles from './style.css';
 
 export const SignInWithPasswordStep = ({
@@ -47,6 +49,7 @@ export const SignInWithPasswordStep = ({
   // #93: レート制限（429）に掛かった状態。パスワードの照合自体が行われていないため、
   // 「パスワードが無効」と表示すると事実と異なる（正しいパスワードでも同じ表示になる）。
   const [rateLimited, setRateLimited] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const captchaService = useService(CaptchaService);
   const serverService = useService(ServerService);
   const isSelfhosted = useLiveData(
@@ -72,6 +75,8 @@ export const SignInWithPasswordStep = ({
     }
   }, [loginStatus, onAuthenticated, t]);
 
+  const isNewUser = state.registered === false;
+
   const onSignIn = useAsyncCallback(async () => {
     if (isLoading || (!verifyToken && needCaptcha)) return;
     setIsLoading(true);
@@ -83,10 +88,25 @@ export const SignInWithPasswordStep = ({
         password,
         verifyToken,
         challenge,
+        // #293: 「アカウントを作成」を押したときだけ作る
+        create: isNewUser || undefined,
+        // #195: 招待のページから来たなら、閉じた環境でも本人宛ての招待で作れる
+        inviteId: inviteIdFromRedirect(
+          new URLSearchParams(window.location.search).get('redirect_uri')
+        ),
       });
       // Success — keep isLoading true until page navigates away
     } catch (err) {
       console.error(err);
+      // #293: 未登録。作らずに「このメールアドレスは登録されていません」と確かめる
+      // （docs/signin-registration.md 4.1）。入力したパスワードはそのまま使う
+      if (UserFriendlyError.fromAny(err).is('USER_NOT_FOUND')) {
+        changeState(prev => ({ ...prev, registered: false }));
+        setPasswordError(false);
+        setRateLimited(false);
+        setIsLoading(false);
+        return;
+      }
       // #93: 429（レート制限）はパスワードの正誤と無関係なので、区別して表示する。
       // レート制限は「IP + 入力されたメールアドレス」単位で、存在しない
       // メールアドレスでも同じように掛かるため、アカウント列挙の手がかりにならない。
@@ -101,6 +121,8 @@ export const SignInWithPasswordStep = ({
         /too many requests|throttler/i.test(String(error?.message ?? ''));
       setRateLimited(isRateLimited);
       setPasswordError(!isRateLimited);
+      // #293: 作るときは、パスワードの決まり（長さ・強さ）で断られることがある。理由を出す
+      setCreateError(isNewUser && !isRateLimited ? (error?.message ?? null) : null);
       setIsLoading(false);
     }
   }, [
@@ -112,13 +134,21 @@ export const SignInWithPasswordStep = ({
     email,
     password,
     challenge,
+    isNewUser,
+    changeState,
   ]);
 
   const sendMagicLink = useCallback(() => {
     changeState(prev => ({ ...prev, step: 'signInWithEmail' }));
   }, [changeState]);
 
-  const isNewUser = state.registered === false;
+  // 打ち間違いに気づいたら、メールアドレスの入力へ戻る（#293 では作らずに戻る）
+  const backToSignIn = useCallback(
+    () =>
+      changeState(prev => ({ ...prev, step: 'signIn', registered: undefined })),
+    [changeState]
+  );
+
   const userName = state.userName;
 
   const title = isNewUser
@@ -152,7 +182,7 @@ export const SignInWithPasswordStep = ({
             setPassword(value);
           }, [])}
           error={passwordError}
-          errorHint={t['com.affine.auth.password.error']()}
+          errorHint={createError ?? t['com.affine.auth.password.error']()}
           onEnter={onSignIn}
         />
         {rateLimited && (
@@ -187,16 +217,16 @@ export const SignInWithPasswordStep = ({
               ? t['com.affine.auth.sign.create-account']()
               : t['com.affine.auth.sign.in']()}
         </Button>
-        {isNewUser && (
-          <Button
-            variant="secondary"
-            size="extraLarge"
-            style={{ width: '100%' }}
-            onClick={useCallback(() => changeState(prev => ({ ...prev, step: 'signIn' })), [changeState])}
-          >
-            ログイン画面に戻る
-          </Button>
-        )}
+        {/* パスワードの画面ではメールアドレスを変えられない。打ち間違えたら戻って直す */}
+        <Button
+          data-testid="back-to-sign-in"
+          variant="secondary"
+          size="extraLarge"
+          style={{ width: '100%' }}
+          onClick={backToSignIn}
+        >
+          {t['com.ofuro.auth.back-to-sign-in']()}
+        </Button>
       </AuthContent>
     </AuthContainer>
   );

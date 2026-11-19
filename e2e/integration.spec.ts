@@ -21,6 +21,10 @@ import {
   dismissDevOverlay,
   createNewPage,
   getOwnedWorkspaceId,
+  adminCookieFor,
+  createManagedSharedWorkspace,
+  deleteWorkspaceAsAdmin,
+  confirmCreateAccount,
 } from './helpers';
 
 /**
@@ -722,98 +726,38 @@ test.describe('バックエンド API', () => {
     expect(Array.isArray(result.data?.workspace?.histories)).toBe(true);
   });
 
-  test('マニュアルWSが Reader で自動参加し最下部・読み取り専用（#72）', async ({
+  test('使い方はサイドバーから /docs/ を開く。マニュアルのワークスペースは無い（#324）', async ({
     sharedPage: page,
   }) => {
-    // #72 マニュアル専用WS。workspaces 取得で各ユーザーが Reader として遅延参加し、
-    // 「📖 Manual」が固定 all-f UUID（一覧最下部）で現れ、編集不可であること。
-    // ⚠️ 名前は #241 で日英併記にしたときに「📖 マニュアル」から変えた。
-    // ※ backend/seed/manual.zip がある環境でのみマニュアルWSが作られる。
+    // #324: 以前の「📖 Manual」ワークスペース（全員が自動参加）はやめ、
+    // 本体が /docs/ で配るガイドに替えた（docs/docs-site.md 5.1・7 章）
     const list = await graphqlQuery(page, '{ workspaces { id name } }');
     expect(list.errors).toBeUndefined();
-    const workspaces: Array<{ id: string; name: string }> =
-      list.data?.workspaces ?? [];
-    const manual = workspaces.find(w => w.id.startsWith('ffffffff-ffff-4fff'));
+    const workspaces: Array<{ id: string }> = list.data?.workspaces ?? [];
+    expect(workspaces.some(w => w.id.startsWith('ffffffff-ffff-4fff'))).toBe(false);
 
-    // seed 未投入の環境ではマニュアルWSが無いのでスキップ（機構は他テストで担保）。
-    test.skip(!manual, 'マニュアルWSが未シード（backend/seed/manual.zip 無し）');
-
-    // 表示名が「📖 Manual」であること。
-    expect(manual!.name).toContain('Manual');
-
-    // Reader は編集不可（Doc_Update=false）＝バックエンド強制の読み取り専用。
-    //
-    // ⚠️ **非 Admin のユーザーで測ること。** 画面のログインユーザー
-    // （e2e-test）は **サーバー全体 Admin** であり、判定をバイパスして
-    // 全許可になる（docs/doc-permission.md 4.2 の①）。それは仕様どおりで、
-    // Admin で測ると「読み取り専用」を確かめたことにならない。
-    //
-    // ⚠️ 以前は permissions がワークスペースのロールから機械的に
-    // 組み立てられていたため、Admin でも `reader → 編集不可` が返り、
-    // **表示と実際にできることが食い違ったまま通っていた**（#97 で是正）。
-    const API = 'http://localhost:3010';
-    const READER = {
-      email: 'e2e-manual-reader@ofuro-wiki.local',
-      password: 'E2eManualReader123!',
-    };
-
-    let auth = await fetch(`${API}/api/auth/sign-in`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(READER),
-    });
-    if (auth.status === 401 || auth.status === 404) {
-      auth = await fetch(`${API}/api/auth/sign-up`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(READER),
-      });
-    }
-    expect(auth.ok).toBe(true);
-    const cookie = (auth.headers.getSetCookie?.() ?? [])
-      .map(c => c.split(';')[0])
-      .join('; ');
-
-    const ask = async (query: string) => {
-      const res = await fetch(`${API}/graphql`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Cookie: cookie },
-        body: JSON.stringify({ query }),
-      });
-      return res.json();
-    };
-
-    // workspaces 取得でマニュアルWSへ Reader として遅延参加する
-    const mine = await ask('{ workspaces { id } }');
-    expect(mine.errors).toBeUndefined();
-    const joined = (mine.data?.workspaces ?? []).some(
-      (w: { id: string }) => w.id === manual!.id
-    );
-    expect(joined).toBe(true);
-
-    const perm = await ask(
-      `query {
-        workspace(id: "${manual!.id}") {
-          doc(docId: "${manual!.id}") {
-            permissions { Doc_Read Doc_Update Doc_Trash }
-          }
-        }
-      }`
-    );
-    expect(perm.errors).toBeUndefined();
-    const p = perm.data?.workspace?.doc?.permissions;
-    expect(p?.Doc_Read).toBe(true);
-    expect(p?.Doc_Update).toBe(false);
-    expect(p?.Doc_Trash).toBe(false);
+    // サイドバーの「その他」から新しいタブで開く。画面の言語で日本語版か英語版か決まる。
+    // ⚠️ 開発サーバー（webpack）は /docs/ を配らない。開く先の URL だけを確かめる
+    const button = page.getByTestId('slider-bar-user-guide-button');
+    await button.scrollIntoViewIfNeeded();
+    const [popup] = await Promise.all([page.waitForEvent('popup'), button.click()]);
+    expect(new URL(popup.url()).pathname).toMatch(/^\/docs\/(en\/)?$/);
+    await popup.close();
   });
 
   test('招待リンクの生成・表示・失効ができる', async ({ sharedPage: page }) => {
     await enterOrCreateWorkspace(page);
 
-    const urlMatch = page.url().match(/\/workspace\/([^/?#]+)/);
-    expect(urlMatch).not.toBeNull();
-    const workspaceId = urlMatch![1];
+    // #297: 招待リンクは共有だけ（プライベートには招待できない）。TEST_USER はシステム管理者
+    const shared = await graphqlQuery(
+      page,
+      `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
+      { name: `invite-link-${Date.now()}` }
+    );
+    const workspaceId: string = shared.data?.createWorkspace?.id;
+    expect(workspaceId).toBeTruthy();
 
+    try {
     // 生成: createInviteLink が成功し、フルURL形式のリンクと有効期限を返す
     const created = await graphqlQuery(
       page,
@@ -866,6 +810,11 @@ test.describe('バックエンド API', () => {
     );
     expect(afterRevoke.errors).toBeUndefined();
     expect(afterRevoke.data?.workspace?.inviteLink).toBeNull();
+    } finally {
+      await graphqlQuery(page, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
+        id: workspaceId,
+      });
+    }
   });
 
   test('内部API: upsert で書いた markdown を get-markdown で往復取得できる（#30）', async ({ sharedPage: page }) => {
@@ -1910,7 +1859,8 @@ test.describe('アクセス制御（ワークスペース越境防止）', () =>
     const adminCookie = await authCookie(TEST_USER.email, TEST_USER.password);
     const created = await gql(
       adminCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      // #297: 管理者が作るのは共有（2 つ目のプライベートは作れない）
+      `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
       { name: 'authz-owner-ws' },
     );
     const wsId = created.data?.createWorkspace?.id;
@@ -1966,7 +1916,7 @@ test.describe('アクセス制御（ワークスペース越境防止）', () =>
     const adminCookie = await authCookie(TEST_USER.email, TEST_USER.password);
     const created = await gql(
       adminCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+      `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
       { name: 'authz-blob-ws' },
     );
     const wsId = created.data?.createWorkspace?.id;
@@ -2041,12 +1991,18 @@ test.describe('アクセス制御（ワークスペース越境防止）', () =>
 
   test('メンバーは自分のワークスペースにアクセスできる（ポジティブコントロール）', async () => {
     const outsiderCookie = await authCookie(OUTSIDER.email, OUTSIDER.password);
+    // #297: 一般ユーザーが作れるのはプライベート 1 つだけ。既にあればそれを使う
     const created = await gql(
       outsiderCookie,
       `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
       { name: 'authz-own-ws' },
     );
-    const wsId = created.data?.createWorkspace?.id;
+    const own = await gql(outsiderCookie, `{ currentUser { id } workspaces { id kind owner { id } } }`);
+    const wsId =
+      created.data?.createWorkspace?.id ??
+      own.data?.workspaces?.find(
+        (w: any) => w.kind === 'Private' && w.owner.id === own.data.currentUser.id,
+      )?.id;
     expect(wsId).toBeTruthy();
 
     try {
@@ -2150,13 +2106,8 @@ test.describe('ページ単位の権限', () => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
 
-    const created = await gql(
-      ownerCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
-      { name: 'doc-permission-ws' },
-    );
-    const wsId = created.data?.createWorkspace?.id;
-    expect(wsId).toBeTruthy();
+    // #297: 共有は管理者が作り、OWNER をワークスペース管理者にする
+    const wsId = await createManagedSharedWorkspace(API, ownerCookie, 'doc-permission-ws');
 
     try {
       // --- メンバーを招待して参加させる
@@ -2189,8 +2140,9 @@ test.describe('ページ単位の権限', () => {
 
       // ⚠️ 内部APIの upsert は検索索引を作らない。索引を作ってから検索を見る。
       // これを忘れると**検索の検査が空振りして、素通りで通る**
+      // #297: 索引の作り直しは保守の操作で、持ち主（共有では root・システム管理者）だけ
       await gql(
-        ownerCookie,
+        await adminCookieFor(API),
         `mutation ($w: String!) { reindexWorkspace(workspaceId: $w) }`,
         { w: wsId },
       );
@@ -2350,9 +2302,8 @@ test.describe('ページ単位の権限', () => {
       ).map((d: any) => d.id);
       expect(ownerSnapIds).toContain(SECRET_DOC);
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 
@@ -2360,13 +2311,7 @@ test.describe('ページ単位の権限', () => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
 
-    const created = await gql(
-      ownerCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
-      { name: 'doc-permission-grant-ws' },
-    );
-    const wsId = created.data?.createWorkspace?.id;
-    expect(wsId).toBeTruthy();
+    const wsId = await createManagedSharedWorkspace(API, ownerCookie, 'doc-permission-grant-ws');
 
     try {
       const invited = await gql(
@@ -2464,9 +2409,8 @@ test.describe('ページ単位の権限', () => {
       expect(revoked.errors).toBeUndefined();
       expect(await readable()).toBeNull();
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 
@@ -2478,13 +2422,7 @@ test.describe('ページ単位の権限', () => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
 
-    const created = await gql(
-      ownerCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
-      { name: 'doc-permission-manager-ws' },
-    );
-    const wsId = created.data?.createWorkspace?.id;
-    expect(wsId).toBeTruthy();
+    const wsId = await createManagedSharedWorkspace(API, ownerCookie, 'doc-permission-manager-ws');
 
     try {
       const invited = await gql(
@@ -2565,9 +2503,8 @@ test.describe('ページ単位の権限', () => {
       expect(perm.Doc_Delete).toBe(false);
       expect(perm.Doc_TransferOwner).toBe(false);
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 
@@ -2575,12 +2512,7 @@ test.describe('ページ単位の権限', () => {
     const ownerCookie = await authCookie(OWNER.email, OWNER.password);
     const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
 
-    const created = await gql(
-      ownerCookie,
-      `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
-      { name: 'doc-permission-escalation-ws' },
-    );
-    const wsId = created.data?.createWorkspace?.id;
+    const wsId = await createManagedSharedWorkspace(API, ownerCookie, 'doc-permission-escalation-ws');
 
     try {
       const invited = await gql(
@@ -2628,9 +2560,69 @@ test.describe('ページ単位の権限', () => {
       );
       expect(after.data?.workspace?.doc ?? null).toBeNull();
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
+    }
+  });
+
+  /**
+   * #266: 内部 API の upsert が、共有目次（ルート文書の meta.pages）に題を書いていた。
+   * ルート文書は全メンバーへ配られるため、**権限で絞ったページの題も届いていた**。
+   * 一覧への登録は台帳（doc_meta）で行う（#151 段階3）。
+   */
+  test('⚠️ 内部 API で作ったページの題が、共有目次に載らない（#266）', async () => {
+    const ownerCookie = await authCookie(OWNER.email, OWNER.password);
+    const memberCookie = await authCookie(MEMBER.email, MEMBER.password);
+    // 他に出てこない題（ルート文書のバイト列に含まれていないかを見る）
+    const SECRET_TITLE = 'kanbuyakuin-gentei-266';
+
+    const wsId = await createManagedSharedWorkspace(API, ownerCookie, 'internal-upsert-root-ws');
+
+    try {
+      const invited = await gql(
+        ownerCookie,
+        `mutation ($w: String!, $e: [String!]!) {
+          inviteMembers(workspaceId: $w, emails: $e) { inviteId }
+        }`,
+        { w: wsId, e: [MEMBER.email] },
+      );
+      await gql(
+        memberCookie,
+        `mutation ($w: String!, $i: String!) { acceptInviteById(workspaceId: $w, inviteId: $i) }`,
+        { w: wsId, i: invited.data?.inviteMembers?.[0]?.inviteId },
+      );
+
+      await upsertDoc(ownerCookie, wsId, SECRET_DOC, SECRET_TITLE, '機密の本文');
+      await gql(
+        ownerCookie,
+        `mutation ($i: UpdateDocDefaultRoleInput!) { updateDocDefaultRole(input: $i) }`,
+        { i: { workspaceId: wsId, docId: SECRET_DOC, role: 'None' } },
+      );
+
+      // ポジティブコントロール: 一覧（台帳）には載っている。目次に書かなくても一覧から消えない
+      const listed = await gql(
+        ownerCookie,
+        `query ($w: String!) { discoverySnapshot(workspaceId: $w) { documents { id title } } }`,
+        { w: wsId },
+      );
+      expect(listed.errors).toBeUndefined();
+      const docs = listed.data?.discoverySnapshot?.documents ?? [];
+      expect(docs.find((d: { id: string }) => d.id === SECRET_DOC)?.title).toBe(SECRET_TITLE);
+
+      // ⚠️ メンバーに配られるルート文書に、題が含まれていないこと（削除の墓標も含めてバイト列で見る）
+      const root = await fetch(`${API}/api/workspaces/${wsId}/docs/${wsId}`, {
+        headers: { Cookie: memberCookie },
       });
+      if (root.ok) {
+        const bytes = Buffer.from(await root.arrayBuffer());
+        expect(bytes.includes(Buffer.from(SECRET_TITLE))).toBe(false);
+      } else {
+        // ルート文書がまだ無いなら、題も届かない
+        expect(root.status).toBe(404);
+      }
+    } finally {
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 });
@@ -2866,7 +2858,8 @@ test.describe('入力検証・セキュリティヘッダ', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({
-        query: `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+        // #297: 管理者が作るのは共有（2 つ目のプライベートは作れない）
+        query: `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
         variables: { name: 'blob-sec-ws' },
       }),
     }).then((r) => r.json());
@@ -2940,93 +2933,135 @@ test.describe('初期ワークスペースのテンプレート', () => {
    * 初期ワークスペースは「そのユーザーが初めてサインインしたとき」にしか作られないため、
    * このテストでは新規ユーザーを作成し、終了後に削除する。
    */
-  test('「はじめに」の内部リンクから「フォルダとタグの使い方」へ遷移できる（#75）', async ({
-    browser,
-  }) => {
-    test.setTimeout(180_000);
+  /**
+   * 見本は画面の言語で選ぶ（docs/first-workspace.md）。英語版が無かったころは、
+   * 英語の画面でも日本語の見本が入っていた（v0.3.0-rc.1 まで）
+   */
+  const onboardingCases = [
+    {
+      locale: 'ja-JP',
+      intro: 'はじめに',
+      guide: 'フォルダとタグの使い方',
+      folder: 'はじめてのフォルダ',
+      template: '議事録',
+      otherIntro: 'Getting Started',
+    },
+    {
+      locale: 'en-US',
+      intro: 'Getting Started',
+      guide: 'How to Use Folders and Tags',
+      folder: 'First Folder',
+      template: 'Meeting Notes',
+      otherIntro: 'はじめに',
+    },
+  ];
+  for (const c of onboardingCases) {
+    test(`「${c.intro}」の内部リンクから「${c.guide}」へ遷移できる（#75・${c.locale}）`, async ({
+      browser,
+    }) => {
+      test.setTimeout(180_000);
 
-    const email = `onboarding-link-${Date.now()}@example.invalid`;
-    const password = 'OnboardingLink123!';
+      const email = `onboarding-link-${c.locale}-${Date.now()}@example.invalid`;
+      const password = 'OnboardingLink123!';
 
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-    const page = await context.newPage();
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        locale: c.locale,
+      });
+      const page = await context.newPage();
 
-    try {
-      // 新規ユーザーでサインイン（未登録アドレスなので自動作成され、初期WSが構築される）
-      await page.goto('/');
-      await dismissDevOverlay(page);
-      await page
-        .locator('input[placeholder*="メールアドレス"], input[placeholder*="email"]')
-        .fill(email);
-      await page.locator('button:has-text("続行"), button:has-text("Continue")').click();
-      await page.locator('input[type="password"]').waitFor({ state: 'visible' });
-      await page.locator('input[type="password"]').fill(password);
-      await page.locator('button:has-text("サインイン"), button:has-text("Sign in")').click();
-      await page.waitForURL(/\/workspace\//, { timeout: 60_000 });
-
-      // オンボーディング文書のインポート完了を待つ
-      await ensureSidebarOpen(page);
-      const gettingStarted = page.locator('text=はじめに').first();
-      await gettingStarted.waitFor({ state: 'visible', timeout: 60_000 });
-
-      // 「はじめに」本文中の内部リンク
-      const reference = page
-        .locator('affine-reference')
-        .filter({ hasText: 'フォルダとタグの使い方' })
-        .first();
-
-      // ⚠️ サインイン直後の数秒は、開いても一覧へ戻されることがある（#258）。
-      // - アプリが初期設定の途中で、何度か一覧（/all）へ移動する
-      // - テンプレートの取り込みで一覧が並び直され、押した瞬間に行が動く
-      // ページが開いて本文が出るまで、押し直す
-      await expect(async () => {
-        // 本文が見えていれば開けている。見えていなければ、一覧に戻されたか
-        // 開いている途中なので押す（開いている途中に押しても同じページを開くだけ）
-        if (!(await reference.isVisible())) {
-          await gettingStarted.click();
-        }
-        await expect(reference).toBeVisible({ timeout: 5_000 });
-      }).toPass({ timeout: 60_000 });
-
-      const urlBefore = page.url();
-      await reference.click();
-
-      // リンク先の文書が開くこと（リンク切れだと存在しないIDに遷移して本文が出ない）
-      await expect(page).not.toHaveURL(urlBefore, { timeout: 15_000 });
-      await expect(
-        page.locator('[data-block-id]').filter({ hasText: 'フォルダとタグの使い方' }).first()
-      ).toBeVisible({ timeout: 30_000 });
-    } finally {
-      // 後片付け: 作成したユーザー（と個人ワークスペース）を Admin 権限で削除する
-      const cleanup = await browser.newContext();
-      const cleanupPage = await cleanup.newPage();
       try {
-        await signInViaAPI(cleanupPage);
-        const list = await graphqlQuery(
-          cleanupPage,
-          `query ($search: String) { adminUserList(search: $search, take: 20) { items { id email } } }`,
-          { search: email }
-        );
-        const target = list?.data?.adminUserList?.items?.find(
-          (u: any) => u.email === email
-        );
-        if (target) {
-          await graphqlQuery(
-            cleanupPage,
-            `mutation ($id: String!) { adminDeleteUser(userId: $id) }`,
-            { id: target.id }
-          );
-        }
-      } catch {
-        // 後片付けの失敗はテスト結果に影響させない
+        // 新規ユーザーでサインイン（未登録アドレスなので、確認のあと作られ、初期WSが構築される）
+        await page.goto('/');
+        await dismissDevOverlay(page);
+        await page
+          .locator('input[placeholder*="メールアドレス"], input[placeholder*="email"]')
+          .fill(email);
+        await page.locator('button:has-text("続行"), button:has-text("Continue")').click();
+        await page.locator('input[type="password"]').waitFor({ state: 'visible' });
+        await page.locator('input[type="password"]').fill(password);
+        // 英語の画面では「Back to sign in」にも当たるため、テスト ID で押す
+        await page.getByTestId('sign-in-button').click();
+        await confirmCreateAccount(page);
+        await page.waitForURL(/\/workspace\//, { timeout: 60_000 });
+
+        // オンボーディング文書のインポート完了を待つ
+        await ensureSidebarOpen(page);
+        const gettingStarted = page.locator(`text=${c.intro}`).first();
+        await gettingStarted.waitFor({ state: 'visible', timeout: 60_000 });
+
+        // 言語に合う最初のフォルダがあり、もう一方の言語の見本は入っていない。
+        // フォルダは見本が一覧に載ってから作る（docs/first-workspace.md）
+        await expect(page.locator(`text=${c.folder}`).first()).toBeVisible({ timeout: 60_000 });
+        await expect(page.locator(`text=${c.otherIntro}`)).toHaveCount(0);
+
+        // 「はじめに」本文中の内部リンク
+        const reference = page
+          .locator('affine-reference')
+          .filter({ hasText: c.guide })
+          .first();
+
+        // ⚠️ サインイン直後の数秒は、開いても一覧へ戻されることがある（#258）。
+        // - アプリが初期設定の途中で、何度か一覧（/all）へ移動する
+        // - テンプレートの取り込みで一覧が並び直され、押した瞬間に行が動く
+        // ページが開いて本文が出るまで、押し直す
+        await expect(async () => {
+          // 本文が見えていれば開けている。見えていなければ、一覧に戻されたか
+          // 開いている途中なので押す（開いている途中に押しても同じページを開くだけ）
+          if (!(await reference.isVisible())) {
+            await gettingStarted.click();
+          }
+          await expect(reference).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 60_000 });
+
+        const urlBefore = page.url();
+        await reference.click();
+
+        // リンク先の文書が開くこと（リンク切れだと存在しないIDに遷移して本文が出ない）
+        await expect(page).not.toHaveURL(urlBefore, { timeout: 15_000 });
+        await expect(
+          page.locator('[data-block-id]').filter({ hasText: c.guide }).first()
+        ).toBeVisible({ timeout: 30_000 });
+
+        // Wiki のテンプレートも作られている（段階 3 から作られていなかった）
+        const workspaceId = page.url().match(/workspace\/([^/]+)/)?.[1];
+        await page.goto(`/workspace/${workspaceId}/all`);
+        await expect(
+          page.locator('[data-testid="doc-list-item-title"]').filter({ hasText: c.template })
+        ).toHaveCount(1, { timeout: 30_000 });
       } finally {
-        await cleanupPage.close();
-        await cleanup.close();
+        // 後片付け: 作成したユーザー（と個人ワークスペース）を Admin 権限で削除する
+        const cleanup = await browser.newContext();
+        const cleanupPage = await cleanup.newPage();
+        try {
+          await signInViaAPI(cleanupPage);
+          const list = await graphqlQuery(
+            cleanupPage,
+            `query ($search: String) { adminUserList(search: $search, take: 20) { items { id email } } }`,
+            { search: email }
+          );
+          const target = list?.data?.adminUserList?.items?.find(
+            (u: any) => u.email === email
+          );
+          if (target) {
+            await graphqlQuery(
+              cleanupPage,
+              `mutation ($id: String!) { adminDeleteUser(userId: $id) }`,
+              { id: target.id }
+            );
+          }
+        } catch {
+          // 後片付けの失敗はテスト結果に影響させない
+        } finally {
+          await cleanupPage.close();
+          await cleanup.close();
+        }
+        await page.close();
+        await context.close();
       }
-      await page.close();
-      await context.close();
-    }
-  });
+    });
+  }
+
   /**
    * #262: ⚠️ **サインイン直後に開いたページが、一覧へ戻されないこと。**
    *
@@ -3054,6 +3089,7 @@ test.describe('初期ワークスペースのテンプレート', () => {
       await page.locator('input[type="password"]').waitFor({ state: 'visible' });
       await page.locator('input[type="password"]').fill(password);
       await page.locator('button:has-text("サインイン"), button:has-text("Sign in")').click();
+      await confirmCreateAccount(page);
       await page.waitForURL(/\/workspace\/[^/]+\/all/, { timeout: 60_000 });
 
       // ⚠️ 取り込みが終わる前に開くこと。一覧に最初のページが出たらすぐ押す
@@ -3214,10 +3250,8 @@ test.describe('招待の受諾', () => {
 
   /** 招待用に、所有者だけのワークスペースを1つ作る */
   async function makeWorkspace(ownerCookie: string): Promise<string> {
-    const r = await gql(ownerCookie, `mutation { createWorkspace { id } }`);
-    const id = r.data?.createWorkspace?.id;
-    if (!id) throw new Error(`createWorkspace failed: ${JSON.stringify(r)}`);
-    return id;
+    // #297: 招待できるのは共有だけ。管理者が作り、所有者役をワークスペース管理者にする
+    return createManagedSharedWorkspace(API, ownerCookie, `invite-accept-${Date.now()}`);
   }
 
   /**
@@ -3251,9 +3285,8 @@ test.describe('招待の受諾', () => {
       // ポジティブコントロール: 実際に入れていないこと
       expect(await isMember(otherCookie, wsId)).toBe(false);
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 
@@ -3279,9 +3312,8 @@ test.describe('招待の受諾', () => {
       expect(r.errors).toBeUndefined();
       expect(await isMember(otherCookie, wsId)).toBe(true);
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 
@@ -3313,9 +3345,8 @@ test.describe('招待の受諾', () => {
       const second = await accept(invitedCookie, wsId, inviteId);
       expect(second.errors).toBeTruthy();
     } finally {
-      await gql(ownerCookie, `mutation ($id: String!) { deleteWorkspace(id: $id) }`, {
-        id: wsId,
-      });
+      // #297: 共有を消せるのはシステム管理者だけ
+      await deleteWorkspaceAsAdmin(API, wsId);
     }
   });
 });
@@ -3410,9 +3441,10 @@ test.describe('読み込めないワークスペース（#128）', () => {
 
       // ⚠️ **GraphQL だけを叩く＝中身を書かない。** これが「作成が中断された」
       // 状態そのもの（行はあるが snapshots 0 / updates 0）
+      // #297: TEST_USER（システム管理者）が作れるのは共有（2 つ目のプライベートは作れない）
       const created = await graphqlQuery(
         page,
-        `mutation ($name: String) { createWorkspace(name: $name) { id } }`,
+        `mutation ($name: String) { createWorkspace(name: $name, kind: Shared) { id } }`,
         { name: `unloadable-${Date.now()}` }
       );
       wsId = created?.data?.createWorkspace?.id;
@@ -3432,19 +3464,22 @@ test.describe('読み込めないワークスペース（#128）', () => {
         .last()
         .click();
 
-      // 一覧から消えること（サーバー側で消えている）
+      // サーバー側で消えていること
+      // ⚠️ #297: 一覧（workspaces）では確かめない。共有の持ち主は root で、
+      // 作った管理者はメンバーでないため、消えていなくても一覧に出ない（素通りで通ってしまう）
       await expect
         .poll(
           async () => {
-            const list = await graphqlQuery(page, '{ workspaces { id } }');
-            const ids: string[] = (list?.data?.workspaces ?? []).map(
-              (w: any) => w.id
+            const r = await graphqlQuery(
+              page,
+              `query ($id: String!) { workspace(id: $id) { id } }`,
+              { id: wsId }
             );
-            return ids.includes(wsId as string);
+            return r?.data?.workspace?.id ?? null;
           },
           { timeout: 30_000 }
         )
-        .toBe(false);
+        .toBeNull();
 
       wsId = undefined;
     } finally {
@@ -3521,6 +3556,125 @@ test.describe('共有メニュー（#131）', () => {
       // ⚠️ 公開リンクの行が無いこと
       await expect(page.getByTestId('share-link-menu-trigger')).toHaveCount(0);
       await expect(page.getByText('リンクを持っている全員')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe('クイック検索（#321）', () => {
+  /**
+   * docs/quick-search.md 3 章。Ctrl+K から設定を開いて閉じると、窓は消えるのに
+   * 画面がクリックを受け付けなくなっていた（body の pointer-events が none のまま）。
+   */
+  test('⚠️ Ctrl+K から設定を開いて閉じても、画面を操作できる', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+
+    try {
+      await signInViaAPI(page);
+      await ensureSidebarOpen(page);
+
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('input[cmdk-input]')).toBeVisible({ timeout: 10_000 });
+      await page.locator('[cmdk-item]', { hasText: /^設定に移動/ }).click();
+      await expect(page.getByTestId('setting-modal')).toBeVisible({ timeout: 10_000 });
+
+      await page.getByTestId('modal-close-button').first().click();
+      await expect(page.getByTestId('setting-modal')).toBeHidden();
+
+      // 閉じたあと、サイドバーで移れる
+      await page.getByText('ゴミ箱', { exact: true }).first().click({ timeout: 5_000 });
+      await page.waitForURL(/\/trash/, { timeout: 10_000 });
+    } finally {
+      await context.close();
+    }
+  });
+
+  /**
+   * docs/quick-search.md 3 章。コマンドを選んで閉じきる前に Ctrl+K を開き直すと、
+   * 選んだコマンドが残り、あとで閉じたときに突然動いていた。
+   */
+  test('⚠️ 選んですぐ Ctrl+K を開き直したら、選んだコマンドは動かさない', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+
+    try {
+      await signInViaAPI(page);
+      await ensureSidebarOpen(page);
+
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('input[cmdk-input]')).toBeVisible({ timeout: 10_000 });
+      await page.locator('input[cmdk-input]').fill('設定に移動');
+      await expect(page.locator('[cmdk-item]', { hasText: /^設定に移動/ })).toBeVisible();
+
+      // 選んで、閉じきる前（0.12 秒）に開き直す
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('input[cmdk-input]')).toBeVisible({ timeout: 10_000 });
+
+      // 閉じても設定は開かない
+      await page.keyboard.press('Escape');
+      await expect(page.locator('input[cmdk-input]')).toBeHidden();
+      await page.waitForTimeout(1_000);
+      await expect(page.getByTestId('setting-modal')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('行き先の無いコマンドを出さない', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+
+    try {
+      await signInViaAPI(page);
+
+      await page.keyboard.press('Control+k');
+      await expect(page.locator('input[cmdk-input]')).toBeVisible({ timeout: 10_000 });
+      await expect(page.locator('[cmdk-item]', { hasText: /^設定に移動/ })).toBeVisible();
+
+      const labels = await page.locator('[cmdk-item]').allTextContents();
+      for (const gone of ['新着情報', 'お問い合わせ', 'ワークスペースに移動']) {
+        expect(labels.some((l) => l.trim().startsWith(gone)), gone).toBe(false);
+      }
+      for (const label of ['コレクションの一覧へ', 'タグの一覧へ']) {
+        expect(labels.some((l) => l.trim().startsWith(label)), label).toBe(true);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  /** docs/quick-search.md 2 章。「ローカル」が何を指すか伝わらないため出さない */
+  test('文字を入れても「ローカル検索」を出さない', async ({ browser }) => {
+    test.setTimeout(180_000);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+
+    try {
+      await signInViaAPI(page);
+      await ensureSidebarOpen(page);
+
+      // 探す相手のページを作る（索引に載るまで少しかかる）
+      const title = `cmdk検索${Date.now()}`;
+      await createNewPage(page);
+      await page.locator('[data-block-is-title]').click();
+      await page.keyboard.type(title);
+
+      // 検索の見出しが出る（=検索が終わった）まで、開き直して探す
+      await expect(async () => {
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Control+k');
+        await page.locator('input[cmdk-input]').fill(title);
+        await expect(page.getByText(`「${title}」の検索`)).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 60_000 });
+
+      await expect(page.locator('[cmdk-item]', { hasText: /^ローカル検索/ })).toHaveCount(0);
+      await expect(page.getByText('(ローカル)')).toHaveCount(0);
     } finally {
       await context.close();
     }

@@ -60,6 +60,10 @@ export function configureDefaultAuthProvider(framework: Framework) {
         password: string;
         verifyToken?: string;
         challenge?: string;
+        /** #293: 「作りますか」で承認した。無ければサーバーは作らない */
+        create?: boolean;
+        /** #195: 招待のページから来た */
+        inviteId?: string;
       }) {
         const headers: Record<string, string> = {};
 

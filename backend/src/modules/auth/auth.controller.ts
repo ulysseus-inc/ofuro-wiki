@@ -46,6 +46,7 @@ export class AuthController {
       body.email,
       body.password,
       req.ip,
+      { create: body.create, inviteId: body.inviteId },
     );
     setAuthCookies(res, token);
     return { id: user.id, email: user.email };

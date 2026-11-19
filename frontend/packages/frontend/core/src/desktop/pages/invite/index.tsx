@@ -67,8 +67,10 @@ const AcceptInvite = ({ inviteId: targetInviteId }: { inviteId: string }) => {
     await invitationService
       .acceptInvite(targetInviteId)
       .then(() => {
-        invitationService.getInviteInfo({ inviteId: targetInviteId });
+        // M3: メール招待は受けると使い切られる（#148）。情報を取り直すと
+        // 「期限切れ」になるため、取り直さずにワークスペースを開く
         setAccepted(true);
+        return openWorkspace();
       })
       .catch(error => {
         const err = UserFriendlyError.fromAny(error);

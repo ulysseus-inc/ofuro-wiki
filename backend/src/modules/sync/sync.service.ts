@@ -4,6 +4,7 @@ import { isUniqueViolation } from '../../prisma-errors';
 import { isUserDoc } from './user-doc';
 import { mergeUpdates, diffUpdate, encodeStateVector } from './yjs.utils';
 import { DocGcService } from '../discovery/doc-gc.service';
+import { DocContentRevisionService } from '../discovery/doc-content-revision.service';
 
 const SNAPSHOT_THRESHOLD = 50; // Rebuild snapshot after N updates
 
@@ -15,6 +16,8 @@ export class SyncService {
     private prisma: PrismaService,
     // #45: 完全削除で消すものは DocGcService が1か所で持つ
     private docGc: DocGcService,
+    // 本文の保存でも一覧の版数を上げる（30 秒に 1 回まで。docs 7.10.6）
+    private contentRevision: DocContentRevisionService,
   ) {}
 
   async loadDoc(
@@ -120,6 +123,8 @@ export class SyncService {
     // a document "fresh", and nothing else advances updated_at for it - the
     // client writes the ledger for title/trash/tags only, so Prisma's
     // @updatedAt never fires on a body-only edit. See docs 7.10.
+    // 台帳の更新日時が実際に動いたか。動いたら一覧の版数を上げる（7.10.6）
+    let ledgerTouched = false;
     await this.prisma.$transaction(async (tx) => {
       await tx.docUpdate.create({
         data: {
@@ -159,7 +164,7 @@ export class SyncService {
       // exists and would take the user's body down with it. A missing ledger
       // row is not an error here - migration gaps and docs created before
       // stage 3 both produce one. Never lose a body over a bookkeeping row.
-      await tx.docMeta.updateMany({
+      const ledger = await tx.docMeta.updateMany({
         where: {
           workspaceId,
           docId,
@@ -182,7 +187,14 @@ export class SyncService {
           ...(editorId ? { updatedById: editorId } : {}),
         },
       });
+      ledgerTouched = ledger.count > 0;
     });
+
+    // ⚠️ コミットの後で伝える。版数を上げても、取り直した一覧に新しい時刻が
+    // 無ければ意味が無い。間引きと後追いは DocContentRevisionService が持つ
+    if (ledgerTouched) {
+      this.contentRevision.touch(workspaceId);
+    }
 
     // Check if we should rebuild the snapshot
     const updateCount = await this.prisma.docUpdate.count({

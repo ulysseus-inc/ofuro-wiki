@@ -216,6 +216,10 @@ export function useAFFiNEI18N(): {
       */
     ["Quick Export Description"](): string;
     /**
+      * `Export`
+      */
+    Export(): string;
+    /**
       * `Export failed`
       */
     ["Export failed"](): string;
@@ -228,14 +232,6 @@ export function useAFFiNEI18N(): {
       */
     ["Export to HTML"](): string;
     /**
-      * `Export`
-      */
-    ["Export"](): string;
-    /**
-      * `Export to Snapshot`
-      */
-    ["Export to Snapshot"](): string;
-    /**
       * `Export to Markdown`
       */
     ["Export to Markdown"](): string;
@@ -243,6 +239,10 @@ export function useAFFiNEI18N(): {
       * `Export to PNG`
       */
     ["Export to PNG"](): string;
+    /**
+      * `Export to Snapshot`
+      */
+    ["Export to Snapshot"](): string;
     /**
       * `File already exists`
       */
@@ -302,10 +302,6 @@ export function useAFFiNEI18N(): {
       */
     ["Invitation sent"](): string;
     /**
-      * `Invited members have been notified with email to join this Workspace.`
-      */
-    ["Invitation sent hint"](): string;
-    /**
       * `Invite`
       */
     Invite(): string;
@@ -317,6 +313,50 @@ export function useAFFiNEI18N(): {
       * `Invited members will collaborate with you in current workspace`
       */
     ["Invite Members Message"](): string;
+    /**
+      * `Backup started. The list updates when it finishes.`
+      */
+    ["com.affine.admin.backup.notify.started"](): string;
+    /**
+      * `Completed`
+      */
+    ["com.affine.admin.backup.status.completed"](): string;
+    /**
+      * `Failed`
+      */
+    ["com.affine.admin.backup.status.failed"](): string;
+    /**
+      * `Running`
+      */
+    ["com.affine.admin.backup.status.running"](): string;
+    /**
+      * `Delete this workspace`
+      */
+    ["com.ofuro.workspace-unloadable.delete"](): string;
+    /**
+      * `This cannot be undone. If the workspace does hold content that has not reached this device, it will be lost.`
+      */
+    ["com.ofuro.workspace-unloadable.delete-confirm-hint"](): string;
+    /**
+      * `Delete this workspace?`
+      */
+    ["com.ofuro.workspace-unloadable.delete-confirm-title"](): string;
+    /**
+      * `Loading and syncing finished, but this workspace has no content. It may have been interrupted while being created.`
+      */
+    ["com.ofuro.workspace-unloadable.hint"](): string;
+    /**
+      * `Reload`
+      */
+    ["com.ofuro.workspace-unloadable.reload"](): string;
+    /**
+      * `Couldn't load this workspace`
+      */
+    ["com.ofuro.workspace-unloadable.title"](): string;
+    /**
+      * `A backup or restore is already running. Wait for it to finish.`
+      */
+    ["error.BACKUP_IN_PROGRESS"](): string;
     /**
       * `Insufficient team seat`
       */
@@ -978,6 +1018,14 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.audit.action.workspace.delete"](): string;
     /**
+      * `Shared workspace owner reassigned to root`
+      */
+    ["com.affine.admin.audit.action.workspace.owner.reassign"](): string;
+    /**
+      * `Workspace migrated to shared`
+      */
+    ["com.affine.admin.audit.action.workspace.kind.migrate"](): string;
+    /**
       * `Member invited`
       */
     ["com.affine.admin.audit.action.workspace.member.invite"](): string;
@@ -1030,6 +1078,22 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.audit.action.doc.publish"](): string;
     /**
+      * `Granted doc permission`
+      */
+    ["com.affine.admin.audit.action.doc.permission.grant"](): string;
+    /**
+      * `Revoked doc permission`
+      */
+    ["com.affine.admin.audit.action.doc.permission.revoke"](): string;
+    /**
+      * `Changed doc permission`
+      */
+    ["com.affine.admin.audit.action.doc.permission.role"](): string;
+    /**
+      * `Changed doc default role`
+      */
+    ["com.affine.admin.audit.action.doc.permission.default"](): string;
+    /**
       * `Document unpublished`
       */
     ["com.affine.admin.audit.action.doc.unpublish"](): string;
@@ -1045,6 +1109,38 @@ export function useAFFiNEI18N(): {
       * `Document tags changed`
       */
     ["com.affine.admin.audit.action.doc.tags"](): string;
+    /**
+      * `Document viewed`
+      */
+    ["com.affine.admin.audit.action.doc.view"](): string;
+    /**
+      * `Folder created`
+      */
+    ["com.affine.admin.audit.action.folder.create"](): string;
+    /**
+      * `Folder renamed`
+      */
+    ["com.affine.admin.audit.action.folder.rename"](): string;
+    /**
+      * `Folder deleted`
+      */
+    ["com.affine.admin.audit.action.folder.delete"](): string;
+    /**
+      * `Folder moved`
+      */
+    ["com.affine.admin.audit.action.folder.move"](): string;
+    /**
+      * `Added to folder`
+      */
+    ["com.affine.admin.audit.action.folder.item.add"](): string;
+    /**
+      * `Removed from folder`
+      */
+    ["com.affine.admin.audit.action.folder.item.remove"](): string;
+    /**
+      * `Moved between folders`
+      */
+    ["com.affine.admin.audit.action.folder.item.move"](): string;
     /**
       * `Server setting changed`
       */
@@ -1066,9 +1162,127 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.audit.action.audit.cleanup"](): string;
     /**
+      * `Suspicious sign-in activity detected`
+      */
+    ["com.affine.admin.audit.action.security.alert"](): string;
+    /**
+      * `Suspicious sign-in activity resolved`
+      */
+    ["com.affine.admin.audit.action.security.alert.resolved"](): string;
+    /**
       * `Restore`
       */
     ["com.affine.admin.nav.restore"](): string;
+    /**
+      * `Current workspace: {{name}}`
+      */
+    ["com.ofuro.settings.workspace.current"](options: {
+        readonly name: string;
+    }): string;
+    /**
+      * `To change another workspace's settings, switch to it and open Settings again.`
+      */
+    ["com.ofuro.settings.workspace.switch-hint"](): string;
+    /**
+      * `Workspaces`
+      */
+    ["com.affine.admin.nav.workspaces"](): string;
+    /**
+      * `Shared workspaces on this server`
+      */
+    ["com.affine.admin.workspaces.subtitle"](): string;
+    /**
+      * `Shared workspaces ({{count}})`
+      */
+    ["com.affine.admin.workspaces.list"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Create`
+      */
+    ["com.affine.admin.workspaces.create"](): string;
+    /**
+      * `Open`
+      */
+    ["com.affine.admin.workspaces.open"](): string;
+    /**
+      * `No shared workspaces yet`
+      */
+    ["com.affine.admin.workspaces.empty"](): string;
+    /**
+      * `{{count}} members`
+      */
+    ["com.affine.admin.workspaces.members"](options: {
+        readonly count: string;
+    }): string;
+    /**
+      * `Untitled`
+      */
+    ["com.affine.admin.workspaces.untitled"](): string;
+    /**
+      * `Delete workspace`
+      */
+    ["com.affine.admin.workspaces.delete.title"](): string;
+    /**
+      * `Delete "{{name}}"? All pages in it are deleted. This cannot be undone.`
+      */
+    ["com.affine.admin.workspaces.delete.desc"](options: {
+        readonly name: string;
+    }): string;
+    /**
+      * `Workspace deleted`
+      */
+    ["com.affine.admin.workspaces.notify.deleted"](): string;
+    /**
+      * `Failed to delete workspace`
+      */
+    ["com.affine.admin.workspaces.notify.deleteFailed"](): string;
+    /**
+      * `Failed to load workspaces`
+      */
+    ["com.affine.admin.workspaces.notify.loadFailed"](): string;
+    /**
+      * `Import`
+      */
+    ["com.affine.admin.workspaces.import"](): string;
+    /**
+      * `Select a .ofuro-backup.zip file`
+      */
+    ["com.affine.admin.workspaces.import.invalid"](): string;
+    /**
+      * `Workspace imported`
+      */
+    ["com.affine.admin.workspaces.import.done"](): string;
+    /**
+      * `Failed to import the workspace`
+      */
+    ["com.affine.admin.workspaces.import.failed"](): string;
+    /**
+      * `root`
+      */
+    ["com.ofuro.workspace.role.root"](): string;
+    /**
+      * `Owner`
+      */
+    ["com.ofuro.workspace.role.owner"](): string;
+    /**
+      * `Workspace admin`
+      */
+    ["com.ofuro.workspace.role.admin"](): string;
+    /**
+      * `Reader`
+      */
+    ["com.ofuro.workspace.role.reader"](): string;
+    /**
+      * `root`
+      */
+    ["com.ofuro.admin.users.rootBadge"](): string;
+    /**
+      * `This user's private workspace ({{name}}) will be deleted too`
+      */
+    ["com.ofuro.admin.users.delete.private"](options: {
+        readonly name: string;
+    }): string;
     /**
       * `Configure server-wide settings`
       */
@@ -1098,17 +1312,53 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.server.linkPreview.desc"](): string;
     /**
-      * `Site Name`
+      * `User guide`
       */
-    ["com.affine.admin.server.siteName.name"](): string;
+    ["com.ofuro.userGuide"](): string;
     /**
-      * `Display name for the wiki instance`
+      * `Back to sign in`
       */
-    ["com.affine.admin.server.siteName.desc"](): string;
+    ["com.ofuro.auth.back-to-sign-in"](): string;
     /**
-      * `Not set`
+      * `Audit log`
       */
-    ["com.affine.admin.server.siteName.notSet"](): string;
+    ["com.ofuro.admin.server.audit"](): string;
+    /**
+      * `Record page views`
+      */
+    ["com.ofuro.admin.server.docView.name"](): string;
+    /**
+      * `When enabled, the audit log records who opened which page.`
+      */
+    ["com.ofuro.admin.server.docView.desc"](): string;
+    /**
+      * `Shared workspaces only.`
+      */
+    ["com.ofuro.admin.server.docView.scope"](): string;
+    /**
+      * `If the same user views the same page several times a day, only the first view is recorded.`
+      */
+    ["com.ofuro.admin.server.docView.once"](): string;
+    /**
+      * `Record page views?`
+      */
+    ["com.ofuro.admin.server.docView.confirm.title"](): string;
+    /**
+      * `The audit log will record who opened which page. System administrators can see it.`
+      */
+    ["com.ofuro.admin.server.docView.confirm.who"](): string;
+    /**
+      * `Tell your users that page views are recorded.`
+      */
+    ["com.ofuro.admin.server.docView.confirm.notice"](): string;
+    /**
+      * `The audit log grows (about 500,000 entries a year for 100 people), and so do backups.`
+      */
+    ["com.ofuro.admin.server.docView.confirm.volume"](): string;
+    /**
+      * `Record`
+      */
+    ["com.ofuro.admin.server.docView.confirm.button"](): string;
     /**
       * `Manage users and admin permissions`
       */
@@ -1204,7 +1454,7 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.admin.users.noName"](): string;
     /**
-      * `Admin`
+      * `System admin`
       */
     ["com.affine.admin.users.adminBadge"](): string;
     /**
@@ -2206,7 +2456,7 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.auth.sign.new-user.title"](): string;
     /**
-      * `This email is not registered. Set a password to create your account.`
+      * `This email is not registered. Create a new account with the password you entered? If you mistyped it, go back to sign in.`
       */
     ["com.affine.auth.sign.new-user.hint"](): string;
     /**
@@ -3414,9 +3664,6 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.issue-feedback.title"](): string;
     /**
-      * `Journals`
-      */
-    /**
       * `Docs`
       */
     ["com.affine.m.all-docs.tab.docs"](): string;
@@ -3429,17 +3676,20 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.m.all-docs.tab.tags"](): string;
     /**
-      * `Search result`
-      */
-    /**
       * `Search Docs, Collections`
       */
     ["com.affine.m.search.placeholder"](): string;
+    /**
+      * `Search result`
+      */
     ["com.affine.m.search.result"](): string;
     /**
       * `Empty`
       */
     ["com.affine.m.doc-card.empty"](): string;
+    /**
+      * `Journals`
+      */
     ["com.affine.journal.app-sidebar-title"](): string;
     /**
       * `{{count}} more articles`
@@ -5081,16 +5331,31 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.payment.member.team.invite.done"](): string;
     /**
-      * `Invitation sent,{{successCount}} successful, {{failedCount}} failed`
+      * `Added {{count}} member(s)`
       */
-    ["com.affine.payment.member.team.invite.notify.title"](options: Readonly<{
-        successCount: string;
-        failedCount: string;
-    }>): string;
+    ["com.affine.payment.member.team.invite.result.added"](options: {
+        readonly count: string;
+    }): string;
     /**
-      * `These email addresses have already been invited:`
+      * `No members added`
       */
-    ["com.affine.payment.member.team.invite.notify.fail-message"](): string;
+    ["com.affine.payment.member.team.invite.result.none-added"](): string;
+    /**
+      * `Already members:`
+      */
+    ["com.affine.payment.member.team.invite.result.already-member"](): string;
+    /**
+      * `No account yet. Invitation email sent to:`
+      */
+    ["com.affine.payment.member.team.invite.result.invited-sent"](): string;
+    /**
+      * `No account yet. Send the invitation URL to them (opening it lets them create an account and join):`
+      */
+    ["com.affine.payment.member.team.invite.result.invited-not-sent"](): string;
+    /**
+      * `Copy URL`
+      */
+    ["com.ofuro.invite.result.copy-url"](): string;
     /**
       * `Revoke invitation`
       */
@@ -5112,7 +5377,7 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.payment.member.team.retry-payment"](): string;
     /**
-      * `Change role to admin`
+      * `Change role to workspace admin`
       */
     ["com.affine.payment.member.team.change.admin"](): string;
     /**
@@ -5196,7 +5461,7 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.payment.member.team.change.notify.title"](): string;
     /**
-      * `You have successfully promoted {{name}} to Admin.`
+      * `You have made {{name}} a workspace admin.`
       */
     ["com.affine.payment.member.team.change.admin.notify.message"](options: {
         readonly name: string;
@@ -5552,19 +5817,9 @@ export function useAFFiNEI18N(): {
       */
     ["com.affine.quicksearch.group.creation"](): string;
     /**
-      * `Search locally`
-      */
-    ["com.affine.quicksearch.search-locally"](): string;
-    /**
       * `Search for "{{query}}"`
       */
     ["com.affine.quicksearch.group.searchfor"](options: {
-        readonly query: string;
-    }): string;
-    /**
-      * `Search for "{{query}}" (locally)`
-      */
-    ["com.affine.quicksearch.group.searchfor-locally"](options: {
         readonly query: string;
     }): string;
     /**
@@ -10226,6 +10481,14 @@ export function useAFFiNEI18N(): {
       * `You have exceeded the comment attachment size quota.`
       */
     ["error.COMMENT_ATTACHMENT_QUOTA_EXCEEDED"](): string;
+    /**
+      * `Go to Collection List`
+      */
+    ["com.ofuro.cmdk.navigation.goto-collection-list"](): string;
+    /**
+      * `Go to Tag List`
+      */
+    ["com.ofuro.cmdk.navigation.goto-tag-list"](): string;
 } { const { t } = useTranslation(); return useMemo(() => createProxy((key) => t.bind(null, key)), [t]); }
 function createComponent(i18nKey: string) {
     return (props) => createElement(Trans, { i18nKey, shouldUnescape: true, ...props });

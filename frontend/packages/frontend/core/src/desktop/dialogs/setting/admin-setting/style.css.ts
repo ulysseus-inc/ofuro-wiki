@@ -192,6 +192,15 @@ export const settingDesc = style({
   color: cssVarV2('text/secondary'),
 });
 
+// #100: 閲覧の記録を有効にするときの確認の箇条書き
+export const confirmList = style({
+  margin: 0,
+  paddingLeft: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+});
+
 export const emptyState = style({
   display: 'flex',
   justifyContent: 'center',

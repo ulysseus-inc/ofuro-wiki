@@ -39,7 +39,12 @@ describe('NotificationService', () => {
       sendMentionNotificationEmail: jest.fn().mockResolvedValue(undefined),
     };
 
-    service = new NotificationService(mockPrisma, mockMailService);
+    service = new NotificationService(
+      mockPrisma,
+      mockMailService,
+      // #319: 名前は DB の値をそのまま返す（ルート文書の読み取りは workspace-name.spec で確かめる）
+      { workspaceName: async (w: { name: string | null }) => w.name } as never,
+    );
   });
 
   /**

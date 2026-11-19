@@ -1,4 +1,4 @@
-import { Button, Switch } from '@ofuro/component';
+import { Switch } from '@ofuro/component';
 import { SettingHeader, SettingWrapper } from '@ofuro/component/setting-components';
 import { GraphQLService } from '@ofuro/core/modules/cloud';
 import { useI18n } from '@ofuro/i18n';
@@ -9,6 +9,7 @@ import {
 import { useService } from '@toeverything/infra';
 import { useCallback, useEffect, useState } from 'react';
 
+import { DOC_VIEW_SETTING_KEY, DocViewSetting } from './doc-view-setting';
 import { SsoSettings } from './sso-settings';
 import * as styles from './style.css';
 
@@ -63,6 +64,13 @@ export const ServerSettings = () => {
   const registrationOpen = getSettingValue('registration_open') !== 'false';
   // 既定 OFF: 明示的に 'true' のときのみ有効（外部送信ゼロを既定で維持）。
   const linkPreviewEnabled = getSettingValue('link_preview_enabled') === 'true';
+  // #100: 既定は記録しない。明示的に 'true' のときだけ有効
+  const docViewEnabled = getSettingValue(DOC_VIEW_SETTING_KEY) === 'true';
+  const onDocViewChange = useCallback(
+    (enabled: boolean) =>
+      updateSetting(DOC_VIEW_SETTING_KEY, enabled ? 'true' : 'false'),
+    [updateSetting]
+  );
 
   return (
     <>
@@ -91,10 +99,6 @@ export const ServerSettings = () => {
               }
             />
           </div>
-          <SiteNameSetting
-            currentValue={getSettingValue('site_name') || ''}
-            onSave={value => updateSetting('site_name', value)}
-          />
         </div>
       </SettingWrapper>
       <SettingWrapper title={t['com.affine.admin.server.integration']()}>
@@ -120,72 +124,16 @@ export const ServerSettings = () => {
           </div>
         </div>
       </SettingWrapper>
+      <SettingWrapper title={t['com.ofuro.admin.server.audit']()}>
+        <div className={styles.userTable}>
+          <DocViewSetting
+            enabled={docViewEnabled}
+            onChange={onDocViewChange}
+          />
+        </div>
+      </SettingWrapper>
       {/* #89: シングルサインオン（OIDC）。設定は .env ではなくここに持つ */}
       <SsoSettings />
     </>
-  );
-};
-
-const SiteNameSetting = ({
-  currentValue,
-  onSave,
-}: {
-  currentValue: string;
-  onSave: (value: string) => Promise<void>;
-}) => {
-  const t = useI18n();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(currentValue);
-  const [saving, setSaving] = useState(false);
-
-  const displayValue = editing ? value : currentValue;
-
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    try {
-      await onSave(value);
-      setEditing(false);
-    } finally {
-      setSaving(false);
-    }
-  }, [onSave, value]);
-
-  return (
-    <div className={styles.settingItem}>
-      <div className={styles.settingLabel}>
-        <div className={styles.settingName}>
-          {t['com.affine.admin.server.siteName.name']()}
-        </div>
-        <div className={styles.settingDesc}>
-          {t['com.affine.admin.server.siteName.desc']()}
-        </div>
-      </div>
-      {editing ? (
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <input
-            className={styles.formInput}
-            value={displayValue}
-            onChange={e => setValue(e.target.value)}
-            placeholder="ofuro-wiki"
-          />
-          <Button
-            type="primary"
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {t['Save']()}
-          </Button>
-          <Button onClick={() => setEditing(false)}>
-            {t['Cancel']()}
-          </Button>
-        </div>
-      ) : (
-        <Button onClick={() => { setValue(currentValue); setEditing(true); }}>
-          {(currentValue || t['com.affine.admin.server.siteName.notSet']()) +
-            ' — ' +
-            t['Edit']()}
-        </Button>
-      )}
-    </div>
   );
 };

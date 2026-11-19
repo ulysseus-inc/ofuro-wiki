@@ -33,7 +33,6 @@ describe('メンバーの状態（#210）', () => {
       workspaceService,
       {} as any, // prisma
       {} as any, // docHistoryService
-      {} as any, // manualWorkspaceService
       {} as any, // discovery
     );
     return { resolver };

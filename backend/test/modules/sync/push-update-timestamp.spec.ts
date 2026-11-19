@@ -54,10 +54,57 @@ describe('本文の保存と更新日時（#151 段階3）', () => {
     };
 
     const discovery: any = { bump: jest.fn(), current: jest.fn() };
-    return { prisma, tx, calls, service: new SyncService(prisma, discovery) };
+    const contentRevision = { touch: jest.fn() };
+    return {
+      prisma,
+      tx,
+      calls,
+      contentRevision,
+      service: new SyncService(prisma, discovery, contentRevision as never),
+    };
   };
 
   const someUpdate = () => new Uint8Array([1, 2, 3]);
+
+  /**
+   * 本文の保存でも一覧の版数を上げる（間引きは DocContentRevisionService）。
+   * 上げないと、本文だけ書き換えたページは一覧でいつまでも古い（docs 7.10.6・2026-11-11）
+   */
+  describe('一覧の版数（7.10.6）', () => {
+    it('【重要】ページの本文を保存したら、一覧の版数を上げるよう伝える', async () => {
+      const { service, contentRevision } = make();
+
+      await service.pushUpdate(WS, DOC, someUpdate(), 'user-1');
+
+      expect(contentRevision.touch).toHaveBeenCalledWith(WS);
+    });
+
+    it('台帳の行が動かなければ伝えない（より新しい編集が先に書いた・台帳に無い）', async () => {
+      const { service, contentRevision } = make({ metaRows: 0 });
+
+      await service.pushUpdate(WS, DOC, someUpdate(), 'user-1');
+
+      expect(contentRevision.touch).not.toHaveBeenCalled();
+    });
+
+    it('ワークスペースのルート文書・内部データでは伝えない', async () => {
+      const { service, contentRevision } = make();
+      const folders = ['db', WS, 'folders'].join('$');
+
+      await service.pushUpdate(WS, WS, someUpdate(), 'user-1');
+      await service.pushUpdate(WS, folders, someUpdate(), 'user-1');
+
+      expect(contentRevision.touch).not.toHaveBeenCalled();
+    });
+
+    it('本文の保存に失敗したら伝えない', async () => {
+      const { service, contentRevision } = make({ createThrows: new Error('db down') });
+
+      await expect(service.pushUpdate(WS, DOC, someUpdate(), 'user-1')).rejects.toThrow();
+
+      expect(contentRevision.touch).not.toHaveBeenCalled();
+    });
+  });
 
   test('本文を保存すると、更新ログが積まれる', async () => {
     const { service, tx } = make();

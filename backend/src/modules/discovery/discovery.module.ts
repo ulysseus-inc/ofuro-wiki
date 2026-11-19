@@ -8,6 +8,7 @@ import { DocMetaAuditService } from './doc-meta-audit.service';
 import { IndexReaderService } from './index-reader.service';
 import { DocMetaWriteService } from './doc-meta-write.service';
 import { DocGcService } from './doc-gc.service';
+import { DocContentRevisionService } from './doc-content-revision.service';
 
 /**
  * #151: Discovery Index（存在を知ってよいドキュメント）。
@@ -33,6 +34,8 @@ import { DocGcService } from './doc-gc.service';
     DocMetaWriteService,
     // #45: 完全削除。sync（space:delete-doc）からも使う
     DocGcService,
+    // 本文の保存で一覧の版数を間引いて上げる（sync から使う。7.10.6）
+    DocContentRevisionService,
     PrismaService,
   ],
   exports: [
@@ -40,6 +43,7 @@ import { DocGcService } from './doc-gc.service';
     DiscoveryService,
     IndexReaderService,
     DocGcService,
+    DocContentRevisionService,
   ],
 })
 export class DiscoveryModule {}

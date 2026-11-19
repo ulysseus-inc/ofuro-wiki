@@ -201,6 +201,10 @@ export class AuthService extends Service {
     password: string;
     verifyToken?: string;
     challenge?: string;
+    /** #293: 「作りますか」で承認した。無ければサーバーは作らない */
+    create?: boolean;
+    /** #195: 招待のページから来た */
+    inviteId?: string;
   }) {
     track.$.$.auth.signIn({ method: 'password' });
     try {

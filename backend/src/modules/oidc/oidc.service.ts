@@ -49,6 +49,37 @@ function timingSafeEqualString(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
+
+/** #330: 接続テストで送る認可コード。実在しないので、IdP 側に何も残らない */
+const CONNECTION_TEST_CODE = 'ofuro-wiki-connection-test';
+const HTTP_BAD_REQUEST = 400;
+const HTTP_UNAUTHORIZED = 401;
+/** RFC 6749 5.2: 認可コードが無効 */
+const INVALID_GRANT = 'invalid_grant';
+/** RFC 6749 5.2: 送り手（クライアント）を認められない。Keycloak はシークレット違いで unauthorized_client を返す */
+const CLIENT_ERRORS = new Set(['invalid_client', 'unauthorized_client']);
+
+/** 発行者 URL の比較用（末尾のスラッシュの有無は同じとみなす） */
+function trimSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+/** client_secret_basic の Authorization ヘッダー（RFC 6749 2.3.1） */
+function basicAuth(clientId: string, clientSecret: string): string {
+  const pair = `${encodeURIComponent(clientId)}:${encodeURIComponent(clientSecret)}`;
+  return 'Basic ' + Buffer.from(pair).toString('base64');
+}
+
+/** トークンの窓口の答えから error を読む。読めなければ空 */
+async function readOAuthError(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    return typeof body.error === 'string' ? body.error : '';
+  } catch {
+    return '';
+  }
+}
+
 @Injectable()
 export class OidcService {
   private readonly logger = new Logger(OidcService.name);
@@ -149,7 +180,11 @@ export class OidcService {
     return doc;
   }
 
-  /** 管理画面の「接続をテスト」用。設定を保存する前に疎通と項目を確認する。 */
+  /**
+   * 管理画面の「接続をテスト」用。
+   * 1. 発行者 URL（入力中の値）からディスカバリ文書を取る
+   * 2. #330: 保存済みのクライアント ID とシークレットを、トークンの窓口で確かめる（docs/sso-setup.md）
+   */
   async testConnection(issuer: string): Promise<{
     ok: boolean;
     issuer?: string;
@@ -163,13 +198,14 @@ export class OidcService {
       // 保存前の（打ち間違いを含む）issuer をキャッシュに残すと、
       // 実際の設定と食い違ったまま TTL のあいだ使われうる。
       const doc = await this.fetchDiscovery(issuer);
+      const client = await this.checkClient(doc);
 
       return {
-        ok: true,
+        ok: client.ok,
         issuer: doc.issuer,
         authorizationEndpoint: doc.authorization_endpoint,
         tokenEndpoint: doc.token_endpoint,
-        message: 'ディスカバリ文書を取得できました。',
+        message: `ディスカバリ文書を取得できました。${client.message}`,
       };
     } catch (err) {
       return {
@@ -177,6 +213,75 @@ export class OidcService {
         message: `接続できませんでした: ${(err as Error).message}`,
       };
     }
+  }
+
+  /**
+   * #330: クライアント ID とシークレットを確かめる。
+   *
+   * わざと無効な認可コードでトークンを求める。IdP はまず送り手（クライアント）を確かめ、
+   * 次にコードを確かめるので、答えで見分けられる（Keycloak 26.0・Google の実物で確認）。
+   *
+   * ```
+   * 400 invalid_grant                        → ID とシークレットは正しい（コードだけ無効）
+   * 401、invalid_client・unauthorized_client → ID かシークレットが違う
+   * それ以外                                 → 判定できない
+   * ```
+   * ⚠️ リダイレクト URI の誤りは分からない（コードが無効な時点で断られる）
+   */
+  private async checkClient(
+    discovery: OidcDiscovery,
+  ): Promise<{ ok: boolean; message: string }> {
+    const credentials = await this.configService.getCredentials();
+    if (!credentials) {
+      return {
+        ok: true,
+        message: 'クライアント ID とシークレットを保存すると確かめられます。',
+      };
+    }
+
+    // ⚠️ 送り先は、保存済みの発行者のトークンの窓口に限る。入力中の発行者 URL へ送ると、
+    // システム管理者が自分のサーバーを入れるだけで、画面に出さないシークレットを抜き取れる
+    if (trimSlash(discovery.issuer) !== trimSlash(credentials.issuer)) {
+      return {
+        ok: true,
+        message: '発行者 URL を保存すると確かめられます（クライアント ID とシークレットは、保存済みの発行者にだけ送ります）。',
+      };
+    }
+
+    const res = await this.fetchWithTimeout(discovery.token_endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: basicAuth(credentials.clientId, credentials.clientSecret),
+      },
+      // リダイレクトで別の送り先へシークレットを持ち出させない
+      redirect: 'manual',
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: CONNECTION_TEST_CODE,
+        redirect_uri: this.configService.getRedirectUri(),
+        client_id: credentials.clientId,
+      }).toString(),
+    });
+    const error = await readOAuthError(res);
+
+    if (res.status === HTTP_UNAUTHORIZED || CLIENT_ERRORS.has(error)) {
+      return {
+        ok: false,
+        message: 'クライアント ID かシークレットが違います。IdP の画面からコピーし直して保存してください。',
+      };
+    }
+    if (res.status === HTTP_BAD_REQUEST && error === INVALID_GRANT) {
+      return {
+        ok: true,
+        message:
+          'クライアント ID とシークレットは正しく受け付けられました。リダイレクト URI は、実際にサインインして確かめてください。',
+      };
+    }
+    return {
+      ok: false,
+      message: `クライアント ID とシークレットを確かめられませんでした（HTTP ${res.status}${error ? ` ${error}` : ''}）。`,
+    };
   }
 
   /** 期限切れの一時情報を掃除する（メモリの肥大化を防ぐ） */
@@ -220,6 +325,9 @@ export class OidcService {
       nonce,
       code_challenge: codeChallenge,
       code_challenge_method: 'S256',
+      // #129: IdP のセッションが残っていても、アカウントを選び直せるように
+      // （docs/signin-registration.md 4.5）
+      prompt: 'select_account',
     });
 
     return {
@@ -334,13 +442,7 @@ export class OidcService {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         // client_secret_basic。多くの IdP が既定で受け付ける方式。
-        Authorization:
-          'Basic ' +
-          Buffer.from(
-            `${encodeURIComponent(config.clientId)}:${encodeURIComponent(
-              config.clientSecret,
-            )}`,
-          ).toString('base64'),
+        Authorization: basicAuth(config.clientId, config.clientSecret),
       },
       body: body.toString(),
     });

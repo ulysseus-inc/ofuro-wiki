@@ -31,6 +31,8 @@ interface Setup {
   userPerm?: string;
   /** サーバー全体 Admin か。 */
   serverAdmin?: boolean;
+  /** #297: ワークスペースの種類。省くと共有（Admin の素通りが効く側） */
+  kind?: 'private' | 'shared';
 }
 
 function makeService(s: Setup): PermissionService {
@@ -44,6 +46,9 @@ function makeService(s: Setup): PermissionService {
       findUnique: jest
         .fn()
         .mockResolvedValue(s.workspace ? { role: s.workspace } : null),
+    },
+    workspace: {
+      findUnique: jest.fn().mockResolvedValue({ kind: s.kind ?? 'shared' }),
     },
     docPermission: {
       // ⚠️ 「行が無い」(undefined) と「行はあるが role が空」('') を区別する。
@@ -141,6 +146,14 @@ describe('認可の真理値表 (#97)', () => {
         expect(await can(s, action)).toBe(true);
       }
     });
+
+    // #297: プライベートは本人だけの場。Admin でも素通りしない（docs/workspace-model.md 3.3）
+    it('9. ⚠️ サーバー全体 Admin でも、プライベートは素通りしない', async () => {
+      const s: Setup = { workspace: null, serverAdmin: true, kind: 'private' };
+      for (const action of DOC_ACTIONS) {
+        expect(await can(s, action)).toBe(false);
+      }
+    });
   });
 
   /**
@@ -186,6 +199,24 @@ describe('認可の真理値表 (#97)', () => {
       const service = makeService({ workspace: 'owner', docDefault: 'None' });
       const f = await service.readableDocFilter(WS, USER, 2);
       expect(f.sql).toBe('true');
+    });
+
+    // #297: getDocRole の ① だけでなく、一覧と検索の絞り込みも共有だけ素通りする
+    it('⚠️ サーバー全体 Admin でも、プライベートの一覧は空', async () => {
+      const service = makeService({ workspace: null, serverAdmin: true, kind: 'private' });
+      expect(await service.filterReadable(WS, [DOC], USER)).toEqual([]);
+    });
+
+    it('⚠️ サーバー全体 Admin でも、プライベートの検索は 1 件も読めない', async () => {
+      const service = makeService({ workspace: null, serverAdmin: true, kind: 'private' });
+      const f = await service.readableDocFilter(WS, USER, 2);
+      expect(f.sql).not.toBe('true');
+    });
+
+    it('サーバー全体 Admin は、共有の一覧・検索を絞られない', async () => {
+      const service = makeService({ workspace: null, serverAdmin: true, kind: 'shared' });
+      expect(await service.filterReadable(WS, [DOC], USER)).toEqual([DOC]);
+      expect((await service.readableDocFilter(WS, USER, 2)).sql).toBe('true');
     });
   });
 

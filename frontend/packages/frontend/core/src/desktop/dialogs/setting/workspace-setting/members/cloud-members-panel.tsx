@@ -27,6 +27,11 @@ import { useLiveData, useService } from '@toeverything/infra';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { SettingState } from '../../types';
+import {
+  type InviteSummary,
+  inviteUrl,
+  summarizeInvites,
+} from './invite-result';
 import { MemberList } from './member-list';
 import * as styles from './styles.css';
 
@@ -68,6 +73,9 @@ export const CloudWorkspaceMembersPanel = ({
   const isOwner = useLiveData(permissionService.permission.isOwner$);
   const isAdmin = useLiveData(permissionService.permission.isAdmin$);
   const isOwnerOrAdmin = isOwner || isAdmin;
+  const isShared = useLiveData(permissionService.permission.isShared$);
+  // #297: プライベートには招待できない（docs/permission-matrix.md 2.3）
+  const canInvite = !!isOwnerOrAdmin && !!isShared;
   useEffect(() => {
     permissionService.permission.revalidate();
   }, [permissionService]);
@@ -129,23 +137,24 @@ export const CloudWorkspaceMembersPanel = ({
         return;
       }
       const results = await membersService.inviteMembers(uniqueEmails);
-      const unSuccessInvites = results.reduce<string[]>((acc, result) => {
-        // #210: スキーマでは email は null を許す
-        if (!result.sentSuccess && result.email) {
-          acc.push(result.email);
-        }
-        return acc;
-      }, []);
       if (results) {
+        // #299: 宛先ごとに何が起きたかで数える（メールを送れたかでは数えない）
+        const summary = summarizeInvites(results);
         notify({
-          title: t['com.affine.payment.member.team.invite.notify.title']({
-            successCount: (
-              uniqueEmails.length - unSuccessInvites.length
-            ).toString(),
-            failedCount: unSuccessInvites.length.toString(),
-          }),
-          message: <NotifyMessage unSuccessInvites={unSuccessInvites} />,
-        });
+          // 0 人のとき「0 人を追加しました」と出すと、追加したように読める
+          title:
+            summary.added > 0
+              ? t['com.affine.payment.member.team.invite.result.added']({
+                  count: summary.added.toString(),
+                })
+              : t['com.affine.payment.member.team.invite.result.none-added'](),
+          message: <NotifyMessage summary={summary} />,
+        },
+        // M3: 招待の URL を渡せる人が居れば、自分で閉じるまで残す（docs/signin-registration.md 4.3）
+        summary.invitedSent.length + summary.invitedNotSent.length > 0
+          ? { duration: Infinity }
+          : undefined
+        );
         setOpenInvite(false);
         membersService.members.revalidate();
       }
@@ -229,8 +238,8 @@ export const CloudWorkspaceMembersPanel = ({
 
   return (
     <>
-      <SettingRow name={title} desc={desc} spreadCol={!!isOwnerOrAdmin}>
-        {isOwnerOrAdmin ? (
+      <SettingRow name={title} desc={desc} spreadCol={canInvite}>
+        {canInvite ? (
           <>
             <Button onClick={openInviteModal}>{t['Invite Members']()}</Button>
             {!isTeam ? (
@@ -262,6 +271,7 @@ export const CloudWorkspaceMembersPanel = ({
         <MemberList
           isOwner={!!isOwner}
           isAdmin={!!isAdmin}
+          isShared={!!isShared}
           goToTeamBilling={goToTeamBilling}
         />
       </div>
@@ -269,23 +279,80 @@ export const CloudWorkspaceMembersPanel = ({
   );
 };
 
-const NotifyMessage = ({
-  unSuccessInvites,
-}: {
-  unSuccessInvites: string[];
-}) => {
+/** 招待の通知の本文。人数だけ（全員を追加できた）のときは何も出さない */
+const NotifyMessage = ({ summary }: { summary: InviteSummary }) => {
   const t = useI18n();
 
-  if (unSuccessInvites.length === 0) {
-    return t['Invitation sent hint']();
+  const groups = [
+    {
+      label: t['com.affine.payment.member.team.invite.result.already-member'](),
+      emails: summary.alreadyMember,
+    },
+  ].filter(group => group.emails.length > 0);
+
+  // M3: アカウントの無い人は、メールを送れたときも URL をコピーできる（迷惑メールに入ることがある）
+  const invites = [
+    {
+      label: t['com.affine.payment.member.team.invite.result.invited-sent'](),
+      items: summary.invitedSent,
+    },
+    {
+      label: t['com.affine.payment.member.team.invite.result.invited-not-sent'](),
+      items: summary.invitedNotSent,
+    },
+  ].filter(group => group.items.length > 0);
+
+  if (groups.length === 0 && invites.length === 0) {
+    return null;
   }
 
   return (
     <div>
-      {t['com.affine.payment.member.team.invite.notify.fail-message']()}
-      {unSuccessInvites.map((email, index) => (
-        <div key={`${index}:${email}`}>{email}</div>
+      {groups.map(group => (
+        <div key={group.label}>
+          {group.label}
+          {group.emails.map((email, index) => (
+            <div key={`${index}:${email}`}>{email}</div>
+          ))}
+        </div>
       ))}
+      {invites.map(group => (
+        <div key={group.label}>
+          {group.label}
+          {group.items.map(invite => (
+            <PendingInviteRow key={invite.inviteId} {...invite} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+/** M3: アカウントの無い人への招待。URL を本人に渡す（docs/signin-registration.md 4.3） */
+const PendingInviteRow = ({
+  email,
+  inviteId,
+}: {
+  email: string;
+  inviteId: string;
+}) => {
+  const t = useI18n();
+
+  const onCopy = useAsyncCallback(async () => {
+    const copied = await copyTextToClipboard(
+      inviteUrl(window.location.origin, inviteId)
+    );
+    if (copied) {
+      notify.success({ title: t['Copied link to clipboard']() });
+    }
+  }, [inviteId, t]);
+
+  return (
+    <div data-testid="pending-invite">
+      {email}{' '}
+      <Button data-testid="copy-invite-url" size="default" onClick={onCopy}>
+        {t['com.ofuro.invite.result.copy-url']()}
+      </Button>
     </div>
   );
 };

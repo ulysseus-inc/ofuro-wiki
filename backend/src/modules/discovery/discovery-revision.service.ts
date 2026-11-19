@@ -128,6 +128,8 @@ export const DISCOVERY_CHANGE_REASONS = [
   // Index の内容が変わるもの
   'doc-create',
   'doc-update', // タイトル・タグ等の Discovery Metadata が変わった
+  // 本文の保存（更新日時と並び順が変わる）。30 秒に 1 回まで間引く（DocContentRevisionService・7.10.6）
+  'doc-content',
   'doc-delete',
   // #151 段階3: ゴミ箱。サーバー側で持つようになったため追加した
   'doc-trash',

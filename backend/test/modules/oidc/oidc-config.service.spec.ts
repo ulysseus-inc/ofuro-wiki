@@ -32,6 +32,10 @@ describe('OidcConfigService (#89)', () => {
           store.set(where.key, create.value);
           return { key: where.key, value: create.value };
         }),
+        deleteMany: jest.fn().mockImplementation(async ({ where }: any) => {
+          const had = store.delete(where.key);
+          return { count: had ? 1 : 0 };
+        }),
       },
     };
 
@@ -214,6 +218,54 @@ describe('OidcConfigService (#89)', () => {
 
       const config = await service.getConfig();
       expect(config?.emailClaims).toEqual(['upn', 'email']);
+    });
+  });
+
+  /**
+   * #330: シークレットは、保存したときの発行者に結び付ける。
+   * 発行者を別の値に変えて保存できると、システム管理者が自分のサーバーを発行者にするだけで、
+   * サインイン（や接続テスト）で、画面に出さないシークレットを受け取れる
+   */
+  describe('発行者を変えたらシークレットを消す (#330)', () => {
+    const SECRET_KEY = 'oidc_client_secret';
+
+    beforeEach(async () => {
+      await service.updateConfig({
+        issuer: 'https://accounts.google.com',
+        clientId: 'client-1',
+        clientSecret: 'GOCSPX-real',
+      });
+    });
+
+    it('【重要】別の発行者を保存すると、保存済みのシークレットは消える', async () => {
+      const view = await service.updateConfig({ issuer: 'https://evil.example' });
+
+      expect(view.clientSecretSet).toBe(false);
+      expect(store.has(SECRET_KEY)).toBe(false);
+      expect(await service.getCredentials()).toBeNull();
+    });
+
+    it('同じ保存で新しいシークレットも入れれば、そちらが残る', async () => {
+      await service.updateConfig({
+        issuer: 'https://login.microsoftonline.com/t/v2.0',
+        clientSecret: 'entra-secret',
+      });
+
+      expect((await service.getCredentials())?.clientSecret).toBe('entra-secret');
+    });
+
+    it('同じ発行者を保存し直しても消えない（前後の空白・末尾のスラッシュは同じとみなす）', async () => {
+      await service.updateConfig({ issuer: '  https://accounts.google.com/  ' });
+
+      expect((await service.getCredentials())?.clientSecret).toBe('GOCSPX-real');
+    });
+
+    it('発行者がまだ無いときに入れるのは、変更とみなさない（先にシークレットを入れる手順を壊さない）', async () => {
+      store.delete('oidc_issuer');
+
+      await service.updateConfig({ issuer: 'https://accounts.google.com' });
+
+      expect((await service.getCredentials())?.clientSecret).toBe('GOCSPX-real');
     });
   });
 });

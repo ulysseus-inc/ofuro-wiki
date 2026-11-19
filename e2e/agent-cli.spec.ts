@@ -612,11 +612,18 @@ test.describe('AI エージェント用 CLI', () => {
     await openSignedIn(page);
 
     // 2つ目のワークスペースに招待された状態を作る
+    // #297: TEST_USER（システム管理者）が作れるのは共有。持ち主は root なので、
+    // CLI の対象（参加しているワークスペース）になるよう自分も参加する
     const created = await graphqlQuery(
       page,
-      'mutation { createWorkspace(name: "E2E第二") { id } }'
+      'mutation { createWorkspace(name: "E2E第二", kind: Shared) { id } }'
     );
     const secondId: string = created.data.createWorkspace.id;
+    await graphqlQuery(
+      page,
+      `mutation ($w: String!, $e: [String!]!) { inviteMembers(workspaceId: $w, emails: $e) { email } }`,
+      { w: secondId, e: [TEST_USER.email] }
+    );
 
     try {
       // 作成先が決まらないときは、候補を示して選ばせる

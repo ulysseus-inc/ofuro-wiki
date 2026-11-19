@@ -1,5 +1,4 @@
 import { ServerFeature } from '@ofuro/graphql';
-import { SearchIcon } from '@blocksuite/icons/rc';
 import {
   effect,
   Entity,
@@ -14,7 +13,6 @@ import type { WorkspaceServerService } from '../../cloud';
 import type { DocRecord, DocsService } from '../../doc';
 import type { DocDisplayMetaService } from '../../doc-display-meta';
 import type { DocsSearchService } from '../../docs-search';
-import type { FeatureFlagService } from '../../feature-flag';
 import type { WorkspaceService } from '../../workspace';
 import type { QuickSearchSession } from '../providers/quick-search-provider';
 import type { QuickSearchItem } from '../types/item';
@@ -35,8 +33,7 @@ export class DocsQuickSearchSession
     private readonly workspaceServerService: WorkspaceServerService,
     private readonly docsSearchService: DocsSearchService,
     private readonly docsService: DocsService,
-    private readonly docDisplayMetaService: DocDisplayMetaService,
-    private readonly featureFlagService: FeatureFlagService
+    private readonly docDisplayMetaService: DocDisplayMetaService
   ) {
     super();
   }
@@ -45,9 +42,6 @@ export class DocsQuickSearchSession
     this.workspaceServerService.server?.config$.value.features.includes(
       ServerFeature.Indexer
     ) ?? false;
-
-  private readonly isEnableBatterySaveMode = () =>
-    this.featureFlagService.flags.enable_battery_save_mode.value;
 
   private readonly isIndexerLoading$ = this.docsSearchService.indexerState$.map(
     ({ completed }) => {
@@ -59,26 +53,6 @@ export class DocsQuickSearchSession
 
   isCloudWorkspace = this.workspaceService.workspace.flavour !== 'local';
 
-  searchLocallyItem = {
-    id: 'search-locally',
-    source: 'docs',
-    label: {
-      title: {
-        i18nKey: 'com.affine.quicksearch.search-locally',
-      },
-    },
-    score: 1000,
-    icon: SearchIcon,
-    payload: {
-      docId: '',
-    },
-    beforeSubmit: () => {
-      this.searchLocally = true;
-      this.query(this.lastQuery);
-      return false;
-    },
-  } as QuickSearchItem<'docs', DocsPayload>;
-
   isLoading$ = LiveData.computed(get => {
     return (
       (this.isCloudWorkspace ? false : get(this.isIndexerLoading$)) ||
@@ -88,16 +62,11 @@ export class DocsQuickSearchSession
 
   error$ = new LiveData<any>(null);
 
-  lastQuery = '';
-
   items$ = new LiveData<QuickSearchItem<'docs', DocsPayload>[]>([]);
 
   searchLocally = !this.isCloudWorkspace;
 
   query = effect(
-    tap(query => {
-      this.lastQuery = query;
-    }),
     throttleTime<string>(500, undefined, {
       leading: false,
       trailing: true,
@@ -105,7 +74,7 @@ export class DocsQuickSearchSession
     switchMap((query: string) => {
       let out;
       if (!query) {
-        out = of({ items: [], useLocalLabel: false });
+        out = of([]);
       } else {
         const preferRemote =
           !this.searchLocally && this.isSupportServerIndexer();
@@ -115,36 +84,20 @@ export class DocsQuickSearchSession
             : 'remote';
         const search$ = preferRemote
           ? this.docsSearchService.search$(query, 'remote').pipe(
+              // 0 件・エラーのときはブラウザの索引で探し直す（docs/quick-search.md 2 章）
               switchMap(docs => {
                 if (docs.length > 0) {
-                  return of({ docs, useLocalLabel: false });
+                  return of(docs);
                 }
-                return this.docsSearchService.search$(query, 'local').pipe(
-                  map(localDocs => ({
-                    docs: localDocs,
-                    useLocalLabel: true,
-                  }))
-                );
+                return this.docsSearchService.search$(query, 'local');
               }),
-              catchError(() =>
-                this.docsSearchService.search$(query, 'local').pipe(
-                  map(localDocs => ({
-                    docs: localDocs,
-                    useLocalLabel: true,
-                  }))
-                )
-              )
+              catchError(() => this.docsSearchService.search$(query, 'local'))
             )
-          : this.docsSearchService.search$(query, preferMode).pipe(
-              map(docs => ({
-                docs,
-                useLocalLabel: preferMode === 'local',
-              }))
-            );
+          : this.docsSearchService.search$(query, preferMode);
 
         out = search$.pipe(
-          map(({ docs, useLocalLabel }) => {
-            const items = docs
+          map(docs =>
+            docs
               .map(doc => {
                 const docRecord = this.docsService.list.doc$(doc.docId).value;
                 return [doc, docRecord] as const;
@@ -161,9 +114,7 @@ export class DocsQuickSearchSession
                   group: {
                     id: 'docs',
                     label: {
-                      i18nKey: useLocalLabel
-                        ? 'com.affine.quicksearch.group.searchfor-locally'
-                        : 'com.affine.quicksearch.group.searchfor',
+                      i18nKey: 'com.affine.quicksearch.group.searchfor',
                       options: { query: truncate(query) },
                     },
                     score: 5,
@@ -177,43 +128,23 @@ export class DocsQuickSearchSession
                   timestamp: updatedDate,
                   payload: doc,
                 } as QuickSearchItem<'docs', DocsPayload>;
-              });
-            return { items, useLocalLabel };
-          })
+              })
+          )
         );
       }
       return out.pipe(
-        tap(({ items, useLocalLabel }) => {
-          this.items$.next(
-            this.isSupportServerIndexer() &&
-              !this.searchLocally &&
-              !this.isEnableBatterySaveMode() &&
-              !useLocalLabel
-              ? [...items, this.searchLocallyItem]
-              : items
-          );
+        tap(items => {
+          this.items$.next(items);
           this.isQueryLoading$.next(false);
         }),
         onStart(() => {
           this.error$.next(null);
-          this.items$.next(
-            this.isSupportServerIndexer() &&
-              !this.searchLocally &&
-              !this.isEnableBatterySaveMode()
-              ? [this.searchLocallyItem]
-              : []
-          );
+          this.items$.next([]);
           this.isQueryLoading$.next(true);
         }),
         catchError(err => {
           this.error$.next(err instanceof Error ? err.message : err);
-          this.items$.next(
-            this.isSupportServerIndexer() &&
-              !this.searchLocally &&
-              !this.isEnableBatterySaveMode()
-              ? [this.searchLocallyItem]
-              : []
-          );
+          this.items$.next([]);
           this.isQueryLoading$.next(false);
           return EMPTY;
         }),

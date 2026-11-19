@@ -11,12 +11,15 @@ import * as styles from './modal.css';
 export interface QuickSearchModalProps {
   open: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** #321: 閉じきった（Radix の窓も外れた）あとに呼ぶ */
+  onExited?: () => void;
 }
 
 const animationTimeout = 120;
 
 export const QuickSearchModal = ({
   onOpenChange,
+  onExited,
   open,
   children,
 }: React.PropsWithChildren<QuickSearchModalProps>) => {
@@ -26,6 +29,11 @@ export const QuickSearchModal = ({
   useEffect(() => {
     toggle(open);
   }, [open]);
+  useEffect(() => {
+    if (status === 'exited') {
+      onExited?.();
+    }
+  }, [status, onExited]);
   return (
     <Dialog.Root modal open={status !== 'exited'} onOpenChange={onOpenChange}>
       <Dialog.Portal>

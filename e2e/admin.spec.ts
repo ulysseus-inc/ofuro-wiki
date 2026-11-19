@@ -5,7 +5,7 @@
  *   - PostgreSQL が起動済み (docker compose up -d)
  *   - バックエンド (port 3010) が起動済み
  *   - フロントエンド (port 8080) が起動済み
- *   - 環境変数 ADMIN_EMAIL=e2e-test@ofuro-wiki.local でバックエンド起動
+ *   - 環境変数 ROOT_EMAIL=e2e-test@ofuro-wiki.local でバックエンド起動
  *
  * 実行方法:
  *   cd e2e && npx playwright test admin.spec.ts
@@ -42,7 +42,7 @@ test.beforeAll(async () => {
 
   // isAdmin = true に設定（SQL 直接は使えないので seedAdmin に任せるか、
   // Admin API で自分自身を昇格させる — ここではバックエンドの seedAdmin を前提とする）
-  // ADMIN_EMAIL 環境変数でバックエンド起動時に設定済みの前提
+  // ROOT_EMAIL 環境変数でバックエンド起動時に設定済みの前提
 });
 
 // ---------------------------------------------------------------------------
@@ -784,23 +784,24 @@ test.describe('Admin API', () => {
     const result = await graphqlQuery(
       page,
       `mutation {
-        adminUpdateServerSetting(key: "site_name", value: "E2E Test Wiki") {
+        adminUpdateServerSetting(key: "link_preview_enabled", value: "false") {
           key value
         }
       }`
     );
-    expect(result.data.adminUpdateServerSetting.key).toBe('site_name');
-    expect(result.data.adminUpdateServerSetting.value).toBe('E2E Test Wiki');
+    // #295: 以前は site_name で試していた（画面から外した。既定の false を書くので他の試験に影響しない）
+    expect(result.data.adminUpdateServerSetting.key).toBe('link_preview_enabled');
+    expect(result.data.adminUpdateServerSetting.value).toBe('false');
 
     // 設定一覧を取得
     const listResult = await graphqlQuery(
       page,
       '{ adminServerSettings { key value } }'
     );
-    const siteName = listResult.data.adminServerSettings.find(
-      (s: any) => s.key === 'site_name'
+    const linkPreview = listResult.data.adminServerSettings.find(
+      (s: any) => s.key === 'link_preview_enabled'
     );
-    expect(siteName?.value).toBe('E2E Test Wiki');
+    expect(linkPreview?.value).toBe('false');
   });
 });
 
@@ -1174,5 +1175,62 @@ test.describe('Admin Panel UI', () => {
     await page.locator('[data-testid="admin-users-trigger"]').click();
     await expect(body).toContainText('ユーザーと管理者権限を管理します');
     await expect(body).toContainText('ユーザーを追加');
+  });
+
+  /**
+   * 確認の画面の「キャンセル」が、日本語の画面でも英語の「Cancel」のままだった
+   * （v0.3.0 の手順書の確認で発覚・2026-11-11）。部品の既定値が英語のため、
+   * 文言を渡していない確認の画面だけに出る（ユーザーの削除・リストア・ワークスペースの削除・バックアップの削除）
+   */
+  test('確認の画面のボタンが日本語で出る（ユーザーの削除）', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await expect(page.locator('[data-testid="setting-modal"]')).toBeVisible({
+      timeout: 5_000,
+    });
+    await page.locator('[data-testid="admin-users-trigger"]').click();
+
+    // 削除の確認を開くだけ（消さない）
+    const actions = page.locator('[data-testid="admin-user-actions"]').first();
+    await actions.waitFor({ state: 'visible', timeout: 15_000 });
+    await actions.click();
+    await page.locator('[data-testid="admin-delete-user"]').click();
+
+    const confirm = page.getByRole('dialog').last();
+    await expect(confirm).toContainText('削除してもよろしいですか', { timeout: 10_000 });
+    await expect(confirm.getByRole('button', { name: 'キャンセル' })).toBeVisible();
+    await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(0);
+    await confirm.getByRole('button', { name: /キャンセル|Cancel/ }).click();
+  });
+
+  /**
+   * #295: 「サイト名」は保存してもどこも読まない設定だった。欄を出さない。
+   * 上流の server.name は複数のバックエンドを見分ける名前で、ofuro-wiki には用途が無い
+   */
+  test('サーバー設定に「サイト名」の欄が無い', async ({ page }) => {
+    await signIn(page);
+    await enterOrCreateWorkspace(page);
+    await ensureSidebarOpen(page);
+
+    const avatar = page.locator('[data-testid="sidebar-user-avatar"]');
+    await avatar.waitFor({ state: 'attached', timeout: 15_000 });
+    await avatar.click({ force: true });
+    await page
+      .locator('[data-testid="workspace-modal-account-admin-option"]')
+      .click();
+    await page.locator('[data-testid="admin-settings-trigger"]').click();
+
+    // ポジティブコントロール: サーバー設定の画面が開いている
+    const modal = page.locator('[data-testid="setting-modal"]');
+    await expect(modal).toContainText('新規登録を許可', { timeout: 10_000 });
+    await expect(modal).not.toContainText('サイト名');
   });
 });

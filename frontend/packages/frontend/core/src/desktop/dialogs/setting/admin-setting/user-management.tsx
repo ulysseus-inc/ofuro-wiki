@@ -13,6 +13,7 @@ import { SettingHeader, SettingWrapper } from '@ofuro/component/setting-componen
 import { GraphQLService } from '@ofuro/core/modules/cloud';
 import { useI18n } from '@ofuro/i18n';
 import {
+  adminPrivateWorkspaceNameQuery,
   adminUserListQuery,
   adminCreateUserMutation,
   adminDeleteUserMutation,
@@ -32,8 +33,16 @@ interface AdminUser {
   name: string | null;
   avatarUrl: string | null;
   isAdmin: boolean;
+  /** #297: root（ROOT_EMAIL）。消せず、管理者も外せない */
+  isRoot: boolean;
   emailVerified: boolean;
   createdAt: string;
+}
+
+/** 削除の確認の相手。privateName は一緒に消えるプライベートの名前（無ければ null） */
+interface DeleteTarget {
+  user: AdminUser;
+  privateName: string | null;
 }
 
 export const UserManagement = () => {
@@ -46,7 +55,7 @@ export const UserManagement = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   /** #92: CSV 一括登録のパネルを開いているか */
   const [showCsvImport, setShowCsvImport] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
   /** #115: 発行したパスワード再設定 URL（閉じると再表示できない） */
   const [resetUrl, setResetUrl] = useState<{ user: AdminUser; url: string } | null>(
     null
@@ -99,7 +108,7 @@ export const UserManagement = () => {
     try {
       await graphqlService.gql({
         query: adminDeleteUserMutation,
-        variables: { userId: deleteTarget.id },
+        variables: { userId: deleteTarget.user.id },
       } as any);
       setDeleteTarget(null);
       fetchUsers();
@@ -112,6 +121,27 @@ export const UserManagement = () => {
       });
     }
   }, [graphqlService, deleteTarget, fetchUsers, t]);
+
+  /**
+   * #297: 確認を出す前に、一緒に消えるプライベートの名前を取る（docs/workspace-model.md 5 章）。
+   * 取れなくても確認は出す（名前の文だけ省く）
+   */
+  const openDeleteConfirm = useCallback(
+    async (user: AdminUser) => {
+      let privateName: string | null = null;
+      try {
+        const result = await graphqlService.gql({
+          query: adminPrivateWorkspaceNameQuery,
+          variables: { userId: user.id },
+        });
+        privateName = result.adminPrivateWorkspaceName;
+      } catch (e) {
+        console.error('Failed to load private workspace name:', e);
+      }
+      setDeleteTarget({ user, privateName });
+    },
+    [graphqlService]
+  );
 
   /**
    * #115: パスワード再設定用の URL を発行する。
@@ -229,7 +259,11 @@ export const UserManagement = () => {
             </div>
           ) : (
             users.map(user => (
-              <div key={user.id} className={styles.userRow}>
+              <div
+                key={user.id}
+                className={styles.userRow}
+                data-testid="admin-user-row"
+              >
                 <Avatar
                   size={36}
                   rounded={4}
@@ -244,16 +278,24 @@ export const UserManagement = () => {
                 </div>
                 <div className={styles.userActions}>
                   {user.isAdmin && (
-                    <span className={styles.adminBadge}>
-                      {t['com.affine.admin.users.adminBadge']()}
+                    <span
+                      className={styles.adminBadge}
+                      data-testid="admin-user-badge"
+                    >
+                      {user.isRoot
+                        ? t['com.ofuro.admin.users.rootBadge']()
+                        : t['com.affine.admin.users.adminBadge']()}
                     </span>
                   )}
-                  <Switch
-                    checked={user.isAdmin}
-                    onChange={(checked: boolean) =>
-                      handleToggleAdmin(user.id, checked)
-                    }
-                  />
+                  {/* #297: root は管理者を外せない（docs/permission-matrix.md 1 章） */}
+                  {user.isRoot ? null : (
+                    <Switch
+                      checked={user.isAdmin}
+                      onChange={(checked: boolean) =>
+                        handleToggleAdmin(user.id, checked)
+                      }
+                    />
+                  )}
                   {/*
                     操作はメニューに畳む。行に直接ボタンを並べると、
                     ボタンの幅で**ユーザー名とメールアドレスが潰れて読めなくなる**。
@@ -275,13 +317,20 @@ export const UserManagement = () => {
                         >
                           {t['com.affine.admin.users.resetPassword']()}
                         </MenuItem>
-                        <MenuItem
-                          data-testid="admin-delete-user"
-                          type="danger"
-                          onSelect={() => setDeleteTarget(user)}
-                        >
-                          {t['Delete']()}
-                        </MenuItem>
+                        {/* #297: root は消せない */}
+                        {user.isRoot ? null : (
+                          <MenuItem
+                            data-testid="admin-delete-user"
+                            type="danger"
+                            onSelect={() => {
+                              openDeleteConfirm(user).catch(() => {
+                                // 失敗は openDeleteConfirm の中で扱う
+                              });
+                            }}
+                          >
+                            {t['Delete']()}
+                          </MenuItem>
+                        )}
                       </>
                     }
                   >
@@ -327,14 +376,26 @@ export const UserManagement = () => {
       <ConfirmModal
         open={!!deleteTarget}
         title={t['com.affine.admin.users.delete.title']()}
-        description={t['com.affine.admin.users.delete.desc']({
-          email: deleteTarget?.email ?? '',
-        })}
+        description={
+          <>
+            {t['com.affine.admin.users.delete.desc']({
+              email: deleteTarget?.user.email ?? '',
+            })}
+            {deleteTarget?.privateName != null && (
+              <div>
+                {t['com.ofuro.admin.users.delete.private']({
+                  name: deleteTarget.privateName,
+                })}
+              </div>
+            )}
+          </>
+        }
         onConfirm={handleDeleteUser}
         onOpenChange={(open: boolean) => {
           if (!open) setDeleteTarget(null);
         }}
         confirmText={t['Delete']()}
+        cancelText={t['Cancel']()}
         confirmButtonOptions={{ variant: 'error' }}
       />
 

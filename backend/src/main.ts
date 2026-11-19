@@ -19,9 +19,10 @@ import {
 import { LogFileService } from './modules/logging/log-file.service';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { AdminService } from './modules/admin/admin.service';
-import { ManualSeedService } from './modules/manual-workspace/manual-seed.service';
+import { ManualRemovalService } from './modules/manual-removal/manual-removal.service';
 import { parseAllowedOrigins, isWildcardOriginInProduction } from './common/cors';
 import { parseTrustProxy } from './common/trust-proxy';
+import { checkRootEmailEnv } from './common/admin-email';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -150,14 +151,23 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
 
-  // Seed admin user from ADMIN_EMAIL env var
+  // #297: ADMIN_EMAIL → ROOT_EMAIL の改名。食い違えば起動しない（docs/workspace-model.md 12.1.1）
+  const rootEmailWarning = checkRootEmailEnv();
+  if (rootEmailWarning) {
+    logger.warn(rootEmailWarning);
+  }
+
+  // Seed admin user from ROOT_EMAIL env var
   const adminService = app.get(AdminService);
   await adminService.seedAdmin();
+  // #297: 移行ツールを流していない状態に気付けるように（失敗しても起動は続ける）
+  await adminService.warnUnmigratedWorkspaces().catch((err) => {
+    logger.warn(`Failed to check workspace migration: ${err?.message ?? err}`);
+  });
 
-  // #72: マニュアル専用ワークスペースをシード（seed zip があれば・冪等）
-  const manualSeedService = app.get(ManualSeedService);
-  await manualSeedService.seedManualWorkspace().catch(err => {
-    logger.error(`Failed to seed manual workspace: ${err?.message ?? err}`);
+  // #324: 以前の「📖 Manual」ワークスペースが残っていれば消す（使い方は /docs/ で配る）
+  await app.get(ManualRemovalService).remove().catch((err) => {
+    logger.error(`Failed to remove the manual workspace: ${err?.message ?? err}`);
   });
 
   const port = process.env.PORT ?? 3010;

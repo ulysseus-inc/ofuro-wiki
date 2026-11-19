@@ -2,9 +2,11 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import archiver from 'archiver';
 import * as unzipper from 'unzipper';
 import { PrismaService } from '../../prisma.service';
+import { WorkspaceKind } from '../../common/workspace-kind';
 // #151: 取り込みで doc が増える＝Index の内容が変わる
 import { isUserDoc } from '../sync/user-doc';
 import { DiscoveryRevisionService } from '../discovery/discovery-revision.service';
+import { IndexReaderService } from '../discovery/index-reader.service';
 import { BlobService } from '../blob/blob.service';
 import { mergeUpdates } from '../sync/yjs.utils';
 import { isSafeArchiveEntry, isValidBlobKey } from './backup-path.util';
@@ -44,9 +46,17 @@ export class BackupService {
     private prisma: PrismaService,
     private blobService: BlobService,
     private discovery: DiscoveryRevisionService,
+    // 書き出しの名前はルート文書から読む（docs/workspace-model.md 12.13）
+    private names: IndexReaderService,
   ) {}
 
-  async exportWorkspace(workspaceId: string): Promise<Buffer> {
+  /**
+   * ワークスペースを ZIP にする。`name` はファイル名に使う名前。
+   * 名前は DB でなくルート文書から読む（DB は作った時のまま。docs/workspace-model.md 12.13）
+   */
+  async exportWorkspace(
+    workspaceId: string,
+  ): Promise<{ zip: Buffer; name: string | null }> {
     this.logger.log(`Exporting workspace ${workspaceId}`);
 
     const workspace = await this.prisma.workspace.findUnique({
@@ -122,17 +132,18 @@ export class BackupService {
     }));
 
     // 5. Build ZIP
+    const name = await this.names.workspaceName(workspace);
     const manifest: ManifestJson = {
       version: 1,
       format: 'ofuro-backup',
-      workspaceName: workspace.name,
+      workspaceName: name,
       workspaceId: workspace.id,
       exportedAt: new Date().toISOString(),
       docCount: docBuffers.size,
       blobCount: blobs.length,
     };
 
-    return new Promise<Buffer>((resolve, reject) => {
+    const zip = await new Promise<Buffer>((resolve, reject) => {
       const archive = archiver('zip', { zlib: { level: 6 } });
       const chunks: Buffer[] = [];
 
@@ -172,6 +183,8 @@ export class BackupService {
         .then(() => archive.finalize())
         .catch((err) => reject(err));
     });
+
+    return { zip, name };
   }
 
   async importWorkspace(
@@ -184,6 +197,8 @@ export class BackupService {
     // ソートするため、固定UUIDを与えて表示位置を安定させる用途。ルートドキュメントは
     // この ID に remap される。
     workspaceIdOverride?: string,
+    // #297: 持ち主。取り込みは共有を作るので root を渡す。省くと userId（マニュアルのシステムアカウント）
+    ownerIdOverride?: string,
   ): Promise<{
     workspaceId: string;
     name: string | null;
@@ -231,6 +246,7 @@ export class BackupService {
       : [];
 
     // 5. Create new workspace
+    const ownerId = ownerIdOverride ?? userId;
     const workspace = await this.prisma.workspace.create({
       data: {
         ...(workspaceIdOverride ? { id: workspaceIdOverride } : {}),
@@ -239,7 +255,9 @@ export class BackupService {
           (manifest.workspaceName
             ? `${manifest.workspaceName} (imported)`
             : 'Imported Workspace'),
-        ownerId: userId,
+        ownerId,
+        // #297: 取り込みで作るのは共有（マニュアルも共有）。docs/workspace-model.md 12.3
+        kind: WorkspaceKind.Shared,
       },
     });
 
@@ -247,7 +265,7 @@ export class BackupService {
     await this.prisma.workspaceMember.create({
       data: {
         workspaceId: workspace.id,
-        userId,
+        userId: ownerId,
         role: 'owner',
         status: 'accepted',
       },

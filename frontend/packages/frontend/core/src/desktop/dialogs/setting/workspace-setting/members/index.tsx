@@ -8,6 +8,7 @@ import { useService } from '@toeverything/infra';
 import type { ReactElement } from 'react';
 
 import type { SettingState } from '../../types';
+import { CurrentWorkspaceNote } from '../current-workspace-note';
 import { EnableCloudPanel } from '../preference/enable-cloud';
 import { CloudWorkspaceMembersPanel } from './cloud-members-panel';
 import * as styles from './styles.css';
@@ -24,13 +25,17 @@ export const MembersPanel = ({
   if (workspace.flavour === 'local') {
     return <MembersPanelLocal onCloseSetting={onCloseSetting} />;
   }
+  // #297: 見出しが無いため、先頭に出す（docs/workspace-model.md 12.8.2）
   return (
-    <AffineErrorBoundary>
-      <CloudWorkspaceMembersPanel
-        onChangeSettingState={onChangeSettingState}
-        isTeam={isTeam}
-      />
-    </AffineErrorBoundary>
+    <>
+      <CurrentWorkspaceNote />
+      <AffineErrorBoundary>
+        <CloudWorkspaceMembersPanel
+          onChangeSettingState={onChangeSettingState}
+          isTeam={isTeam}
+        />
+      </AffineErrorBoundary>
+    </>
   );
 };
 

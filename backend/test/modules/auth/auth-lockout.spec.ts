@@ -208,11 +208,11 @@ describe('AuthService — アカウント作成の回数制限 (#93)', () => {
 
   it('サインイン経由の自動作成でも同じ上限が効く（迂回できない）', async () => {
     for (let i = 0; i < 10; i++) {
-      await service.signInOrSignUp(`auto${i}@example.com`, 'password123', '203.0.113.9');
+      await service.signInOrSignUp(`auto${i}@example.com`, 'password123', '203.0.113.9', { create: true });
     }
 
     await expect(
-      service.signInOrSignUp('auto10@example.com', 'password123', '203.0.113.9'),
+      service.signInOrSignUp('auto10@example.com', 'password123', '203.0.113.9', { create: true }),
     ).rejects.toMatchObject({ status: 429 });
   });
 });

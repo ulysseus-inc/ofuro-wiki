@@ -9,13 +9,15 @@ import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../../prisma.service';
 import { MailModule } from '../mail/mail.module';
 
+import { SESSION_TTL_SECONDS } from './session-ttl';
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: () => ({
         secret: process.env.JWT_SECRET || 'dev-secret',
-        signOptions: { expiresIn: '7d' },
+        // #332: クッキーの期限と揃える
+        signOptions: { expiresIn: SESSION_TTL_SECONDS },
       }),
     }),
     MailModule,

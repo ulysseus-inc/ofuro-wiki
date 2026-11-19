@@ -6,7 +6,10 @@ export { WorkspaceEngineBeforeStart, WorkspaceInitialized } from './events';
 export { getAFFiNEWorkspaceSchema } from './global-schema';
 export type { WorkspaceMetadata } from './metadata';
 export type { WorkspaceOpenOptions } from './open-options';
-export type { WorkspaceFlavourProvider } from './providers/flavour';
+export type {
+  CreateWorkspaceOptions,
+  WorkspaceFlavourProvider,
+} from './providers/flavour';
 export { WorkspaceFlavoursProvider } from './providers/flavour';
 export type { RootDocLoadState } from './root-doc-state';
 export { decideRootDocState } from './root-doc-state';

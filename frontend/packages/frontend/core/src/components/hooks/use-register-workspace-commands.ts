@@ -1,15 +1,15 @@
 import { AppSidebarService } from '@ofuro/core/modules/app-sidebar';
+import { UserFeatureService } from '@ofuro/core/modules/cloud';
 import { DesktopApiService } from '@ofuro/core/modules/desktop-api';
 import {
   GlobalDialogService,
   WorkspaceDialogService,
 } from '@ofuro/core/modules/dialogs';
 import { I18nService } from '@ofuro/core/modules/i18n';
-import { UrlService } from '@ofuro/core/modules/url';
-import { WorkbenchService } from '@ofuro/core/modules/workbench';
 import { WorkspaceService } from '@ofuro/core/modules/workspace';
 import { useI18n } from '@ofuro/i18n';
 import {
+  useLiveData,
   useService,
   useServiceOptional,
   useServices,
@@ -23,7 +23,6 @@ import {
   PreconditionStrategy,
   registerAffineCommand,
   registerAffineCreationCommands,
-  registerAffineHelpCommands,
   registerAffineLanguageCommands,
   registerAffineLayoutCommands,
   registerAffineNavigationCommands,
@@ -55,9 +54,14 @@ export function useRegisterWorkspaceCommands() {
   const t = useI18n();
   const theme = useTheme();
   const currentWorkspace = useService(WorkspaceService).workspace;
-  const urlService = useService(UrlService);
   const pageHelper = usePageHelper(currentWorkspace.docCollection);
   const navigationHelper = useNavigateHelper();
+  // #297: 新しいワークスペース（共有）を作るコマンドは、システム管理者にだけ出す
+  const userFeatureService = useService(UserFeatureService);
+  const isAdmin = useLiveData(userFeatureService.userFeature.isAdmin$);
+  useEffect(() => {
+    userFeatureService.userFeature.revalidate();
+  }, [userFeatureService]);
   const {
     cMDKQuickSearchService,
     editorSettingService,
@@ -77,7 +81,6 @@ export function useRegisterWorkspaceCommands() {
   const i18n = i18nService.i18n;
 
   const desktopApiService = useServiceOptional(DesktopApiService);
-  const workbenchService = useServiceOptional(WorkbenchService);
 
   const quitAndInstall = desktopApiService?.handler.updater.quitAndInstall;
 
@@ -113,7 +116,6 @@ export function useRegisterWorkspaceCommands() {
       docCollection: currentWorkspace.docCollection,
       navigationHelper,
       workspaceDialogService,
-      workbenchService,
     });
 
     return () => {
@@ -126,7 +128,6 @@ export function useRegisterWorkspaceCommands() {
     navigationHelper,
     globalDialogService,
     workspaceDialogService,
-    workbenchService,
   ]);
 
   // register AffineSettingsCommands
@@ -169,23 +170,11 @@ export function useRegisterWorkspaceCommands() {
       globalDialogService,
       pageHelper: pageHelper,
       t,
+      isAdmin: isAdmin === true,
     });
 
     return () => {
       unsub();
     };
-  }, [store, pageHelper, t, globalDialogService]);
-
-  // register AffineHelpCommands
-  useEffect(() => {
-    const unsub = registerAffineHelpCommands({
-      t,
-      urlService,
-      workspaceDialogService,
-    });
-
-    return () => {
-      unsub();
-    };
-  }, [t, globalDialogService, urlService, workspaceDialogService]);
+  }, [store, pageHelper, t, globalDialogService, isAdmin]);
 }

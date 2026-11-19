@@ -284,6 +284,20 @@ describe('サインインの異常系', () => {
     );
   });
 
+  it('M3: アカウントが無ければ、ブラウザで作るよう案内する（CLI は作らない）', async () => {
+    const notFound = new Response(
+      JSON.stringify({ status: 401, name: 'USER_NOT_FOUND' }),
+      { status: 401, headers: { 'content-type': 'application/json' } }
+    );
+    const { error } = await withFetch(notFound, () =>
+      signIn('https://wiki.example.com', 'a@example.com', 'p')
+    );
+    assert.ok(
+      error instanceof CliError && /アカウントが無い/.test(error.message),
+      String(error)
+    );
+  });
+
   it('⚠️ localhost 以外へ平文の HTTP でパスワードを送るときは警告する', async () => {
     const ok = new Response('{}', {
       status: 200,

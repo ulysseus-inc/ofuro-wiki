@@ -143,6 +143,30 @@ test.describe('シングルサインオン（OIDC）', () => {
     expect(result.data.testOidcConnection.issuer).toBe(KEYCLOAK_ISSUER);
   });
 
+  test('接続テストで、保存したクライアント ID とシークレットの誤りが分かる（#330）', async ({
+    page,
+  }) => {
+    const test = async () =>
+      (
+        await graphqlQuery(
+          page,
+          `mutation ($issuer: String!) { testOidcConnection(issuer: $issuer) { ok message } }`,
+          { issuer: KEYCLOAK_ISSUER }
+        )
+      ).data.testOidcConnection;
+
+    // 本番で起きた形: シークレットにサインイン用のパスワードが入っている
+    await updateOidcConfig(page, { clientSecret: 'not-the-secret' });
+    const wrong = await test();
+    expect(wrong.ok).toBe(false);
+    expect(wrong.message).toContain('クライアント ID かシークレットが違います');
+
+    await updateOidcConfig(page, { clientSecret: 'dev-client-secret' });
+    const right = await test();
+    expect(right.ok).toBe(true);
+    expect(right.message).toContain('正しく受け付けられました');
+  });
+
   test('設定すると SSO ボタンが表示される（#89）', async ({ page, browser }) => {
     const config = await graphqlQuery(
       page,

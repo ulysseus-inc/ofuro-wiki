@@ -53,7 +53,18 @@ RUN npx prisma generate
 RUN npm run build
 
 # ============================================================
-# Stage 3: Production runtime
+# Stage 3: Build docs (#324: 利用者マニュアルと導入ガイド。/docs/ で配る)
+# ============================================================
+FROM node:22-alpine AS docs-builder
+
+WORKDIR /site
+COPY site/package*.json ./
+RUN npm ci
+COPY site/ .
+RUN npm run docs:build
+
+# ============================================================
+# Stage 4: Production runtime
 # ============================================================
 FROM node:22-alpine
 
@@ -74,14 +85,14 @@ COPY --from=backend-builder /backend/package.json ./
 COPY --from=backend-builder /backend/prisma ./prisma
 COPY --from=backend-builder /backend/prisma.config.ts ./
 COPY --from=backend-builder /backend/tsconfig.json ./
-# マニュアルWSシード（#72）— 起動時に seed/manual.zip があれば投入される
-COPY --from=backend-builder /backend/seed ./seed
 
 # Copy frontend dist as static files
 # The backend's ServeStaticModule serves from /app/public/
 COPY --from=frontend-builder /frontend/packages/frontend/apps/web/dist ./public
 # Mobile dist — MobileRedirectMiddleware serves HTML, ServeStaticModule serves assets
 COPY --from=frontend-builder /frontend/packages/frontend/apps/mobile/dist ./public-mobile
+# #324: ガイド。backend が /docs/ で配る（docs/docs-site.md 5.1）
+COPY --from=docs-builder /site/.vitepress/dist ./public-docs
 
 EXPOSE 3010
 

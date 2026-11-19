@@ -190,3 +190,27 @@ describe('タグの名前の読み取り（#276）', () => {
     expect(names.size).toBe(0);
   });
 });
+
+/** #297: ユーザー削除の確認に、一緒に消えるプライベートの名前を出す（docs/workspace-model.md 12.8.3） */
+describe('ワークスペースの名前', () => {
+  const serviceFor = (root: Uint8Array | null) =>
+    new IndexReaderService({
+      docSnapshot: {
+        findUnique: jest.fn().mockResolvedValue(root ? { blob: Buffer.from(root) } : null),
+      },
+      docUpdate: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService);
+
+  test('ルート文書の meta.name を読む（画面のワークスペース名と同じ場所）', async () => {
+    const doc = new Y.Doc();
+    doc.getMap('meta').set('name', '山田の下書き');
+    const name = await serviceFor(Y.encodeStateAsUpdate(doc)).readWorkspaceName('ws-1');
+    expect(name).toBe('山田の下書き');
+  });
+
+  test('名前が無い・ルート文書が無いなら null', async () => {
+    const empty = Y.encodeStateAsUpdate(new Y.Doc());
+    expect(await serviceFor(empty).readWorkspaceName('ws-1')).toBeNull();
+    expect(await serviceFor(null).readWorkspaceName('ws-1')).toBeNull();
+  });
+});

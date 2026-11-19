@@ -214,6 +214,7 @@ describe('操作名の翻訳 (#90)', () => {
       'user.',
       'workspace.',
       'doc.',
+      'folder.',
       'setting.',
       'backup.',
       'sso.',

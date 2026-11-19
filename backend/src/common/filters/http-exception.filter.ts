@@ -40,7 +40,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // が揃っているときだけ status を保持する（欠けていると一律 500 の UnknownError に
     // 潰れる）。ステータスコードで分岐できるよう、その形に合わせて返す。
     // 例: 429 を「レート制限」として画面表示に反映するため。
-    const name = HTTP_ERROR_NAMES[status] ?? 'HTTP_ERROR';
+    // M3: 例外が name を持てば使う（例: サインインの「登録されていません」は USER_NOT_FOUND）
+    const name =
+      ownName(exception) ?? HTTP_ERROR_NAMES[status] ?? 'HTTP_ERROR';
 
     response.status(status).json({
       // 既存の利用箇所のために従来のフィールドも残す
@@ -54,4 +56,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message: exception.message,
     });
   }
+}
+
+/** 例外に渡した name（`new UnauthorizedException({ message, name })`）。無ければ undefined */
+function ownName(exception: HttpException): string | undefined {
+  const response = exception.getResponse();
+  if (typeof response !== 'object' || response === null) {
+    return undefined;
+  }
+
+  const name = (response as { name?: unknown }).name;
+  return typeof name === 'string' ? name : undefined;
 }

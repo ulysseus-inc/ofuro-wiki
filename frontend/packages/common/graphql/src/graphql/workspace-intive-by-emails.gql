@@ -9,5 +9,6 @@ mutation inviteByEmails(
     email
     inviteId
     sentSuccess
+    outcome
   }
 }

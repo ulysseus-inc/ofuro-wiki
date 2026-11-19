@@ -12,7 +12,7 @@ describe('isNewDoc (#90)', () => {
     };
     // #151: 版数の更新は本テストの関心事ではないため何もしないものを渡す
     const discovery: any = { bump: jest.fn(), current: jest.fn() };
-    return { prisma, service: new SyncService(prisma, discovery) };
+    return { prisma, service: new SyncService(prisma, discovery, { touch: jest.fn() } as never) };
   };
 
   it('スナップショットも更新も無ければ新規', async () => {

@@ -10,6 +10,7 @@ import track from '@ofuro/track';
 import { FrameworkScope, useService } from '@toeverything/infra';
 import { useCallback } from 'react';
 
+import { CurrentWorkspaceNote } from '../current-workspace-note';
 import * as styles from './styles.css';
 
 const WorkspaceSettingPropertiesMain = () => {
@@ -71,6 +72,7 @@ export const WorkspaceSettingProperties = () => {
           </Trans>
         }
       />
+      <CurrentWorkspaceNote />
       <WorkspaceSettingPropertiesMain />
     </FrameworkScope>
   );

@@ -46,6 +46,18 @@ const EMPTY: OidcConfig = {
   redirectUri: '',
 };
 
+
+/**
+ * #330: ブラウザ・パスワードマネージャーに、サインインの欄と取り違えさせない（docs/sso-setup.md）。
+ * クライアント ID（テキスト）のすぐ後にシークレット（伏せ字）が並ぶため、ユーザー名とパスワードとみなされ、
+ * サインイン用のメールアドレスとパスワードが自動で入る。欄から離れると保存するので、そのまま保存されていた
+ */
+const NOT_A_SIGN_IN_FIELD = {
+  'data-1p-ignore': 'true',
+  'data-lpignore': 'true',
+  'data-bwignore': 'true',
+} as const;
+
 export const SsoSettings = () => {
   const t = useI18n();
   const graphqlService = useService(GraphQLService);
@@ -194,6 +206,9 @@ export const SsoSettings = () => {
           </div>
           <Input
             value={config.clientId}
+            {...NOT_A_SIGN_IN_FIELD}
+            name="oidc-client-id"
+            autoComplete="off"
             onChange={value => setConfig(prev => ({ ...prev, clientId: value }))}
             onBlur={() => save({ clientId: config.clientId })}
             disabled={saving || !loaded}
@@ -214,6 +229,9 @@ export const SsoSettings = () => {
           <Input
             value={secretInput}
             type="password"
+            {...NOT_A_SIGN_IN_FIELD}
+            name="oidc-client-secret"
+            autoComplete="new-password"
             placeholder={
               config.clientSecretSet ? '********' : t['com.affine.admin.sso.client-secret.placeholder']()
             }

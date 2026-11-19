@@ -19,6 +19,7 @@ import { deriveUserName } from '../../common/user-name.util';
 import { isAdminEmail } from '../../common/admin-email';
 import { normalizeEmail } from '../../common/email.util';
 import { AttackCounterService } from '../security/attack-counter.service';
+import { judgeInvitation } from '../workspace/invitation-rule';
 
 export interface JwtPayload {
   sub: string;
@@ -86,11 +87,49 @@ const SIGNIN_FAILURE_WINDOW_MS = 5 * 60 * 1000;
  */
 const signinFailureWindow = createDedupeWindow(60 * 1000);
 
+/**
+ * M3: 「登録されていません」を返す回数の上限（IP あたり 1 時間）。作成と同じ数。
+ *
+ * 確認を挟むと、アカウントを作らずに未登録かを調べられる。今までは試すたびに
+ * アカウントができ、作成の上限で止まっていたので、同じ数で止める
+ * （docs/signin-registration.md 4.1）。
+ */
+const NOT_FOUND_MAX_PER_IP = SIGNUP_MAX_PER_IP;
+
+/** 画面が「登録されていません」を見分ける名前（フロントの ErrorNames と同じ） */
+const ACCOUNT_NOT_FOUND = 'USER_NOT_FOUND';
+
+/** M3: 未登録の人を作ってよい理由（docs/signin-registration.md 3 章） */
+enum CreateReason {
+  /** 新規登録が開 かつ AUTH_SIGNIN_AUTOCREATE が true */
+  Open = 'open',
+  /** ROOT_EMAIL（#294） */
+  Root = 'root',
+  /** 本人宛てのメール招待（#195） */
+  Invite = 'invite',
+}
+
+/** signUp で新規登録の開閉を見るか */
+export enum RegistrationGate {
+  Check = 'check',
+  /** root・招待の宛先（開閉を見ずに作る） */
+  Bypass = 'bypass',
+}
+
+export interface SignInOptions {
+  /** 「作りますか」で承認した。無ければ作らない（#293） */
+  create?: boolean;
+  /** 招待のページから来た（#195） */
+  inviteId?: string;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   /** #93: IP ごとのアカウント作成時刻（メモリ保持・プロセス再起動でリセット） */
   private readonly signupAttempts = new Map<string, number[]>();
+  /** M3: IP ごとの「登録されていません」の応答時刻 */
+  private readonly notFoundAnswers = new Map<string, number[]>();
   /** #93: 「IP + メールアドレス」ごとのサインイン失敗時刻（成功時にクリア） */
   private readonly signinFailures = new Map<string, number[]>();
 
@@ -123,33 +162,54 @@ export class AuthService {
    * サインアップ経路と、サインインでの自動作成経路の両方から呼ぶ。
    */
   private assertSignupAllowed(ip?: string): void {
+    this.assertHourlyLimit(
+      this.signupAttempts,
+      SIGNUP_MAX_PER_IP,
+      ip,
+      'Too many accounts created from this address. Please try again later.',
+    );
+  }
+
+  /** M3: 「登録されていません」の応答を IP あたり 1 時間で数える（4.1） */
+  private assertNotFoundAllowed(ip?: string): void {
+    this.assertHourlyLimit(
+      this.notFoundAnswers,
+      NOT_FOUND_MAX_PER_IP,
+      ip,
+      'Too many attempts from this address. Please try again later.',
+    );
+  }
+
+  /** IP ごとに 1 時間の回数を数え、上限なら 429 */
+  private assertHourlyLimit(
+    times: Map<string, number[]>,
+    max: number,
+    ip: string | undefined,
+    message: string,
+  ): void {
     if (!ip) return;
 
     const now = Date.now();
-    const recent = (this.signupAttempts.get(ip) ?? []).filter(
+    const recent = (times.get(ip) ?? []).filter(
       (at) => now - at < SIGNUP_WINDOW_MS,
     );
 
-    if (recent.length >= SIGNUP_MAX_PER_IP) {
+    if (recent.length >= max) {
       this.logger.warn(
-        `Account creation rate limit exceeded: ip=${ip} ` +
-          `(${recent.length}/${SIGNUP_MAX_PER_IP} in the last hour)`,
+        `Hourly limit exceeded: ip=${ip} (${recent.length}/${max} in the last hour) ${message}`,
       );
-      throw new HttpException(
-        'Too many accounts created from this address. Please try again later.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      throw new HttpException(message, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     recent.push(now);
-    this.signupAttempts.set(ip, recent);
+    times.set(ip, recent);
 
     // 古いエントリの掃除（IPごとの配列が無限に増えないようにする）
-    if (this.signupAttempts.size > 1000) {
-      for (const [key, times] of this.signupAttempts) {
-        const alive = times.filter((at) => now - at < SIGNUP_WINDOW_MS);
-        if (alive.length === 0) this.signupAttempts.delete(key);
-        else this.signupAttempts.set(key, alive);
+    if (times.size > 1000) {
+      for (const [key, list] of times) {
+        const alive = list.filter((at) => now - at < SIGNUP_WINDOW_MS);
+        if (alive.length === 0) times.delete(key);
+        else times.set(key, alive);
       }
     }
   }
@@ -158,6 +218,7 @@ export class AuthService {
    * パスワードによるアカウント作成。
    *
    * @param viaSignin サインイン経由の自動作成か（`signInOrSignUp` から呼ばれた場合）
+   * @param gate 新規登録の開閉を見るか（root・招待の宛先は見ない。M3）
    */
   async signUp(
     email: string,
@@ -165,8 +226,9 @@ export class AuthService {
     name?: string,
     ip?: string,
     viaSignin = false,
+    gate = RegistrationGate.Check,
   ) {
-    if (!(await this.isRegistrationOpen())) {
+    if (gate === RegistrationGate.Check && !(await this.isRegistrationOpen())) {
       throw new ForbiddenException('Registration is closed');
     }
 
@@ -179,7 +241,7 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    // #77: ADMIN_EMAIL のユーザーは、作成時点で Admin にする。
+    // #77: ROOT_EMAIL のユーザーは、作成時点で Admin にする。
     // 起動時のシード（AdminService.seedAdmin）は「その時点で存在するユーザー」しか
     // 対象にできないため、サインアップ側でも付与しないと、
     // 「サインアップ後にコンテナを再起動するまで Admin にならない」状態になる。
@@ -480,18 +542,23 @@ export class AuthService {
     });
   }
 
-  async signInOrSignUp(email: string, password: string, ip?: string) {
+  async signInOrSignUp(
+    email: string,
+    password: string,
+    ip?: string,
+    options: SignInOptions = {},
+  ) {
     // #93: 未登録アドレスへの試行も失敗として数える（存在の有無を漏らさないため）
     this.assertSigninAllowed(email, ip);
 
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
-      // M-2(B/C): 未登録メールの挙動を「誤パスワード」と区別できないよう一律 401 に倒す。
+      // M-2(B/C): 作れないときは、未登録メールの挙動を「誤パスワード」と区別できないよう一律 401 に倒す。
       // - C: AUTH_SIGNIN_AUTOCREATE=false なら sign-in での自動作成を無効化（既定は true=後方互換）。
       // - B: 登録クローズ時も `Registration is closed`(403) ではなく `Invalid credentials`(401)。
-      // いずれもユーザー存在オラクルを与えない。登録オープン＋自動作成有効時のみ従来どおり作成。
-      const autoCreate = process.env.AUTH_SIGNIN_AUTOCREATE !== 'false';
-      if (!autoCreate || !(await this.isRegistrationOpen())) {
+      // M3: ただし root と、本人宛てのメール招待は作れる（docs/signin-registration.md 3 章）
+      const reason = await this.createReason(email, options.inviteId);
+      if (!reason) {
         // タイミング攻撃対策: 既存ユーザー経路の bcrypt.compare と処理時間を
         // 揃えるため、不在時もダミーハッシュで比較してから 401 を返す。
         await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
@@ -501,11 +568,36 @@ export class AuthService {
         await this.recordMissingAccountAttempt(email, ip);
         throw new UnauthorizedException('Invalid credentials');
       }
+
+      // #293: 承認が無ければ作らずに「登録されていません」と答える。
+      // 作れる環境では、今も作られることで未登録と分かるため、漏れる範囲は増えない。
+      // 作らずに調べられるようになる分は、回数で止める（4.1）
+      if (!options.create) {
+        this.assertNotFoundAllowed(ip);
+        await this.recordMissingAccountAttempt(email, ip);
+        throw new UnauthorizedException({
+          message: 'Account not found',
+          name: ACCOUNT_NOT_FOUND,
+        });
+      }
+
+      const gate =
+        reason === CreateReason.Open
+          ? RegistrationGate.Check
+          : RegistrationGate.Bypass;
+
       // 自動作成の経路でも、サインインが成立した以上は失敗の記録を消す
       // （signIn 側と挙動を揃える。未登録時の失敗が新規アカウントに残らないように）
       try {
         // 第5引数: サインイン経由の自動作成であることを監査ログに残す
-        const created = await this.signUp(email, password, undefined, ip, true);
+        const created = await this.signUp(
+          email,
+          password,
+          undefined,
+          ip,
+          true,
+          gate,
+        );
         this.clearSigninFailures(email, ip);
         return created;
       } catch (e: any) {
@@ -526,6 +618,57 @@ export class AuthService {
       }
     }
     return this.signIn(email, password, ip);
+  }
+
+  /**
+   * M3: 未登録の人を作ってよい理由。作れなければ null（docs/signin-registration.md 3 章）
+   *
+   * 例: 新規登録を閉じていても、root（#294）と、本人宛てのメール招待のページから
+   * 来た人（#195）は作れる。
+   */
+  private async createReason(
+    email: string,
+    inviteId?: string,
+  ): Promise<CreateReason | null> {
+    if (isAdminEmail(email)) {
+      return CreateReason.Root;
+    }
+
+    if (inviteId && (await this.isInvitedByEmail(email, inviteId))) {
+      return CreateReason.Invite;
+    }
+
+    const autoCreate = process.env.AUTH_SIGNIN_AUTOCREATE !== 'false';
+    if (autoCreate && (await this.isRegistrationOpen())) {
+      return CreateReason.Open;
+    }
+    return null;
+  }
+
+  /**
+   * #195: 本人宛てのメール招待か（受諾と同じ judgeInvitation で見る）。
+   *
+   * ⚠️ 招待リンク（誰でも使える）では作らない。作れると、リンクを持つ誰でも
+   * アカウントを作れて、新規登録を閉じた意味が無くなる（4.3）
+   */
+  private async isInvitedByEmail(
+    email: string,
+    inviteId: string,
+  ): Promise<boolean> {
+    const invitation = await this.prisma.invitation.findUnique({
+      where: { id: inviteId },
+    });
+    if (!invitation) {
+      return false;
+    }
+
+    const judgement = judgeInvitation({
+      invitation,
+      user: { email },
+      workspaceId: invitation.workspaceId,
+      now: new Date(),
+    });
+    return judgement.ok && judgement.kind === 'email';
   }
 
   async preflight(_email: string) {
@@ -594,6 +737,10 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+    // #297: root は消せない（本人でも）。替えるときは .env の ROOT_EMAIL を書き換える
+    if (isAdminEmail(user.email)) {
+      throw new ForbiddenException('The root user (ROOT_EMAIL) cannot be deleted');
     }
 
     if (user.isAdmin) {
@@ -711,7 +858,8 @@ export class AuthService {
       return this.generateTokenResponse(user);
     }
 
-    if (!autoCreateUser) {
+    // #294: root は SSO の自動作成が切でも作る（IdP がアドレスを確かめている）
+    if (!autoCreateUser && !isAdminEmail(email)) {
       this.logger.warn(
         `OIDC sign-in rejected (no account, auto-create disabled): ${email} ip=${ip ?? 'unknown'}`,
       );

@@ -114,6 +114,14 @@ export const adminDeleteUserMutation = {
 }`,
 };
 
+export const adminPrivateWorkspaceNameQuery = {
+  id: 'adminPrivateWorkspaceNameQuery' as const,
+  op: 'adminPrivateWorkspaceName',
+  query: `query adminPrivateWorkspaceName($userId: String!) {
+  adminPrivateWorkspaceName(userId: $userId)
+}`,
+};
+
 export const adminServerSettingsQuery = {
   id: 'adminServerSettingsQuery' as const,
   op: 'adminServerSettings',
@@ -165,10 +173,23 @@ export const adminUserListQuery = {
       name
       avatarUrl
       isAdmin
+      isRoot
       emailVerified
       createdAt
     }
     totalCount
+  }
+}`,
+};
+
+export const adminWorkspaceListQuery = {
+  id: 'adminWorkspaceListQuery' as const,
+  op: 'adminWorkspaceList',
+  query: `query adminWorkspaceList {
+  adminWorkspaceList {
+    id
+    memberCount
+    updatedAt
   }
 }`,
 };
@@ -538,8 +559,8 @@ export const uploadCommentAttachmentMutation = {
 export const createWorkspaceMutation = {
   id: 'createWorkspaceMutation' as const,
   op: 'createWorkspace',
-  query: `mutation createWorkspace {
-  createWorkspace {
+  query: `mutation createWorkspace($kind: WorkspaceKind) {
+  createWorkspace(kind: $kind) {
     id
     public
     createdAt
@@ -940,6 +961,7 @@ export const getWorkspaceInfoQuery = {
     }
     role
     team
+    kind
   }
 }`,
 };
@@ -1158,6 +1180,14 @@ export const mentionUserMutation = {
   op: 'mentionUser',
   query: `mutation mentionUser($input: MentionInput!) {
   mentionUser(input: $input)
+}`,
+};
+
+export const myPrivateWorkspaceIdQuery = {
+  id: 'myPrivateWorkspaceIdQuery' as const,
+  op: 'myPrivateWorkspaceId',
+  query: `query myPrivateWorkspaceId {
+  myPrivateWorkspaceId
 }`,
 };
 
@@ -1440,6 +1470,7 @@ export const inviteByEmailsMutation = {
     email
     inviteId
     sentSuccess
+    outcome
   }
 }`,
   deprecations: ["'sentSuccess' is deprecated: Notification will be sent asynchronously"],

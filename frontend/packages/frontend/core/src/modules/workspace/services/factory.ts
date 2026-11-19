@@ -2,6 +2,7 @@ import type { BlobStorage, DocStorage } from '@ofuro/nbstore';
 import type { Workspace } from '@blocksuite/affine/store';
 import { Service } from '@toeverything/infra';
 
+import type { CreateWorkspaceOptions } from '../providers/flavour';
 import type { WorkspaceFlavoursService } from './flavours';
 
 export class WorkspaceFactoryService extends Service {
@@ -21,7 +22,8 @@ export class WorkspaceFactoryService extends Service {
       docCollection: Workspace,
       blobFrontend: BlobStorage,
       docFrontend: DocStorage
-    ) => Promise<void> = () => Promise.resolve()
+    ) => Promise<void> = () => Promise.resolve(),
+    options?: CreateWorkspaceOptions
   ) => {
     const provider = this.flavoursService.flavours$.value.find(
       x => x.flavour === flavour
@@ -29,7 +31,7 @@ export class WorkspaceFactoryService extends Service {
     if (!provider) {
       throw new Error(`Unknown workspace flavour: ${flavour}`);
     }
-    const metadata = await provider.createWorkspace(initial);
+    const metadata = await provider.createWorkspace(initial, options);
     return metadata;
   };
 }

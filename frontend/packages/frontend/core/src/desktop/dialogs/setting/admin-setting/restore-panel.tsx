@@ -165,6 +165,7 @@ export const RestorePanel = () => {
         title={t['com.affine.admin.restore.confirm.title']()}
         description={t['com.affine.admin.restore.confirm.desc']()}
         confirmText={t['com.affine.admin.nav.restore']()}
+        cancelText={t['Cancel']()}
         confirmButtonOptions={{ variant: 'error' }}
         onConfirm={onRestore}
       />

@@ -7,6 +7,7 @@ import {
   SaveIcon,
   ResetIcon,
   HistoryIcon,
+  AllDocsIcon,
 } from '@blocksuite/icons/rc';
 import { useLiveData, useService } from '@toeverything/infra';
 import { useEffect, useMemo } from 'react';
@@ -17,6 +18,7 @@ import { BackupPanel } from './backup-panel';
 import { RestorePanel } from './restore-panel';
 import { ServerSettings } from './server-settings';
 import { UserManagement } from './user-management';
+import { WorkspacePanel } from './workspace-panel';
 
 export type AdminSettingList = SettingSidebarItem[];
 
@@ -37,6 +39,12 @@ export const useAdminSettingList = (): AdminSettingList => {
         title: t['com.affine.admin.nav.users'](),
         icon: <AdminIcon />,
         testId: 'admin-users-trigger',
+      },
+      {
+        key: 'admin:workspaces' as SettingTab,
+        title: t['com.affine.admin.nav.workspaces'](),
+        icon: <AllDocsIcon />,
+        testId: 'admin-workspaces-trigger',
       },
       {
         key: 'admin:settings' as SettingTab,
@@ -69,12 +77,18 @@ export const useAdminSettingList = (): AdminSettingList => {
 interface AdminSettingProps {
   activeTab: SettingTab;
   onChangeSettingState: (settingState: SettingState) => void;
+  onCloseSetting: () => void;
 }
 
-export const AdminSetting = ({ activeTab }: AdminSettingProps) => {
+export const AdminSetting = ({
+  activeTab,
+  onCloseSetting,
+}: AdminSettingProps) => {
   switch (activeTab) {
     case 'admin:users':
       return <UserManagement />;
+    case 'admin:workspaces':
+      return <WorkspacePanel onCloseSetting={onCloseSetting} />;
     case 'admin:settings':
       return <ServerSettings />;
     case 'admin:audit':

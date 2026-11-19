@@ -46,6 +46,7 @@ import { NotificationButton } from './notification-button';
 import { SidebarAudioPlayer } from './sidebar-audio-player';
 import { TemplateDocEntrance } from './template-doc-entrance';
 import { TrashButton } from './trash-button';
+import { UserGuideButton } from './user-guide-button';
 import { UpdaterButton } from './updater-button';
 import UserInfo from './user-info';
 
@@ -230,6 +231,7 @@ export const RootAppSidebar = memo((): ReactElement => {
           </MenuItem>
           <InviteMembersButton />
           <TemplateDocEntrance />
+          <UserGuideButton />
           {/* Release notes link removed for ofuro-wiki */}
         </CollapsibleSection>
       </SidebarScrollableContainer>

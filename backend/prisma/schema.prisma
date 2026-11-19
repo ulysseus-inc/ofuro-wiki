@@ -58,6 +58,9 @@ model Workspace {
   name      String?  @db.VarChar(255)
   avatarKey String?  @map("avatar_key")
   public    Boolean  @default(false)
+  /// #297: 'private'（1 人 1 つ・本人だけ）/ 'shared'（システム管理者が作る・持ち主は root）。
+  /// docs/workspace-model.md 12.1
+  kind      String   @default("private") @db.VarChar(20)
   ownerId   String   @map("owner_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz()
@@ -85,6 +88,9 @@ model Workspace {
   comments    Comment[]
 
   @@index([ownerId], map: "idx_workspaces_owner")
+  /// #297: プライベートは 1 人 1 つ。部分一意インデックス workspaces_one_private_per_owner
+  /// （owner_id WHERE kind = 'private'）は Prisma で書けないため、手書きの SQL で管理する
+  /// （migrations/20261028010000_workspace_one_private と移行ツール。docs/workspace-model.md 12.9）
   @@map("workspaces")
   searchIndexQueues SearchIndexQueue[]
 }

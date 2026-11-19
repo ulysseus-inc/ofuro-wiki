@@ -417,6 +417,7 @@ export const BackupPanel = () => {
           filename: deleteTarget?.filename ?? '',
         })}
         confirmText={t['Delete']()}
+        cancelText={t['Cancel']()}
         confirmButtonOptions={{ variant: 'error' }}
         onConfirm={() => deleteTarget && onDeleteBackup(deleteTarget.id)}
       />

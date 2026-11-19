@@ -1,8 +1,9 @@
 # ofuro-wiki デプロイガイド
 
 > **対象読者**: ofuro-wiki を自分のサーバーにデプロイして**利用する**方。
-> リポジトリを clone せず最小手順で試したい場合は、トップの
-> [README クイックスタート](../../README.md#クイックスタート) を参照してください。
+> 画面を追った導入の手順は、導入ガイド（[クイックスタート](../../site/guide/quickstart.md)・
+> [社内サーバーへの導入](../../site/guide/install-server.md)。本体の `/docs/` でも読めます）にあります。
+> この文書は、設定項目とパターンごとの詳しい説明です。
 
 ## デプロイパターンの選択
 
@@ -86,7 +87,7 @@ cp backend/.env.example .env
 | `JWT_SECRET` | JWTの署名キー（32文字以上） | `openssl rand -base64 48` |
 | `POSTGRES_PASSWORD` | PostgreSQLパスワード | `openssl rand -base64 24` |
 | `BASE_URL` | 公開URL（例: `https://wiki.example.com`） | — |
-| `ADMIN_EMAIL` | 初回Admin のメールアドレス | — |
+| `ROOT_EMAIL` | root（消せないシステム管理者・1 人）のメールアドレス。v0.2 までの名前は `ADMIN_EMAIL` | — |
 
 **CORS設定（推奨）:**
 ```bash
@@ -104,7 +105,7 @@ ALLOWED_ORIGINS=https://wiki.example.com
 **メール設定（オプション）:**
 未設定の場合、招待メール・パスワードリセットメールは送信されません。
 SMTP なしでも運用できます（既登録ユーザーの招待は即時メンバー登録、未登録ユーザーは
-招待リンクの共有で代替、パスワードリセットは Admin が再設定用 URL を発行して共有）。
+招待リンクの共有で代替、パスワードリセットはシステム管理者が再設定用 URL を発行して共有）。
 ```bash
 MAILER_HOST=smtp.example.com
 MAILER_PORT=587
@@ -210,7 +211,7 @@ Nest application successfully started
 ofuro-wiki backend running on port 3010
 ```
 
-ブラウザで `BASE_URL` にアクセスし、`ADMIN_EMAIL` でサインアップできれば完了です。
+ブラウザで `BASE_URL` にアクセスし、`ROOT_EMAIL` でサインアップできれば完了です。
 
 > **サーバーの再起動について**: `app` と `postgres` は `restart: unless-stopped` を指定しており、
 > サーバーを再起動すると自動で起動します。`docker compose stop` で止めた場合は、

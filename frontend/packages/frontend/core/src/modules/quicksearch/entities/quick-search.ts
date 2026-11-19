@@ -65,6 +65,9 @@ export class QuickSearch extends Entity {
       this.hide();
     }
 
+    // #321: 閉じきる前に開き直したら、積んだコマンドは捨てる（docs/quick-search.md 3 章）
+    this.afterClosed = [];
+
     const sessions = sources.map((source: QuickSearchSource<any, any>) => {
       if (typeof source === 'function') {
         const items$ = new LiveData<QuickSearchItem<any, any>[]>([]);
@@ -107,6 +110,21 @@ export class QuickSearch extends Entity {
     }
 
     this.state$.next(null);
+  }
+
+  // #321: 窓が閉じきってから動かす処理（docs/quick-search.md 3 章）
+  // 選んだ時点（submit の callback）で積む。その直後に閉じ始めるので、必ず動く
+  private afterClosed: Array<() => void> = [];
+
+  runAfterClosed(fn: () => void) {
+    this.afterClosed.push(fn);
+  }
+
+  /** 窓が閉じきったとき、画面から呼ぶ */
+  notifyClosed() {
+    const fns = this.afterClosed;
+    this.afterClosed = [];
+    fns.forEach(fn => fn());
   }
 
   submit(result: QuickSearchItem | null) {

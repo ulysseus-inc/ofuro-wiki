@@ -25,7 +25,7 @@ export const MemberOptions = ({
   const t = useI18n();
   const membersService = useService(WorkspaceMembersService);
   const permission = useService(WorkspacePermissionService).permission;
-  const isTeam = useLiveData(permission.isTeam$);
+  const isShared = useLiveData(permission.isShared$);
   const { openConfirmModal } = useConfirmModal();
 
   const openRemoveConfirmModal = useCallback(
@@ -265,8 +265,9 @@ export const MemberOptions = ({
       {
         label: t['com.affine.payment.member.team.change.admin'](),
         onClick: handleChangeToAdmin,
+        // #297: 任命は共有で、root・システム管理者（役割が Owner で返る）だけ（docs/workspace-member-roles.md 3 章）
         show:
-          isTeam &&
+          !!isShared &&
           isOwner &&
           member.permission !== Permission.Owner &&
           member.permission !== Permission.Admin &&
@@ -278,24 +279,25 @@ export const MemberOptions = ({
         // #215: 管理者にも出す。オーナーを譲ると元のオーナーは管理者になり、
         // 通常のメンバーへ戻す手段がこれしか無い（以前の「協力者に変更」は
         // Collaborator を送り、バックエンドの Permission に無いため必ず失敗した）
+        // #297: 閲覧者を戻すのはワークスペース管理者にもできる。管理者を下げるのは root・システム管理者だけ
         show:
-          isOwner &&
           member.status === WorkspaceMemberStatus.Accepted &&
-          (member.permission === Permission.Read ||
-            member.permission === Permission.Admin),
+          ((member.permission === Permission.Read && (isOwner || isAdmin)) ||
+            (member.permission === Permission.Admin && isOwner)),
       },
       {
         label: t['com.affine.payment.member.team.change.reader'](),
         onClick: handleChangeToReader,
         show:
-          isOwner &&
+          (isOwner || isAdmin) &&
           member.status === WorkspaceMemberStatus.Accepted &&
           member.permission === Permission.Write,
       },
       {
         label: t['com.affine.payment.member.team.assign'](),
         onClick: handleAssignOwner,
-        show: isOwner && member.status === WorkspaceMemberStatus.Accepted,
+        // #297: 出さない。共有の持ち主は root に固定、プライベートは譲る相手が居ない
+        show: false,
       },
     ];
   }, [
@@ -310,7 +312,7 @@ export const MemberOptions = ({
     handleRevoke,
     isAdmin,
     isOwner,
-    isTeam,
+    isShared,
     member.permission,
     member.status,
     t,

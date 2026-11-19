@@ -4,6 +4,8 @@ import { PrismaModule } from '../../prisma.module';
 import { AuditService } from './audit.service';
 import { AuditInterceptor } from './audit.interceptor';
 import { DocEditAggregator } from './doc-edit-aggregator';
+import { DocViewRecorder } from './doc-view-recorder';
+import { FolderAuditService } from './folder-audit.service';
 import { AuditQueryService } from './audit-query.service';
 
 /**
@@ -19,9 +21,17 @@ import { AuditQueryService } from './audit-query.service';
     AuditService,
     AuditQueryService,
     DocEditAggregator,
+    DocViewRecorder,
+    FolderAuditService,
     // 成功した更新操作を横断的に記録する（拒否・認証失敗は別経路）
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
-  exports: [AuditService, AuditQueryService, DocEditAggregator],
+  exports: [
+    AuditService,
+    AuditQueryService,
+    DocEditAggregator,
+    DocViewRecorder,
+    FolderAuditService,
+  ],
 })
 export class AuditModule {}

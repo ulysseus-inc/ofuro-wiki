@@ -1,5 +1,6 @@
 import { Session } from './domain/session';
 import { CliError } from './errors';
+import { exitAfterFlush } from './exit';
 import { type Args, option, parseArgs } from './commands/args';
 import { help } from './commands/help';
 import { login } from './commands/login';
@@ -37,8 +38,7 @@ const COMMANDS: Record<string, Command> = {
 /**
  * エントリポイント。
  *
- * ⚠️ 最後に必ず process.exit する。blocksuite の同期エンジンのタイマーが残り、
- * 放っておくとプロセスが終わらない（設計書 §3.0）。
+ * ⚠️ 最後に必ず exitAfterFlush で終える（exit.ts。出力を送り切ってから exit する）。
  */
 async function main(argv: string[]): Promise<ExitCode> {
   const [name, ...rest] = argv;
@@ -69,10 +69,10 @@ async function main(argv: string[]): Promise<ExitCode> {
 }
 
 main(process.argv.slice(2))
-  .then(code => process.exit(code))
+  .then(code => exitAfterFlush(code))
   .catch((e: unknown) => {
     const line =
       e instanceof CliError ? e.toLine() : `想定外のエラー: ${String(e)}`;
     process.stderr.write(`${line}\n`);
-    process.exit(ExitCode.Failed);
+    exitAfterFlush(ExitCode.Failed);
   });

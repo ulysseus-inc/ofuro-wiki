@@ -78,10 +78,11 @@ cat <<EOF
        git tag v${VERSION}
        git push origin v${VERSION}
 
-     → CI がイメージ :${VERSION} と :latest をビルドし、
+     → CI がイメージ :${VERSION} と :X.Y をビルドし、
        APP_VERSION=${VERSION} を焼き込む
+       （:latest は master への push で付く。候補版 -rc.N には :X.Y も付かない）
 
-  4. OSS リポジトリへ反映し、公開側でもタグと Release を作成
+  4. OSS リポジトリへ反映し、公開側でもタグと Release を作成（候補版はしない）
        bash scripts/oss-publish.sh --push
        # OSS クローン側で git tag v${VERSION} && git push origin v${VERSION}
        # GitHub で Release を作成し、変更点を記載する

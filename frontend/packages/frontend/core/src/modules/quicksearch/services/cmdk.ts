@@ -40,9 +40,14 @@ export class CMDKQuickSearchService extends Service {
             return;
           }
 
+          // #321: コマンドは窓が閉じきってから動かす。閉じる途中で別の窓を開くと、
+          // 閉じたあと画面が固まる（docs/quick-search.md 3 章）
           if (result.source === 'commands') {
-            result.payload.run()?.catch(err => {
-              console.error(err);
+            const command = result.payload;
+            this.quickSearchService.quickSearch.runAfterClosed(() => {
+              command.run()?.catch(err => {
+                console.error(err);
+              });
             });
             return;
           }

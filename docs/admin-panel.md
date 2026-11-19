@@ -5,18 +5,25 @@
 ## アクセス権
 
 - `isAdmin = true` のユーザーのみ表示・操作可能。
-- Admin の付与は環境変数 `ADMIN_EMAIL` によるシード（`AdminService.seedAdmin()`、起動時に該当ユーザーを昇格）か、既存 Admin による付与で行う。
+- Admin の付与は環境変数 `ROOT_EMAIL` によるシード（`AdminService.seedAdmin()`、起動時に該当ユーザーを昇格）か、既存 Admin による付与で行う。
+- `ROOT_EMAIL` のユーザー（root）は消せず、Admin を外せない。ユーザー管理では root の行に削除・切り替えを出さない（#297・`workspace-model.md` 12.8.3）。
 
 ## 画面構成
 
-設定ダイアログのサイドバー「管理」セクションに、以下の 4 タブを表示する。
+設定ダイアログのサイドバー「管理」セクションに、以下のタブを表示する。
 
 | タブ | コンポーネント | 内容 |
 |------|---------------|------|
-| ユーザー管理 | `user-management.tsx` | ユーザー一覧・検索・追加・削除、Admin 権限の付与/剥奪、パスワードの再設定・変更 URL の発行（操作は行の ⋮ メニュー内） |
-| サーバー設定 | `server-settings.tsx` | 新規登録の許可、サイト名、リンクプレビュー・リッチ埋め込み（既定 OFF） |
+| ユーザー管理 | `user-management.tsx` | ユーザー一覧・検索・追加・削除、Admin 権限の付与/剥奪、パスワードの再設定・変更 URL の発行（操作は行の ⋮ メニュー内）。root・システム管理者の印。削除の確認に、一緒に消えるプライベートの名前 |
+| ワークスペース | `workspace-panel.tsx` | 共有ワークスペースの一覧・作成・取り込み・削除（#297・`workspace-model.md` 12.8.1） |
+| サーバー設定 | `server-settings.tsx` | 新規登録の許可、リンクプレビュー・リッチ埋め込み（既定 OFF）。「サイト名」は保存してもどこも読まないため外した（#295。保存済みの `site_name` の行は害が無いので残す） |
 | バックアップ | `backup-panel.tsx` | 自動バックアップ設定、手動バックアップ、履歴・ダウンロード・削除 |
 | リストア | `restore-panel.tsx` | バックアップ ZIP のアップロードによるシステム復元 |
+
+⚠️ **汎用の設定の書き換え（`adminUpdateServerSetting`）と一覧（`adminServerSettings`）で触れるのは、管理画面が使う設定だけ**（`AdminService` の `GENERAL_SETTING_KEYS`）:
+`registration_open`・`link_preview_enabled`・`backup_enabled`・`backup_retention_days`・`backup_schedule`・`audit_log_doc_view_enabled`。
+ほかの名前は断る。何でも書けると、専用の処理を素通りできるため（例: SSO の発行者を変えたらシークレットを消す #330 を、`oidc_issuer` を直接書いて避けられた）。
+SSO は `updateOidcConfig` だけで変える。設定を足すときは、画面と `GENERAL_SETTING_KEYS` を一緒に直す
 
 実装: `frontend/packages/frontend/core/src/desktop/dialogs/setting/admin-setting/`
 タブの登録: `index.tsx` の `useAdminSettingList()`
@@ -240,7 +247,7 @@ v0.1.0 のスコープ外。
 
 ## E2E
 
-`e2e/admin.spec.ts`（バックエンドを `ADMIN_EMAIL=e2e-test@ofuro-wiki.local` で起動して実行）。
+`e2e/admin.spec.ts`（バックエンドを `ROOT_EMAIL=e2e-test@ofuro-wiki.local` で起動して実行）。
 Admin API（GraphQL）に加え、Admin パネル UI のラベルがデフォルト言語（日本語）で表示されることを検証する。
 パスワード変更機能（#115）については、以下を検証する。
 

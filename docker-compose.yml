@@ -52,6 +52,8 @@ services:
       NODE_ENV: production
       # #10: メール内リンク等に使用するベースURL
       BASE_URL: ${BASE_URL}
+      ROOT_EMAIL: ${ROOT_EMAIL:-}
+      # v0.2 までの名前。古い .env でも root が居なくならないように渡す（docs/workspace-model.md 12.1.1）
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       # sign-in での未登録メール自動作成を無効化する場合は false（既定: true）
       AUTH_SIGNIN_AUTOCREATE: ${AUTH_SIGNIN_AUTOCREATE:-true}

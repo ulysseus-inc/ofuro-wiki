@@ -62,6 +62,8 @@ describe('招待の受諾（#148 消費の原子性）', () => {
 
     const prisma: any = {
       invitation: { findUnique: jest.fn().mockResolvedValue(invitation) },
+      // #297: 招待を受けられるのは共有だけ
+      workspace: { findUnique: jest.fn().mockResolvedValue({ kind: 'shared' }) },
       user: {
         findUnique: jest.fn().mockResolvedValue({
           email: opts.userEmail === undefined ? EMAIL : opts.userEmail,
@@ -76,6 +78,7 @@ describe('招待の受諾（#148 消費の原子性）', () => {
       { isEnabled: () => false } as never,
       { record: jest.fn() } as never,
       discovery,
+      { workspaceName: async (w: { name: string | null }) => w.name } as never,
     );
     return { service, tx, calls, prisma, discovery };
   };

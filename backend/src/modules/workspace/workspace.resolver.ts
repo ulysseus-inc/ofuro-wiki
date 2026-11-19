@@ -11,6 +11,7 @@ import { UseGuards, NotFoundException, Logger } from '@nestjs/common';
 import {
   WorkspaceType,
   InviteUserType,
+  InviteOutcome,
   InvitationType,
   InviteLinkType,
   Permission,
@@ -20,8 +21,8 @@ import {
   WorkspaceDocHistoryType,
   buildPermissions,
 } from './workspace.model';
+import { WorkspaceKind } from '../../common/workspace-kind';
 import { DocHistoryService } from '../doc/doc-history.service';
-import { ManualWorkspaceService } from '../manual-workspace/manual-workspace.service';
 import { ListedBlob } from '../blob/blob.resolver';
 import { WorkspaceService } from './workspace.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -105,6 +106,7 @@ function buildWorkspaceResponse(workspace: any, role: string, userId: string) {
     avatar: workspace.avatarKey,
     public: workspace.public,
     initialized: true,
+    kind: workspace.kind,
     createdAt: workspace.createdAt,
     permission: roleToPermission(role),
     memberCount,
@@ -147,24 +149,24 @@ export class WorkspaceResolver {
     private workspaceService: WorkspaceService,
     private prisma: PrismaService,
     private docHistoryService: DocHistoryService,
-    private manualWorkspaceService: ManualWorkspaceService,
     private discovery: DiscoveryRevisionService,
   ) {}
 
   @Query(() => [WorkspaceType])
   async workspaces(@CurrentUser() user: { id: string }) {
-    // #72: マニュアルWSへ Reader として遅延参加（冪等）。新規/既存ユーザー問わず
-    // 一覧取得時に自己修復的に参加させる（per-signup フック/バックフィル不要）。
-    await this.manualWorkspaceService.ensureMembership(user.id).catch(() => {
-      /* マニュアル未整備時などは黙って無視（一覧表示は継続） */
-    });
     const items = await this.workspaceService.getUserWorkspaces(user.id);
-    // 注: フロントはクラウドWSを workspace.id で localeCompare ソートするため、
-    // ここでの順序は UI 表示順に影響しない。マニュアルWSを最下部にするには
-    // 「最後にソートされる固定UUID」を与えている（ManualSeedService 参照）。
     return items.map(({ workspace, role }) =>
       buildWorkspaceResponse(workspace, role, user.id),
     );
+  }
+
+  /**
+   * #297: 自分が持ち主のプライベートの ID（無ければ null）。
+   * 着地で、プライベートを作るかを決めるのに使う（docs/workspace-model.md 12.3.1）
+   */
+  @Query(() => String, { nullable: true })
+  async myPrivateWorkspaceId(@CurrentUser() user: { id: string }) {
+    return this.workspaceService.findPrivateWorkspaceId(user.id);
   }
 
   @Query(() => WorkspaceType)
@@ -175,7 +177,8 @@ export class WorkspaceResolver {
   ) {
     const ws = await this.workspaceService.getWorkspace(id);
     if (!ws) throw new NotFoundException('Workspace not found');
-    const role = await this.workspaceService.getMemberRole(id, user.id);
+    // #297: メンバーでない共有を開いたシステム管理者は owner と同じ（12.2）
+    const role = await this.workspaceService.effectiveRole(id, user.id);
     return buildWorkspaceResponse(ws, role || 'reader', user.id);
   }
 
@@ -314,21 +317,25 @@ export class WorkspaceResolver {
   async createWorkspace(
     @CurrentUser() user: { id: string },
     @Args('name', { nullable: true }) name?: string,
+    // #297: 省くとプライベート（最初のサインイン）。共有はシステム管理者だけ
+    @Args('kind', { type: () => WorkspaceKind, nullable: true }) kind?: WorkspaceKind,
   ) {
-    const ws = await this.workspaceService.createWorkspace(user.id, name);
+    const ws = await this.workspaceService.createWorkspace(user.id, name, kind);
     return {
       id: ws.id,
       name: ws.name,
       avatar: ws.avatarKey,
       public: ws.public,
       initialized: true,
+      kind: ws.kind,
       createdAt: ws.createdAt,
       permission: Permission.Owner,
       memberCount: 1,
       members: [],
-      isOwner: true,
+      // #297: 共有の持ち主は root。作ったシステム管理者は素通りで owner と同じに扱われる
+      isOwner: ws.ownerId === user.id,
       team: false,
-      owner: { id: user.id },
+      owner: { id: ws.ownerId },
       role: 'owner',
       permissions: buildPermissions('owner'),
       ...WORKSPACE_CONFIG_DEFAULTS,
@@ -345,7 +352,8 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => [InviteUserType])
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async inviteMembers(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('emails', { type: () => [String] }) emails: string[],
@@ -358,6 +366,7 @@ export class WorkspaceResolver {
       email: string | null;
       accepted: boolean;
       sentSuccess: boolean;
+      outcome: InviteOutcome;
     }> = [];
     for (const email of emails) {
       const inv = await this.workspaceService.inviteByEmail(
@@ -370,20 +379,23 @@ export class WorkspaceResolver {
         permission: Permission.Write,
         inviteId: inv.id,
         email: inv.email,
-        accepted: false,
+        accepted: inv.outcome !== InviteOutcome.Invited,
         sentSuccess: inv.sentSuccess,
+        outcome: inv.outcome,
       });
     }
     return results;
   }
 
   @Mutation(() => Boolean)
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async revokeMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
+    @CurrentUser() user: { id: string },
   ) {
-    return this.workspaceService.removeMember(workspaceId, userId);
+    return this.workspaceService.removeMember(workspaceId, userId, user.id);
   }
 
   @Mutation(() => Boolean)
@@ -407,7 +419,8 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async grantMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
@@ -423,7 +436,8 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async approveMember(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('userId', { type: () => String }) userId: string,
@@ -439,7 +453,8 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => InviteLinkType)
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async createInviteLink(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
     @Args('expireTime', { type: () => WorkspaceInviteLinkExpireTime })
@@ -454,7 +469,8 @@ export class WorkspaceResolver {
   }
 
   @Mutation(() => Boolean)
-  @WorkspaceRole('owner')
+  // #297: ワークスペース管理者（admin）も使える。管理者の任命はサービスで断る
+  @WorkspaceRole('admin')
   async revokeInviteLink(
     @Args('workspaceId', { type: () => String }) workspaceId: string,
   ) {

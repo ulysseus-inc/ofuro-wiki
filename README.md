@@ -56,8 +56,7 @@ Two things set it apart:
 
 We run it in production for our own team, every day.
 
-> **Status**: v0.1.0 is the first public release. Adoption outside our company is just starting;
-> issues and questions are welcome.
+> **Status**: v0.3.0 is the current release. Issues and questions are welcome.
 
 ## How it compares to other self-hostable wikis
 
@@ -114,23 +113,27 @@ Try it right now — no installation required.
 - **Works on phones** — the mobile build is served automatically based on the browser;
   no app to install
 - **Audit log** — who did what, and when. Readable from the admin panel
-- **Single sign-on (SSO)** — OIDC support: sign in with Google, Keycloak, and other providers ([setup guide](docs/sso-setup.md))
-- **AI agent access** — AI agents such as Claude Code can search, read, and edit pages as a regular user, with the same permissions and audit log as people. Edits appear live in open browsers ([setup guide](docs/ai-agent-setup.md), Japanese)
+- **Single sign-on (SSO)** — OIDC support: sign in with Google, Keycloak, and other providers ([setup guide](site/en/guide/integration.md))
+- **AI agent access** — AI agents such as Claude Code can search, read, and edit pages as a regular user, with the same permissions and audit log as people. Edits appear live in open browsers ([setup guide](site/en/guide/integration.md))
+- **Private and shared workspaces** — everyone gets a private workspace for drafts; system administrators create shared workspaces for the team or each department
+- **Built-in user guide** — the installation guide and user guide ship with the server at `/docs/`, in English and Japanese. Readable on air-gapped networks too
 - **Fully self-hosted** — start with a single Docker command, no external service dependencies
 - **Privacy-first** — telemetry and outbound data transmission are disabled by design
 
-## What's in v0.1.0
-
-The first release. Everything below ships in the box.
+## What's in v0.3.0
 
 | Area | What you get |
 |---|---|
-| **Writing** | Block editor with `/` commands, drag & drop, tables, code blocks, and a custom multi-column block. Import from Markdown, HTML, and Notion exports; export to PDF, Markdown, and HTML |
+| **Writing** | Block editor with `/` commands, drag & drop, tables, code blocks, and a custom multi-column block. Import from Markdown, HTML, and Notion exports; export to PDF, Markdown, and HTML. **Protected** mode to prevent accidental edits |
 | **Finding** | Japanese-aware full-text search (PGroonga), backlinks on every page, `@`-mentions that link pages and notify people, tags and folders |
-| **Sharing** | Workspaces with invitations and four roles (Admin / Owner / Member / Reader), per-page read and write permissions, read-only protection for pages that must not change |
+| **Sharing** | Private workspaces (one per person) and shared workspaces (created by system administrators). Invitations and roles per workspace, per-page read and write permissions |
 | **Privacy** | A page you cannot read never appears in your list — the title is not leaked. No telemetry, no outbound calls unless you turn a feature on |
-| **Operations** | Admin panel with user management, audit log, server settings, and backup / restore. Trash with restore and permanent delete. SSO via OIDC |
-| **Devices** | Desktop browsers and phones. The mobile build is served automatically based on the browser |
+| **Operations** | Admin panel with user management (one by one or by CSV), audit log, server settings, and backup / restore. Export and import of a single workspace. SSO via OIDC with a connection test |
+| **Documentation** | Installation guide and user guide served by the app itself at `/docs/` (English and Japanese) |
+| **Devices** | Desktop browsers and phones. The mobile build is served automatically based on the browser. English and Japanese interface |
+
+See the [release notes](https://github.com/ulysseus-inc/ofuro-wiki/releases) for what changed in each version,
+including how to upgrade from v0.2.
 
 ## Tech stack
 
@@ -146,91 +149,60 @@ The first release. Everything below ships in the box.
 > implements its own backend, which is what makes it possible to offer the whole
 > project under the MIT License.
 
+## Documentation
+
+The guides ship with the server: open **`/docs/`** on your ofuro-wiki (for example `http://localhost:3010/docs/en/`),
+or **User guide** in the sidebar. The same pages are in this repository:
+
+| Guide | For | |
+|---|---|---|
+| **Installation & operation** | Administrators | [site/en/guide](site/en/guide/introduction.md) — quick start, installing on a company server, initial setup, users and access, backups and upgrades, SSO and AI agents, troubleshooting |
+| **User guide** | Everyone | [site/en/user](site/en/user/index.md) — pages and blocks, the editor, search and tags, sharing and permissions, phones |
+
 ## Quick start
 
-All you need is **Docker**. Prebuilt public images are used, so there is no
-need to clone the repository or build anything (**proven on a free-tier GCE
-e2-micro with 1GB RAM + 2GB swap**).
+All you need is **Docker**. Prebuilt public images are used, so there is no need to clone the repository or build anything.
 
-### 1. Fetch the files
+**▶ [Quick start guide](site/en/guide/quickstart.md)** — try it on your own PC in about 10 minutes.
 
-```bash
-mkdir ofuro-wiki && cd ofuro-wiki
-curl -O https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/docker-compose.yml
-curl --create-dirs -o backend/.env.example https://raw.githubusercontent.com/ulysseus-inc/ofuro-wiki/main/backend/.env.example
-```
+| Use | Requirements |
+|---|---|
+| Try it on your PC | Docker, about 2GB of free memory |
+| Company server | Ubuntu Server 24.04, 4GB+ memory, 20GB+ free disk ([guide](site/en/guide/install-server.md)) |
+| Windows PC as the server | Windows 11, 8GB+ memory ([guide](site/en/guide/install-windows.md)) |
 
-### 2. Configure environment variables
+It also runs on 1GB of memory plus 2GB of swap (our own production and the live demo run on a GCE e2-micro), though sign-in is slower when many people sign in at once.
 
-```bash
-cp backend/.env.example .env
-```
-
-Open `.env` and set at least these four.
-
-| Variable | What it is | How to choose it |
-|---|---|---|
-| `JWT_SECRET` | Secret used to sign sign-in sessions (32+ characters) | Paste the output of `openssl rand -base64 48` |
-| `POSTGRES_PASSWORD` | Database password | Paste the output of `openssl rand -base64 24` |
-| `BASE_URL` | The URL your users open in a browser | e.g. `https://wiki.example.com` — **no trailing slash** |
-| `ADMIN_EMAIL` | Email address of the first administrator | Whoever signs up with this address becomes Admin |
-
-```bash
-JWT_SECRET=<generate with: openssl rand -base64 48>
-POSTGRES_PASSWORD=<generate with: openssl rand -base64 24>
-BASE_URL=https://wiki.example.com
-ADMIN_EMAIL=admin@example.com
-```
-
-> Email (SMTP) is optional — ofuro-wiki runs fine without it.
-> See the [deploy guide](docs/deploy/README.md) for every available setting.
-
-Then append the prebuilt image references:
-
-```bash
-APP_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki:latest
-POSTGRES_IMAGE=ghcr.io/ulysseus-inc/ofuro-wiki-postgres:latest
-```
-
-### 3. Start
-
-```bash
-docker compose pull app postgres
-docker compose up -d --no-build
-```
-
-> The database schema is set up automatically on first start (no manual
-> migration needed).
-
-> **Want to build from source?** Clone the repository and run
-> `docker compose build` (4GB+ RAM recommended). See the
-> [deploy guide](docs/deploy/README.md) for details.
-
-### 4. Verify
-
-```bash
-curl http://localhost:3010/api/health
-```
-
-Open `BASE_URL` in your browser (locally, `http://localhost:3010`) and sign up with
-the `ADMIN_EMAIL` address to finish setup.
+To let other PCs in your company use it, continue with
+[Installing on a company server](site/en/guide/install-server.md) (HTTPS with your own certificate authority).
 
 ## Roles
 
-| Role | Permissions |
-|------|-------------|
-| **Admin** | Server settings and management of all users |
-| **Owner** | User management within a workspace, member invitations, settings |
-| **Member** | Read/write documents |
-| **Reader** | Read-only |
+Permissions have three levels.
 
-Admin is granted to the address specified by the `ADMIN_EMAIL` environment variable
-when it signs up for the first time.
+```
+① Server     root (ROOT_EMAIL, one person, cannot be removed) ⊂ system admins / regular users
+   └ ② Workspace  private (one per person, only that person)
+                  shared (created by system admins, owned by root)
+                    workspace admin > member > reader
+        └ ③ Page   can manage > can edit > read only > no access
+```
+
+| Role | How it is decided | What they can do |
+|---|---|---|
+| **root** | `ROOT_EMAIL` in `.env` (one person) | Everything a system admin can do. Cannot be deleted or demoted. Owns every shared workspace |
+| **System admin** | Turned on in **Settings** → **User Management** | Users, shared workspaces, server settings, audit log, backups. Manages any shared workspace without an invitation, but cannot open other people's private workspaces |
+| **Workspace admin** | Chosen by a system admin | Settings and invitations of that shared workspace |
+| **Member** | Invited | Read and write pages |
+| **Reader** | Switched after inviting | Read pages only |
+
+Details: [Users and access](site/en/guide/users-and-access.md).
 
 ## Deployment
 
-For production deployment details (Nginx / Caddy configuration, swap setup,
-backups, etc.), see [docs/deploy/README.md](docs/deploy/README.md).
+For a step-by-step installation, see [Installing on a company server](site/en/guide/install-server.md).
+Reference material for every setting (Nginx / Caddy, swap, sign-in limits, etc.) is in
+[docs/deploy/README.md](docs/deploy/README.md) (Japanese).
 
 ### Clipboard behavior: HTTP vs HTTPS
 
@@ -246,7 +218,7 @@ but the behavior differs:
 | Copy & paste across tabs/windows | ✅ Full | ❌ Not supported |
 
 > **HTTPS is strongly recommended for production / organizational use.**
-> If you must run over HTTP only, see [Pattern C](docs/deploy/pattern-C.md).
+> If you must run over HTTP only, see [Pattern C](docs/deploy/pattern-C.md) (Japanese).
 
 ## Security & privacy
 
@@ -272,6 +244,20 @@ are eliminated by design so that confidential information can be managed safely.
 > that content is loaded from its origin when displayed. For strictly closed-network
 > operation, additionally restrict outbound destinations with a reverse proxy or CSP
 > (`connect-src` / `frame-src`, etc.).
+
+### Link previews and rich embeds (off by default)
+
+Rich previews of bookmarks and embeds (title, thumbnail, description for YouTube, GitHub, Figma, Loom, etc.)
+need the target URL's OGP metadata. ofuro-wiki fetches it **on your own server**
+(`/api/worker/link-preview`, `/api/worker/image-proxy`) instead of upstream AFFiNE's external worker.
+
+- **Off by default** (no-op): the server makes no outbound connections. Embedded players still work,
+  but rich preview cards are not shown
+- When a **system administrator** turns on **Settings** → **Server Settings** → **Link Previews & Rich Embeds**,
+  the server connects to the URLs users paste to fetch metadata and images (outbound traffic caused by a
+  user's action). Other users cannot change this setting. SSRF protections are in place (internal addresses
+  blocked, redirects re-checked, size and timeout limits)
+- Keep it **off** for fully closed networks
 
 ## Development
 

@@ -4,6 +4,9 @@ import { CliError } from '../errors';
 import { type Config, TOKEN_FILE, writePrivateFile } from './config';
 
 const SIGN_IN_PATH = '/api/auth/sign-in';
+const HTTP_UNAUTHORIZED = 401;
+/** サーバーが「登録されていません」に付ける名前 */
+const ACCOUNT_NOT_FOUND = 'USER_NOT_FOUND';
 const TOKEN_COOKIE = 'affine_token';
 const HTTP_TOO_MANY_REQUESTS = 429;
 /** 応答しないサーバーで AI が止まり続けないよう打ち切る */
@@ -125,6 +128,14 @@ export async function signIn(
       '数分待ってから再実行する'
     );
   }
+  // M3: サーバーは、作ると承認しない限りアカウントを作らない。CLI は承認を送らない
+  // （docs/signin-registration.md 4.4）
+  if (await isAccountNotFound(res)) {
+    throw new CliError(
+      `このアドレスのアカウントが無い: ${email}`,
+      'ブラウザでサインインしてアカウントを作るか、管理者に作ってもらう'
+    );
+  }
   if (!res.ok) {
     throw new CliError(
       `サインインに失敗した（HTTP ${res.status}）`,
@@ -137,6 +148,15 @@ export async function signIn(
     throw new CliError('サインイン応答にトークンが無い');
   }
   return token;
+}
+
+/** 応答が「登録されていません」（name: USER_NOT_FOUND）か */
+async function isAccountNotFound(res: Response): Promise<boolean> {
+  if (res.status !== HTTP_UNAUTHORIZED) {
+    return false;
+  }
+  const body = await res.json().catch(() => null);
+  return body?.name === ACCOUNT_NOT_FOUND;
 }
 
 /** 例: `affine_token=abc; Path=/; HttpOnly` → `abc` */

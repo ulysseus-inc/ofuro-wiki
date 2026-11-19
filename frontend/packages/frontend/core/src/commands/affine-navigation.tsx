@@ -5,7 +5,6 @@ import { ArrowRightBigIcon } from '@blocksuite/icons/rc';
 
 import type { useNavigateHelper } from '../components/hooks/use-navigate-helper';
 import type { WorkspaceDialogService } from '../modules/dialogs';
-import type { WorkbenchService } from '../modules/workbench';
 import { registerAffineCommand } from './registry';
 
 export function registerAffineNavigationCommands({
@@ -13,13 +12,11 @@ export function registerAffineNavigationCommands({
   docCollection,
   navigationHelper,
   workspaceDialogService,
-  workbenchService,
 }: {
   t: ReturnType<typeof useI18n>;
   navigationHelper: ReturnType<typeof useNavigateHelper>;
   docCollection: Workspace;
   workspaceDialogService: WorkspaceDialogService;
-  workbenchService?: WorkbenchService;
 }) {
   const unsubs: Array<() => void> = [];
   unsubs.push(
@@ -43,7 +40,7 @@ export function registerAffineNavigationCommands({
       id: 'affine:goto-collection-list',
       category: 'affine:navigation',
       icon: <ArrowRightBigIcon />,
-      label: 'Go to Collection List',
+      label: t['com.ofuro.cmdk.navigation.goto-collection-list'](),
       run() {
         track.$.cmdk.navigation.navigate({
           to: 'collectionList',
@@ -59,29 +56,13 @@ export function registerAffineNavigationCommands({
       id: 'affine:goto-tag-list',
       category: 'affine:navigation',
       icon: <ArrowRightBigIcon />,
-      label: 'Go to Tag List',
+      label: t['com.ofuro.cmdk.navigation.goto-tag-list'](),
       run() {
         track.$.cmdk.navigation.navigate({
           to: 'tagList',
         });
 
         navigationHelper.jumpToTags(docCollection.id);
-      },
-    })
-  );
-
-  unsubs.push(
-    registerAffineCommand({
-      id: 'affine:goto-workspace',
-      category: 'affine:navigation',
-      icon: <ArrowRightBigIcon />,
-      label: t['com.affine.cmdk.affine.navigation.goto-workspace'](),
-      run() {
-        track.$.cmdk.navigation.navigate({
-          to: 'workspace',
-        });
-
-        workbenchService?.workbench.openWorkspaceSelector();
       },
     })
   );

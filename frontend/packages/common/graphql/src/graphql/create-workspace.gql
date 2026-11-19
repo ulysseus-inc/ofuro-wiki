@@ -1,5 +1,5 @@
-mutation createWorkspace {
-  createWorkspace {
+mutation createWorkspace($kind: WorkspaceKind) {
+  createWorkspace(kind: $kind) {
     id
     public
     createdAt

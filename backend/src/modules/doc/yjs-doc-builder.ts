@@ -445,65 +445,6 @@ function renderBlock(block: Y.Map<unknown>, numberedCounter: number): string {
   }
 }
 
-/**
- * ワークスペース root doc の meta.pages に docId を追加（またはタイトルを更新）する。
- * root doc が存在しない場合は新規作成する。
- * @returns 更新後の Yjs バイナリ
- */
-export function upsertWorkspaceRootDoc(
-  existingBlob: Buffer | null,
-  docId: string,
-  title: string,
-): Uint8Array {
-  const rootDoc = new Y.Doc();
-
-  // 既存スナップショットがあれば適用
-  if (existingBlob && existingBlob.length > 0) {
-    try {
-      Y.applyUpdate(rootDoc, new Uint8Array(existingBlob));
-    } catch {
-      // 破損していれば無視して新規作成
-    }
-  }
-
-  const metaMap = rootDoc.getMap<unknown>('meta');
-
-  // pages 配列がなければ初期化
-  if (!metaMap.has('pages')) {
-    metaMap.set('pages', new Y.Array());
-  }
-
-  const pages = metaMap.get('pages') as Y.Array<Y.Map<unknown>>;
-
-  // 既存エントリを探す
-  let found = false;
-  for (let i = 0; i < pages.length; i++) {
-    const entry = pages.get(i);
-    if (entry instanceof Y.Map && entry.get('id') === docId) {
-      rootDoc.transact(() => {
-        entry.set('title', title);
-        entry.set('updatedDate', Date.now());
-      });
-      found = true;
-      break;
-    }
-  }
-
-  if (!found) {
-    const entry = new Y.Map<unknown>();
-    entry.set('id', docId);
-    entry.set('title', title);
-    entry.set('tags', new Y.Array());
-    entry.set('createDate', Date.now());
-    entry.set('updatedDate', Date.now());
-    rootDoc.transact(() => {
-      pages.push([entry]);
-    });
-  }
-
-  return Y.encodeStateAsUpdate(rootDoc);
-}
-
 // docId のプレフィックスからフォルダ名を決定するマッピング
 const DOC_PREFIX_TO_FOLDER: Record<string, string> = {
   'summary-':   'summary',

@@ -14,7 +14,7 @@ describe('取り込みが作る台帳（#241）', () => {
   const WS = '11111111-1111-4111-8111-111111111111';
 
   const make = () => {
-    const service = new BackupService({} as any, {} as any, {} as any);
+    const service = new BackupService({} as any, {} as any, {} as any, {} as any);
     return service as any;
   };
 

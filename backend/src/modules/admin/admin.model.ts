@@ -19,6 +19,10 @@ export class AdminUserItem {
   @Field()
   isAdmin: boolean;
 
+  /** #297: root（`.env` の ROOT_EMAIL）。消せず、管理者も外せない */
+  @Field()
+  isRoot: boolean;
+
   @Field()
   emailVerified: boolean;
 
@@ -33,6 +37,19 @@ export class AdminUserList {
 
   @Field(() => Int)
   totalCount: number;
+}
+
+/** #297: 管理画面「ワークスペース」の 1 行（docs/workspace-model.md 12.8.1） */
+@ObjectType()
+export class AdminWorkspaceItem {
+  @Field()
+  id: string;
+
+  @Field(() => Int)
+  memberCount: number;
+
+  @Field()
+  updatedAt: Date;
 }
 
 @ObjectType()
