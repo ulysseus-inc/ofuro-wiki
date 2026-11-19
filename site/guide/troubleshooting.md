@@ -22,7 +22,7 @@ docker compose logs app --tail 50  # ofuro-wiki の記録（最後の 50 行）
 `.env` の `JWT_SECRET` が短すぎます。英数字だけで 32 文字以上にして、`docker compose up -d --no-build` で起動し直します。
 
 ::: warning 動いている Wiki の `JWT_SECRET` は変えない
-変えると、全員のサインインが切れます。SSO のシークレットも入れ直しになります（[連携](./integration#sso-の注意)）。
+変えると、全員のサインインが切れます。SSO のシークレットも入れ直しになります（[連携](./integration.md#sso-の注意)）。
 :::
 
 ### 記録に `P1000: Authentication failed against database server` と出る
@@ -55,9 +55,9 @@ ofuro-wiki が起動の途中です。`docker compose ps` で `app` が `(health
 
 | 出る文字 | 原因 | 直し方 |
 |---|---|---|
-| `NET::ERR_CERT_AUTHORITY_INVALID` | その PC が、認証局を信頼していない | [他の PC から開く](./install-server#_6-他の-pc-から開く) の手順で信頼させる。ブラウザを開き直す |
+| `NET::ERR_CERT_AUTHORITY_INVALID` | その PC が、認証局を信頼していない | [他の PC から開く](./install-server.md#_6-他の-pc-から開く) の手順で信頼させる。ブラウザを開き直す |
 | `NET::ERR_CERT_COMMON_NAME_INVALID` | 開いたアドレスが、証明書に入っていない | 下の「サーバーの IP アドレスが変わった」 |
-| `NET::ERR_CERT_DATE_INVALID` | 証明書の期限が切れた | [証明書を更新する](./operation#_4-証明書を更新する) |
+| `NET::ERR_CERT_DATE_INVALID` | 証明書の期限が切れた | [証明書を更新する](./operation.md#_4-証明書を更新する) |
 
 警告を無視して進むのはやめてください。パスワードを盗み見られても気付けません。
 
@@ -79,13 +79,13 @@ docker compose restart caddy
 
 - 認証局は同じなので、社内の PC に配り直す必要はありません
 - SSO を使っているなら、IdP 側のリダイレクト URI も直します
-- また変わらないよう、IP アドレスを固定してください（[サーバーの IP アドレスを固定する](./install-server#_1-サーバーの-ip-アドレスを固定する)）
+- また変わらないよう、IP アドレスを固定してください（[サーバーの IP アドレスを固定する](./install-server.md#_1-サーバーの-ip-アドレスを固定する)）
 
 ### 何も表示されず、時間切れになる
 
 - サーバーの電源が入っているか、`docker compose ps` で動いているか
 - 開いている IP アドレスが正しいか
-- サーバーのファイアウォール（ufw）で、80 と 443 を開けているか（[他の PC から開く](./install-server#_6-他の-pc-から開く) の「つながらないとき」）
+- サーバーのファイアウォール（ufw）で、80 と 443 を開けているか（[他の PC から開く](./install-server.md#_6-他の-pc-から開く) の「つながらないとき」）
 
 ## サインインできない
 
@@ -95,8 +95,8 @@ docker compose restart caddy
 
 | 原因 | 直し方 |
 |---|---|
-| パスワードの間違い | システム管理者が、パスワード変更 URL を発行する（[パスワードを忘れた](./users-and-access#_5-パスワードを忘れた・端末をなくした)） |
-| アカウントが無い（新規登録を無効にしている） | システム管理者がアカウントを作るか、ワークスペースに招待する（[ユーザーを追加する](./users-and-access#_1-ユーザーを追加する)） |
+| パスワードの間違い | システム管理者が、パスワード変更 URL を発行する（[パスワードを忘れた](./users-and-access.md#_5-パスワードを忘れた・端末をなくした)） |
+| アカウントが無い（新規登録を無効にしている） | システム管理者がアカウントを作るか、ワークスペースに招待する（[ユーザーを追加する](./users-and-access.md#_1-ユーザーを追加する)） |
 | 続けて 10 回間違えて、ロックされた | 15 分待つ |
 
 ### root のパスワードを忘れた・システム管理者が全員パスワードを忘れた
@@ -120,10 +120,10 @@ IdP 側に登録したリダイレクト URI が、管理画面に出ている�
 
 | 症状 | 原因 | 直し方 |
 |---|---|---|
-| 別のタブからの貼り付けが効かない | `http://` で開いている | `https://` で開く（[社内サーバーへの導入](./install-server)） |
-| 自動バックアップが昼の 12:00 に動く | ofuro-wiki の中の時刻が日本時間でない | `docker-compose.override.yml` に `TZ: Asia/Tokyo` を足す（[設定ファイルを作る](./install-server#_4-設定ファイルを作る)）。起動し直す |
+| 別のタブからの貼り付けが効かない | `http://` で開いている | `https://` で開く（[社内サーバーへの導入](./install-server.md)） |
+| 自動バックアップが昼の 12:00 に動く | ofuro-wiki の中の時刻が日本時間でない | `docker-compose.override.yml` に `TZ: Asia/Tokyo` を足す（[設定ファイルを作る](./install-server.md#_4-設定ファイルを作る)）。起動し直す |
 | 監査ログの接続元が、全員同じアドレスになる | `.env` に `TRUST_PROXY=1` が無い | 足して、起動し直す |
-| URL は正しいのに、AI が「サーバーに接続できない」で失敗する | Node.js が、認証局を見ていない | `NODE_EXTRA_CA_CERTS` を設定する（[連携](./integration#ai-エージェント側-使う人の-pc)） |
+| URL は正しいのに、AI が「サーバーに接続できない」で失敗する | Node.js が、認証局を見ていない | `NODE_EXTRA_CA_CERTS` を設定する（[連携](./integration.md#ai-エージェント側-使う人の-pc)） |
 | 始業時など、サインインが集中すると遅い | パスワードの照合は、わざと重くしてある | [デプロイガイドの「同時ログインが集中すると遅い」](https://github.com/ulysseus-inc/ofuro-wiki/blob/main/docs/deploy/README.md#始業時など同時ログインが集中すると遅いタイムアウトする) |
 
 ## それでも直らないとき

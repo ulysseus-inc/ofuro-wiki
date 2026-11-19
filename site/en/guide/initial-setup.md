@@ -23,7 +23,7 @@ To check that you are a system administrator, open **Settings** on the left. If 
 
 ::: tip Keep separate accounts for administration and daily use
 root and system administrators can open every shared workspace. We recommend doing your everyday reading and writing with a separate regular account.
-Add more system administrators in **Settings** → **User Management** ([Users and access](./users-and-access#_7-add-system-administrators)).
+Add more system administrators in **Settings** → **User Management** ([Users and access](./users-and-access.md#_7-add-system-administrators)).
 :::
 
 ## 2. Disable new registration
@@ -33,10 +33,10 @@ If you want system administrators to decide who can use it, disable it.
 
 Turn off **Settings** → **Server Settings** → **Allow New Registration**.
 
-![Server settings](/images/en/setup/server-settings.png)
+![Server settings](../../images/en/setup/server-settings.png)
 
 After that, signing in with an unregistered address shows "Invalid password" and no account is created.
-Accounts are created by a system administrator, or by people themselves from a workspace invitation email or link ([Users and access](./users-and-access)).
+Accounts are created by a system administrator, or by people themselves from a workspace invitation email or link ([Users and access](./users-and-access.md)).
 
 ::: info Accounts that can still be created
 The `ROOT_EMAIL` address, and people who received an invitation email or link, can create accounts even when new registration is disabled.
@@ -66,7 +66,7 @@ To split by department, create more shared workspaces the same way. People who a
 Rename the open workspace in **Settings** → **Workspace** → **Preference** → **Workspace name**.
 The change is shown to everyone who was invited.
 
-![Workspace name](/images/en/setup/workspace-name.png)
+![Workspace name](../../images/en/setup/workspace-name.png)
 
 ### Sample pages
 
@@ -95,6 +95,6 @@ If you do not want connections outside your organization, agree not to use embed
 
 ## Next steps
 
-- Create accounts and invite people to the shared workspace ([Users and access](./users-and-access))
-- Point users to the [User guide](/en/user/). It can also be opened from **User guide** on the left side of the ofuro-wiki screen
-- Set up backups ([Operation](./operation))
+- Create accounts and invite people to the shared workspace ([Users and access](./users-and-access.md))
+- Point users to the [User guide](../user/index.md). It can also be opened from **User guide** on the left side of the ofuro-wiki screen
+- Set up backups ([Operation](./operation.md))

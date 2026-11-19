@@ -40,8 +40,8 @@ This demo is shared by everyone and is reset every night at 3:00 (JST). Do not e
 ## What you need
 
 - One server that runs **Docker**
-  - For use in your organization we recommend Ubuntu Server (physical or virtual) ([Install on a server](./install-server))
-  - If you cannot prepare Linux, a Windows 11 PC with 8 GB of memory or more also works ([Appendix](./install-windows))
+  - For use in your organization we recommend Ubuntu Server (physical or virtual) ([Install on a server](./install-server.md))
+  - If you cannot prepare Linux, a Windows 11 PC with 8 GB of memory or more also works ([Appendix](./install-windows.md))
 - A browser on each user's PC or phone
 
 No external services are required.
@@ -50,8 +50,8 @@ No external services are required.
 
 | Goal | Chapters |
 |---|---|
-| Try it on your own PC first | [Quick start](./quickstart) |
-| Start using it as your organization's wiki | [Install on a server](./install-server) → [Initial setup](./initial-setup) → [Users and access](./users-and-access) |
-| Keep it running | [Operation](./operation) (backups, upgrading) |
-| Something does not work | [Troubleshooting](./troubleshooting) |
-| Show users how to use it | [User guide](/en/user/) |
+| Try it on your own PC first | [Quick start](./quickstart.md) |
+| Start using it as your organization's wiki | [Install on a server](./install-server.md) → [Initial setup](./initial-setup.md) → [Users and access](./users-and-access.md) |
+| Keep it running | [Operation](./operation.md) (backups, upgrading) |
+| Something does not work | [Troubleshooting](./troubleshooting.md) |
+| Show users how to use it | [User guide](../user/index.md) |

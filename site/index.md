@@ -41,6 +41,6 @@ features:
 
 <div class="home-more">
 
-[機能一覧はこちら →](/guide/introduction#特徴)
+[機能一覧はこちら →](./guide/introduction.md#特徴)
 
 </div>

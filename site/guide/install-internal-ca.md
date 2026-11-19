@@ -1,6 +1,6 @@
 # 社内のドメイン名・認証局を使う
 
-[社内サーバーへの導入](./install-server) では、IP アドレスと mkcert で HTTPS にしました。
+[社内サーバーへの導入](./install-server.md) では、IP アドレスと mkcert で HTTPS にしました。
 社内に DNS や認証局がある場合は、次のようにできます。どちらか片方だけでもかまいません。
 
 | | できること |
@@ -56,7 +56,7 @@ docker compose restart caddy
 社内の PC で `https://wiki.corp.example.com` を開き、警告が出なければ完了です。
 
 - 社員には、新しい URL を知らせてください。古い URL（IP アドレス）のブックマークは、作り直してもらいます
-- SSO を使っているなら、IdP 側のリダイレクト URI も直します（[連携](./integration#_1-リダイレクト-uri-を控える)）
+- SSO を使っているなら、IdP 側のリダイレクト URI も直します（[連携](./integration.md#_1-リダイレクト-uri-を控える)）
 - AI 用の CLI を使っている人は、新しい URL で `login` し直します
 
 ## 社内の認証局の証明書を使う
@@ -96,5 +96,5 @@ docker compose restart caddy
 社内の認証局の証明書には、期限があります（1〜2 年が多い）。期限の前に発行し直してもらい、2. と同じく置き換えて `docker compose restart caddy` します。
 
 ::: warning AI 用の CLI は、社内の認証局も見ません
-Node.js は、PC の信頼している認証局を見ません。社内の認証局でも、`NODE_EXTRA_CA_CERTS` に、その認証局の証明書（PEM）の場所を設定します（[連携](./integration#ai-エージェント側-使う人の-pc)）。
+Node.js は、PC の信頼している認証局を見ません。社内の認証局でも、`NODE_EXTRA_CA_CERTS` に、その認証局の証明書（PEM）の場所を設定します（[連携](./integration.md#ai-エージェント側-使う人の-pc)）。
 :::

@@ -30,7 +30,7 @@ For pages that are mostly read, turn on protected mode to avoid changing them by
 2. Even people who can edit open the page as read-only. A banner appears at the top.
 3. To edit, turn it off in the same place.
 
-Protected mode is not a permission. Anyone who can edit can turn it off. To control who can read or edit, use [Sharing and permissions](./sharing).
+Protected mode is not a permission. Anyone who can edit can turn it off. To control who can read or edit, use [Sharing and permissions](./sharing.md).
 
 ## Import and export
 

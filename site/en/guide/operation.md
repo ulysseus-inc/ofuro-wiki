@@ -7,7 +7,7 @@ After installation, there are two main ongoing tasks.
 
 Also, renew the certificate about once every two years.
 
-Run commands in `~/ofuro-wiki` on the server (the folder created in [Install on a server](./install-server)).
+Run commands in `~/ofuro-wiki` on the server (the folder created in [Install on a server](./install-server.md)).
 
 ## 1. Backups
 
@@ -23,14 +23,14 @@ Turn on **Settings** → **Backup** → automatic backups.
 | Schedule | Daily, weekly, monthly |
 | Retention (days) | Backups older than this are deleted |
 
-Automatic backups run at **3:00** in the time zone set with `TZ` ([Install on a server](./install-server)).
+Automatic backups run at **3:00** in the time zone set with `TZ` ([Install on a server](./install-server.md)).
 On a day when the backup fails, old backups are not deleted.
 
 ### Back up now
 
 Press **Create Backup**. It is finished when the status changes from in progress to completed.
 
-![Backup](/images/en/operation/backup.png)
+![Backup](../../images/en/operation/backup.png)
 
 **Download** saves the ZIP to your PC.
 
@@ -79,7 +79,7 @@ Return the whole system to the time of a backup.
 2. Press **Restore**
 3. Confirm with **Restore**
 
-![Restore](/images/en/operation/restore.png)
+![Restore](../../images/en/operation/restore.png)
 
 ::: danger All current data is replaced
 Pages created and changes made after the backup are lost. This cannot be undone.
@@ -96,7 +96,7 @@ Users, passwords, and permissions also return to the time of the backup.
 
 **Settings** → **About ofuro-wiki** shows the version.
 
-![Version](/images/en/operation/about.png)
+![Version](../../images/en/operation/about.png)
 
 Find new versions in the [list of releases](https://github.com/ulysseus-inc/ofuro-wiki/releases).
 **Read the notes for that version before upgrading.** Some versions need extra steps before or after.

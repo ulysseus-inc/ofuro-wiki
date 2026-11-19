@@ -1,6 +1,6 @@
 # Use your own domain and CA
 
-[Install on a server](./install-server) used an IP address and mkcert for HTTPS.
+[Install on a server](./install-server.md) used an IP address and mkcert for HTTPS.
 If your organization has DNS or a certificate authority (CA), you can do the following. Either one alone is fine.
 
 | | What you get |
@@ -56,7 +56,7 @@ docker compose restart caddy
 Open `https://wiki.corp.example.com` from a PC. You are done if no warning appears.
 
 - Tell everyone the new URL. Ask them to recreate bookmarks that use the old URL (the IP address)
-- If you use SSO, also fix the redirect URI on the IdP side ([Integrations](./integration#_1-note-the-redirect-uri))
+- If you use SSO, also fix the redirect URI on the IdP side ([Integrations](./integration.md#_1-note-the-redirect-uri))
 - People who use the AI CLI run `login` again with the new URL
 
 ## Use a certificate from your internal CA
@@ -96,5 +96,5 @@ Open it from a PC. You are done if no warning appears. You may remove mkcert's `
 Certificates from an internal CA expire (often after 1–2 years). Before then, have it reissued, replace it as in step 2, and run `docker compose restart caddy`.
 
 ::: warning The AI CLI does not look at your internal CA either
-Node.js does not look at the CAs your PC trusts. Even with an internal CA, set `NODE_EXTRA_CA_CERTS` to the location of that CA's certificate (PEM) ([Integrations](./integration#ai-agents)).
+Node.js does not look at the CAs your PC trusts. Even with an internal CA, set `NODE_EXTRA_CA_CERTS` to the location of that CA's certificate (PEM) ([Integrations](./integration.md#ai-agents)).
 :::

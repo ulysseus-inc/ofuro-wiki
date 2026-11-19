@@ -3,7 +3,7 @@
 Run ofuro-wiki on your own PC and try it in a browser. It takes about 10 minutes.
 
 ::: tip This chapter is for trying it out
-It assumes you use it only from your own PC. To use it from other PCs in your organization, go to [Install on a server](./install-server).
+It assumes you use it only from your own PC. To use it from other PCs in your organization, go to [Install on a server](./install-server.md).
 :::
 
 ## What you need
@@ -102,13 +102,13 @@ Open **[http://localhost:3010](http://localhost:3010)**.
 2. Choose a password (8 characters or more) and press **Sign in**
 3. A **Create account** screen appears. Press **Create account**
 
-![The Create account screen](/images/en/quickstart/signin.png)
+![The Create account screen](../../images/en/quickstart/signin.png)
 
 When you sign in with an address that has no account, this confirmation appears before the account is created. If you mistyped the address, go back with **Back to sign in**.
 
 After signing in, your workspace is created with some sample pages.
 
-![The first workspace](/images/en/quickstart/workspace.png)
+![The first workspace](../../images/en/quickstart/workspace.png)
 
 Create a page with **New doc** and type `/` to see the blocks you can insert.
 

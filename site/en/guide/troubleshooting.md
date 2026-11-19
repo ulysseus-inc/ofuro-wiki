@@ -22,7 +22,7 @@ docker compose logs app --tail 50  # ofuro-wiki's log (last 50 lines)
 `JWT_SECRET` in `.env` is too short. Make it 32 or more letters and digits, then restart with `docker compose up -d --no-build`.
 
 ::: warning Do not change `JWT_SECRET` of a running wiki
-Changing it signs everyone out, and the SSO secret must be entered again ([Integrations](./integration#notes-on-sso)).
+Changing it signs everyone out, and the SSO secret must be entered again ([Integrations](./integration.md#notes-on-sso)).
 :::
 
 ### The log says `P1000: Authentication failed against database server`
@@ -55,9 +55,9 @@ The code shown on the warning page tells you the cause.
 
 | Code | Cause | Fix |
 |---|---|---|
-| `NET::ERR_CERT_AUTHORITY_INVALID` | That PC does not trust the CA | Make it trust the CA as in [Open it from other PCs](./install-server#_6-open-it-from-other-pcs), then reopen the browser |
+| `NET::ERR_CERT_AUTHORITY_INVALID` | That PC does not trust the CA | Make it trust the CA as in [Open it from other PCs](./install-server.md#_6-open-it-from-other-pcs), then reopen the browser |
 | `NET::ERR_CERT_COMMON_NAME_INVALID` | The address you opened is not in the certificate | See "The server's IP address changed" below |
-| `NET::ERR_CERT_DATE_INVALID` | The certificate expired | [Renew the certificate](./operation#_4-renew-the-certificate) |
+| `NET::ERR_CERT_DATE_INVALID` | The certificate expired | [Renew the certificate](./operation.md#_4-renew-the-certificate) |
 
 Do not click through the warning. You would not notice if your password were being intercepted.
 
@@ -79,13 +79,13 @@ docker compose restart caddy
 
 - The CA is the same, so you do not need to redistribute it to your PCs
 - If you use SSO, also fix the redirect URI on the IdP side
-- Fix the IP address so it does not change again ([Fix the server's IP address](./install-server#_1-fix-the-server-s-ip-address))
+- Fix the IP address so it does not change again ([Fix the server's IP address](./install-server.md#_1-fix-the-server-s-ip-address))
 
 ### Nothing appears and it times out
 
 - Is the server on, and does `docker compose ps` show it running?
 - Are you opening the right IP address?
-- Are ports 80 and 443 open in the server's firewall (ufw)? (See "If you cannot connect" in [Open it from other PCs](./install-server#_6-open-it-from-other-pcs))
+- Are ports 80 and 443 open in the server's firewall (ufw)? (See "If you cannot connect" in [Open it from other PCs](./install-server.md#_6-open-it-from-other-pcs))
 
 ## Cannot sign in
 
@@ -95,8 +95,8 @@ One of the following. The screen does not tell you which (to give attackers no c
 
 | Cause | Fix |
 |---|---|
-| Wrong password | A system admin issues a password URL ([Forgotten password](./users-and-access#_5-forgotten-password-or-lost-device)) |
-| No account (new registration is disabled) | A system admin creates the account or invites the person to a workspace ([Add users](./users-and-access#_1-add-users)) |
+| Wrong password | A system admin issues a password URL ([Forgotten password](./users-and-access.md#_5-forgotten-password-or-lost-device)) |
+| No account (new registration is disabled) | A system admin creates the account or invites the person to a workspace ([Add users](./users-and-access.md#_1-add-users)) |
 | Locked after 10 failures in a row | Wait 15 minutes |
 
 ### root forgot the password, or every system admin forgot theirs
@@ -120,10 +120,10 @@ For other symptoms, see [SSO setup (details)](https://github.com/ulysseus-inc/of
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Pasting from another tab does not work | Opened with `http://` | Open with `https://` ([Install on a server](./install-server)) |
-| Automatic backups run at the wrong hour | ofuro-wiki's clock is not in your time zone | Add `TZ` (for example `TZ: Asia/Tokyo`) to `docker-compose.override.yml` ([Create the settings files](./install-server#_4-create-the-settings-files)) and restart |
+| Pasting from another tab does not work | Opened with `http://` | Open with `https://` ([Install on a server](./install-server.md)) |
+| Automatic backups run at the wrong hour | ofuro-wiki's clock is not in your time zone | Add `TZ` (for example `TZ: Asia/Tokyo`) to `docker-compose.override.yml` ([Create the settings files](./install-server.md#_4-create-the-settings-files)) and restart |
 | The audit log shows the same source address for everyone | `TRUST_PROXY=1` is missing from `.env` | Add it and restart |
-| The URL is right but the AI fails with "cannot connect to the server" | Node.js does not see your CA | Set `NODE_EXTRA_CA_CERTS` ([Integrations](./integration#ai-agents)) |
+| The URL is right but the AI fails with "cannot connect to the server" | Node.js does not see your CA | Set `NODE_EXTRA_CA_CERTS` ([Integrations](./integration.md#ai-agents)) |
 | Slow when many people sign in at once, such as at the start of the day | Password checking is deliberately expensive | See ["slow when many people sign in at once" in the deploy guide](https://github.com/ulysseus-inc/ofuro-wiki/blob/main/docs/deploy/README.md) (in Japanese) |
 
 ## If it still does not work

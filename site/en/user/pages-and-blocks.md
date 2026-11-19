@@ -15,7 +15,7 @@ You can rearrange blocks freely and build a page by combining them like parts.
 | Operation | How |
 |---|---|
 | Reorder | Drag the handle (⋮⋮) that appears to the left of a block |
-| Change the type | Type `/` at the start of a line and pick a type ([Using the editor](./editor)) |
+| Change the type | Type `/` at the start of a line and pick a type ([Using the editor](./editor.md)) |
 | Delete | Select the block and press Delete |
 
 ## Page hierarchy

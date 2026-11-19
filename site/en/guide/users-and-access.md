@@ -14,14 +14,14 @@ In ofuro-wiki, pages you have no permission to read never appear in lists or sea
 
 ## 1. Add users
 
-Once new registration is disabled ([Initial setup](./initial-setup#_2-disable-new-registration)), system administrators create accounts.
+Once new registration is disabled ([Initial setup](./initial-setup.md#_2-disable-new-registration)), system administrators create accounts.
 People who received an invitation email or link can also create their own account from it (step 2).
 
 ### One at a time
 
 In **Settings** → **User Management** → **Add User**, enter the email address, a password (8 characters or more), and a name, then create the user.
 
-![User management](/images/en/access/users.png)
+![User management](../../images/en/access/users.png)
 
 Tell the person their email address and password.
 Ask them to change the password first in **Settings** → **Account**.
@@ -50,7 +50,7 @@ System administrators and workspace admins can invite. You cannot invite anyone 
 
 Open the workspace, then in **Settings** → **Workspace** → **Members** → **Invite members**, enter email addresses and send the invites. Separate several addresses with commas.
 
-![Invite members](/images/en/access/invite.png)
+![Invite members](../../images/en/access/invite.png)
 
 - **People who already have an account become members immediately.** No email setup is needed
 - **People without an account** receive an invitation email (email must be set up). Without email, use **Copy URL** in the message at the bottom right of the screen and give the invitation URL to them. They create an account from it and press **Accept & Join** to join — even when new registration is disabled
@@ -77,7 +77,7 @@ Roles inside a shared workspace and what they can do. How each is decided differ
 
 Change roles in **Settings** → **Workspace** → **Members** with the "︙" on the person's row.
 
-![Changing a role](/images/en/access/role-menu.png)
+![Changing a role](../../images/en/access/role-menu.png)
 
 | Menu | What it does | Shown to |
 |---|---|---|
@@ -95,7 +95,7 @@ For pages that only some people should see, such as HR or management pages, rest
 3. Type a name in **Invite other members** and pick the people who should see it
 4. Choose the permission on the right (table below), then press **Invite**
 
-![General access](/images/en/access/general-access.png)
+![General access](../../images/en/access/general-access.png)
 
 | Permission | Read | Write, move to trash | Change this page's sharing |
 |---|:-:|:-:|:-:|
@@ -107,7 +107,7 @@ For pages that only some people should see, such as HR or management pages, rest
 - "Change this page's sharing" means showing or hiding the page for other people and changing their permissions. **People with Can manage can show the page to still more people**
 - For people with no access, the page never appears in lists or search results
 
-![Picking people](/images/en/access/share-invite.png)
+![Picking people](../../images/en/access/share-invite.png)
 
 When you pick someone, the permission starts as **Can edit**. To let them only read, change it to **Read only** before inviting.
 With **Can manage**, they can show the page to still more people.

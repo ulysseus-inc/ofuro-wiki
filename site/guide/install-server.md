@@ -30,7 +30,7 @@ Ubuntu の入れ方は、[Ubuntu Server の公式の手順](https://ubuntu.com/t
 
 ## 0. サーバーの時刻を日本時間にする
 
-サーバーのタイムゾーンを日本時間にします。[運用](./operation) の章で、決まった時刻にバックアップを写すときの基準になります。
+サーバーのタイムゾーンを日本時間にします。[運用](./operation.md) の章で、決まった時刻にバックアップを写すときの基準になります。
 
 ```bash
 sudo timedatectl set-timezone Asia/Tokyo
@@ -111,7 +111,7 @@ mkdir -p ~/ofuro-wiki/certs && cd ~/ofuro-wiki
 mkcert -cert-file certs/cert.pem -key-file certs/key.pem 192.168.1.50 localhost
 ```
 
-`certs` フォルダーに `cert.pem` と `key.pem` ができれば完了です。証明書の期限は 2 年 3 か月です（[証明書を更新する](./operation#_4-証明書を更新する)）。
+`certs` フォルダーに `cert.pem` と `key.pem` ができれば完了です。証明書の期限は 2 年 3 か月です（[証明書を更新する](./operation.md#_4-証明書を更新する)）。
 初めて実行したときに、認証局（`~/.local/share/mkcert`）も作られます。
 「the local CA is not installed in the system trust store」と出ますが、気にしなくてかまいません。認証局を信頼させるのは、サーバーではなく社内の PC です（手順 6）。
 
@@ -149,7 +149,7 @@ chmod 600 .env
 | `ALLOWED_ORIGINS` | 受け付ける接続元。`BASE_URL` と同じにします |
 | `TRUST_PROXY` | Caddy を通して受けるための設定。これが無いと、監査ログの接続元がすべて Caddy になります |
 
-そのほかの項目は [クイックスタート](./quickstart#_1-フォルダーと設定ファイルを作る) と同じです。
+そのほかの項目は [クイックスタート](./quickstart.md#_1-フォルダーと設定ファイルを作る) と同じです。
 `chmod 600` で、`.env` を自分だけが読めるようにしています。
 
 **HTTPS の受け口の設定**（`Caddyfile`）を作ります。そのまま実行します。
@@ -220,7 +220,7 @@ curl -k https://localhost/api/health
 
 ::: warning 社内で使い始める前に
 初期の設定では新規登録が有効になっており、Wiki の URL を開ける人なら誰でも、自分でアカウントを作れます。
-root が最初にサインインしたら、必要に応じて [初期設定](./initial-setup#_2-新規登録を無効にする) の章で新規登録を無効にしてください。
+root が最初にサインインしたら、必要に応じて [初期設定](./initial-setup.md#_2-新規登録を無効にする) の章で新規登録を無効にしてください。
 :::
 
 ## 6. 他の PC から開く
@@ -259,7 +259,7 @@ sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keyc
 
 社内の PC のブラウザで **https://192.168.1.50** を開きます。鍵のマークが出て、警告が出なければ完了です。
 
-最初のサインインは、`.env` の `ROOT_EMAIL` のアドレスで行います（[クイックスタートの 3.](./quickstart#_3-ブラウザで開く) と同じです）。
+最初のサインインは、`.env` の `ROOT_EMAIL` のアドレスで行います（[クイックスタートの 3.](./quickstart.md#_3-ブラウザで開く) と同じです）。
 
 ::: details つながらないとき
 サーバーでファイアウォール（ufw）を有効にしている場合は、80 と 443 を開けます。
@@ -277,4 +277,4 @@ Ubuntu Server の初期の状態では、ufw は無効です（`sudo ufw status`
 2. 片方で文字を打ち、もう片方にすぐ出ることを確かめます
 3. サーバーを再起動し（`sudo reboot`）、数分待ちます。誰も触らずに、社内の PC から開けることを確かめます
 
-ここまでできれば、導入は完了です。次は [初期設定](./initial-setup) に進みます。
+ここまでできれば、導入は完了です。次は [初期設定](./initial-setup.md) に進みます。

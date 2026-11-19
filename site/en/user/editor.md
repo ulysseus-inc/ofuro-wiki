@@ -49,6 +49,6 @@ Paste a link to YouTube, GitHub, Figma, and so on, and it is shown as a card or 
 
 Type `@` in the body to see candidate pages and members.
 
-- **Pick a page** to insert a link to it. The linked page records it as a backlink ([Handy features](./features)).
+- **Pick a page** to insert a link to it. The linked page records it as a backlink ([Handy features](./features.md)).
 - **Pick a member** to send them a notification.
 - You can mention only people who are in the same workspace and can read the page.

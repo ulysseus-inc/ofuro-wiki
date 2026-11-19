@@ -41,4 +41,4 @@ Pages are grouped into "workspaces". Click the workspace name at the top left to
 ## It works on your phone
 
 Open the same URL in your phone's browser and you get a phone-friendly screen. No app to install.
-See [On your phone](./mobile) for details.
+See [On your phone](./mobile.md) for details.

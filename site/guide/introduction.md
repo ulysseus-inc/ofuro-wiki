@@ -40,8 +40,8 @@ Notion のようなブロックエディタで書き、社内の知識を共有�
 ## 必要なもの
 
 - **Docker** が動くサーバー 1 台
-  - 社内で使うなら、Ubuntu Server（実機・仮想マシンのどちらでも）を勧めます（[社内サーバーへの導入](./install-server)）
-  - Linux を用意できないときは、メモリ 8GB 以上の Windows 11 PC でも動きます（[付録](./install-windows)）
+  - 社内で使うなら、Ubuntu Server（実機・仮想マシンのどちらでも）を勧めます（[社内サーバーへの導入](./install-server.md)）
+  - Linux を用意できないときは、メモリ 8GB 以上の Windows 11 PC でも動きます（[付録](./install-windows.md)）
 - 使う人の PC かスマホのブラウザ
 
 外部のサービスには依存しません。
@@ -50,8 +50,8 @@ Notion のようなブロックエディタで書き、社内の知識を共有�
 
 | 目的 | 読む章 |
 |---|---|
-| まず手元で動かしてみたい | [クイックスタート](./quickstart) |
-| 社内 Wiki として使い始めたい | [社内サーバーへの導入](./install-server) → [初期設定](./initial-setup) → [ユーザーとアクセス制限](./users-and-access) |
-| 運用を続ける | [運用](./operation)（バックアップ・バージョンアップ） |
-| うまく動かない | [困ったとき](./troubleshooting) |
-| 使う人に使い方を案内したい | [使い方](/user/) |
+| まず手元で動かしてみたい | [クイックスタート](./quickstart.md) |
+| 社内 Wiki として使い始めたい | [社内サーバーへの導入](./install-server.md) → [初期設定](./initial-setup.md) → [ユーザーとアクセス制限](./users-and-access.md) |
+| 運用を続ける | [運用](./operation.md)（バックアップ・バージョンアップ） |
+| うまく動かない | [困ったとき](./troubleshooting.md) |
+| 使う人に使い方を案内したい | [使い方](../user/index.md) |

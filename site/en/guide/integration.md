@@ -64,11 +64,11 @@ Enter the values in **Settings** → **Server Settings** → **Single sign-on (O
 Use **Test connection** to check that the issuer URL and the saved client ID and secret are correct, then turn on **Enable single sign-on**.
 A wrong redirect URI cannot be detected by the connection test, so finish by actually signing in.
 
-![SSO settings](/images/en/integration/sso-settings.png)
+![SSO settings](../../images/en/integration/sso-settings.png)
 
 A button appears on the sign-in screen. It opens the IdP in a new tab, and after you sign in there you are in ofuro-wiki.
 
-![SSO button](/images/en/integration/sso-signin.png)
+![SSO button](../../images/en/integration/sso-signin.png)
 
 ### Should automatic account creation be on
 
@@ -77,7 +77,7 @@ A button appears on the sign-in screen. It opens the IdP in a new tab, and after
 | Only people in your organization can use it (Workspace "Internal", Entra ID, Keycloak) | On | New staff can start right away |
 | People outside can also use it (regular Google accounts and so on) | **Off** | If on, **anyone** who can sign in to that IdP can use your wiki |
 
-When it is off, an administrator creates accounts first ([Users and access](./users-and-access)). If the email address matches, SSO signs in to the same account.
+When it is off, an administrator creates accounts first ([Users and access](./users-and-access.md)). If the email address matches, SSO signs in to the same account.
 
 ### Notes on SSO
 
@@ -92,7 +92,7 @@ When it is off, an administrator creates accounts first ([Users and access](./us
 |---|---|
 | No SSO button on the sign-in screen | The issuer URL, client ID, or secret is empty. Review the items in step 3 |
 | 「IdP との認証に失敗しました」 (authentication with the IdP failed) | The IdP rejects the client ID and secret pair. **Suspect the secret first.** Copy it again from the IdP and re-enter it (for Google, the one starting with `GOCSPX-`) |
-| `redirect_uri_mismatch` on the IdP screen | The redirect URI registered at the IdP differs from the value in step 1, even by one character ([Troubleshooting](./troubleshooting#sso-shows-redirect-uri-mismatch)) |
+| `redirect_uri_mismatch` on the IdP screen | The redirect URI registered at the IdP differs from the value in step 1, even by one character ([Troubleshooting](./troubleshooting.md#sso-shows-redirect-uri-mismatch)) |
 
 For details, see [SSO setup (details)](https://github.com/ulysseus-inc/ofuro-wiki/blob/main/docs/sso-setup.md).
 
@@ -105,11 +105,11 @@ Its edits appear right away in open browsers. Who edited is recorded in the audi
 
 ### On the ofuro-wiki side (administrator)
 
-1. Create an account for the AI ([Add users](./users-and-access#_1-add-users))
+1. Create an account for the AI ([Add users](./users-and-access.md#_1-add-users))
    - Create **one per person** (for example `taro+ai@example.com`). You can tell whose AI edited, and stop only that person's AI
    - **Set a password.** The AI signs in with a password. Even if you use SSO, create the AI account separately with a password (accounts created by SSO have no password, so the AI cannot sign in with them)
    - Do not make it an administrator
-2. Invite it to a workspace and choose its role: member to let it write, reader to let it only read. Pages it should not touch can be [restricted page by page](./users-and-access#_4-restrict-who-can-see-a-page)
+2. Invite it to a workspace and choose its role: member to let it write, reader to let it only read. Pages it should not touch can be [restricted page by page](./users-and-access.md#_4-restrict-who-can-see-a-page)
 
 To stop an AI, change that account's password or delete it.
 
@@ -139,7 +139,7 @@ Finally, ask the AI to "show me the list of ofuro-wiki pages". If a list appears
 The AI CLI runs on Node.js. **Node.js does not look at the CAs installed on your PC.**
 As is, it fails with "cannot connect to the server".
 
-On the PC that runs the AI, set the environment variable `NODE_EXTRA_CA_CERTS` to the location of the CA (the `rootCA.pem` distributed in [Install on a server](./install-server#_6-open-it-from-other-pcs)) before starting `login` and Claude Code.
+On the PC that runs the AI, set the environment variable `NODE_EXTRA_CA_CERTS` to the location of the CA (the `rootCA.pem` distributed in [Install on a server](./install-server.md#_6-open-it-from-other-pcs)) before starting `login` and Claude Code.
 
 ```bash
 # Mac / Linux (put it in ~/.bashrc or ~/.zshrc)

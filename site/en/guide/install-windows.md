@@ -4,7 +4,7 @@ Steps to turn one Windows PC into your wiki server when you cannot prepare a Lin
 
 ::: tip Use Ubuntu if you can
 On Windows, keeping Docker Desktop running needs workarounds such as automatic sign-in.
-If you can prepare a server, we recommend [Install on a server](./install-server) (Ubuntu).
+If you can prepare a server, we recommend [Install on a server](./install-server.md) (Ubuntu).
 :::
 
 ```
@@ -126,7 +126,7 @@ ROOT_EMAIL=$rootEmail
 | `ALLOWED_ORIGINS` | Accepted origins. Same as `BASE_URL` |
 | `TRUST_PROXY` | Needed when requests come through Caddy. Without it, the audit log records Caddy as the source of every request |
 
-The other items are the same as in the [Quick start](./quickstart#_1-create-a-folder-and-the-settings-files).
+The other items are the same as in the [Quick start](./quickstart.md#_1-create-a-folder-and-the-settings-files).
 
 Create the **HTTPS front end settings** (`Caddyfile`). Run it as is.
 
@@ -188,11 +188,11 @@ When `docker compose ps` shows `app` as `(healthy)`, it is running. The first st
 Open **https://192.168.1.50** in this PC's browser and check that the sign-in screen appears.
 While starting up it shows `502`; wait a little and reload.
 
-Sign in for the first time with the `ROOT_EMAIL` address in `.env` (same as [Quick start step 3](./quickstart#_3-open-it-in-a-browser)).
+Sign in for the first time with the `ROOT_EMAIL` address in `.env` (same as [Quick start step 3](./quickstart.md#_3-open-it-in-a-browser)).
 
 ::: warning Before your organization starts using it
 By default, new registration is enabled, and anyone who can open the wiki's URL can create their own account.
-After root signs in for the first time, disable new registration if needed in [Initial setup](./initial-setup#_2-disable-new-registration).
+After root signs in for the first time, disable new registration if needed in [Initial setup](./initial-setup.md#_2-disable-new-registration).
 :::
 
 ## 6. Open it from other PCs
@@ -278,4 +278,4 @@ Update restarts do not happen during those hours.
 2. Type on one and check that it appears on the other right away
 3. Restart the wiki PC and wait a few minutes. Without touching anything, check that the PCs can open it again
 
-That completes the installation. Next, go to [Initial setup](./initial-setup).
+That completes the installation. Next, go to [Initial setup](./initial-setup.md).

@@ -64,11 +64,11 @@ https://192.168.1.50/oauth/callback
 「**接続をテスト**」で、発行者 URL と、保存したクライアント ID・シークレットの組み合わせが正しいかを確かめてから、「**シングルサインオンを有効にする**」をオンにします。
 リダイレクト URI の誤りは接続のテストでは分からないので、最後に実際にサインインして確かめてください。
 
-![SSO の設定](/images/integration/sso-settings.png)
+![SSO の設定](../images/integration/sso-settings.png)
 
 サインイン画面にボタンが出ます。押すと新しいタブで IdP の画面が開き、サインインすると ofuro-wiki に入れます。
 
-![SSO のボタン](/images/integration/sso-signin.png)
+![SSO のボタン](../images/integration/sso-signin.png)
 
 ### 自動作成をオンにするか
 
@@ -77,7 +77,7 @@ https://192.168.1.50/oauth/callback
 | 社内の人だけが使える（Workspace の「内部」・Entra ID・Keycloak） | オン | 入社した人が、すぐ使える |
 | 社外の人も使える（一般の Google アカウントなど） | **オフ** | オンにすると、その IdP にサインインできる人が**誰でも**使えてしまう |
 
-オフのときは、管理者が先にアカウントを作っておきます（[ユーザーとアクセス制限](./users-and-access)）。メールアドレスが一致すれば、SSO で同じアカウントに入れます。
+オフのときは、管理者が先にアカウントを作っておきます（[ユーザーとアクセス制限](./users-and-access.md)）。メールアドレスが一致すれば、SSO で同じアカウントに入れます。
 
 ### SSO の注意
 
@@ -92,7 +92,7 @@ https://192.168.1.50/oauth/callback
 |---|---|
 | サインイン画面に SSO のボタンが出ない | 発行者 URL・クライアント ID・シークレットのどれかが空です。3. の項目を見直してください |
 | 「IdP との認証に失敗しました」 | IdP がクライアント ID とシークレットの組み合わせを受け付けていません。**まずシークレットを疑ってください。** IdP の画面からコピーし直して入れ直します（Google なら `GOCSPX-` で始まるもの） |
-| IdP の画面で `redirect_uri_mismatch` | IdP に登録したリダイレクト URI が、1. の値と 1 文字でも違います（[困ったとき](./troubleshooting#sso-で-redirect-uri-mismatch-と出る)） |
+| IdP の画面で `redirect_uri_mismatch` | IdP に登録したリダイレクト URI が、1. の値と 1 文字でも違います（[困ったとき](./troubleshooting.md#sso-で-redirect-uri-mismatch-と出る)） |
 
 詳しくは [SSO の設定（詳細）](https://github.com/ulysseus-inc/ofuro-wiki/blob/main/docs/sso-setup.md) を見てください。
 
@@ -105,11 +105,11 @@ AI は、ofuro-wiki から見て**普通の利用者の一人**です。人と�
 
 ### ofuro-wiki 側（管理者）
 
-1. AI 用のアカウントを作ります（[ユーザーを追加する](./users-and-access#_1-ユーザーを追加する)）
+1. AI 用のアカウントを作ります（[ユーザーを追加する](./users-and-access.md#_1-ユーザーを追加する)）
    - **使う人ごとに 1 つ**作ります（例: `taro+ai@example.com`）。誰の AI が編集したかが分かり、その人の AI だけを止められます
    - **パスワードを設定**します。AI はパスワードでサインインします。SSO を使っている場合も、AI 用のアカウントはパスワード付きで別に作ってください（SSO で作ったアカウントにはパスワードが無く、AI はサインインできません）
    - 管理者にはしません
-2. ワークスペースに招待し、役割を決めます。書かせるならメンバー、読ませるだけなら閲覧者です。触らせたくないページは、[ページごとに絞れます](./users-and-access#_4-ページごとに見られる人を絞る)
+2. ワークスペースに招待し、役割を決めます。書かせるならメンバー、読ませるだけなら閲覧者です。触らせたくないページは、[ページごとに絞れます](./users-and-access.md#_4-ページごとに見られる人を絞る)
 
 AI を止めたいときは、そのアカウントのパスワードを変えるか、削除します。
 
@@ -139,7 +139,7 @@ node ~/.claude/plugins/marketplaces/ofuro-wiki/skills/ofuro-wiki-cli/scripts/ofu
 AI 用の CLI は Node.js で動きます。**Node.js は、PC に入れた認証局を見ません。**
 そのままだと「サーバーに接続できない」で失敗します。
 
-AI を動かす PC で、環境変数 `NODE_EXTRA_CA_CERTS` に認証局（[社内サーバーへの導入](./install-server#_6-他の-pc-から開く) で配った `rootCA.pem`）の場所を設定してから、`login` と Claude Code を起動します。
+AI を動かす PC で、環境変数 `NODE_EXTRA_CA_CERTS` に認証局（[社内サーバーへの導入](./install-server.md#_6-他の-pc-から開く) で配った `rootCA.pem`）の場所を設定してから、`login` と Claude Code を起動します。
 
 ```bash
 # Mac・Linux（~/.bashrc や ~/.zshrc に書いておく）

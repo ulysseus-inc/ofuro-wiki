@@ -41,6 +41,6 @@ features:
 
 <div class="home-more">
 
-[See all features →](/en/guide/introduction#features)
+[See all features →](./guide/introduction.md#features)
 
 </div>

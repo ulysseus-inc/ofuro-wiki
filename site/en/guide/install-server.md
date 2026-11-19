@@ -30,7 +30,7 @@ Run every command below on the server (at its console or over SSH).
 
 ## 0. Set the server's time zone
 
-Set the server to your local time zone. The [Operation](./operation) chapter uses it as the clock for copying backups at a fixed time.
+Set the server to your local time zone. The [Operation](./operation.md) chapter uses it as the clock for copying backups at a fixed time.
 The examples use Japan time (`Asia/Tokyo`); replace it with yours (`timedatectl list-timezones` lists them).
 
 ```bash
@@ -111,7 +111,7 @@ mkdir -p ~/ofuro-wiki/certs && cd ~/ofuro-wiki
 mkcert -cert-file certs/cert.pem -key-file certs/key.pem 192.168.1.50 localhost
 ```
 
-You are done when `cert.pem` and `key.pem` appear in the `certs` folder. The certificate is valid for 2 years and 3 months ([Renew the certificate](./operation#_4-renew-the-certificate)).
+You are done when `cert.pem` and `key.pem` appear in the `certs` folder. The certificate is valid for 2 years and 3 months ([Renew the certificate](./operation.md#_4-renew-the-certificate)).
 The first run also creates the CA (`~/.local/share/mkcert`).
 You will see "the local CA is not installed in the system trust store"; you can ignore it. It is your PCs, not the server, that need to trust the CA (step 6).
 
@@ -149,7 +149,7 @@ chmod 600 .env
 | `ALLOWED_ORIGINS` | Accepted origins. Same as `BASE_URL` |
 | `TRUST_PROXY` | Needed when requests come through Caddy. Without it, the audit log records Caddy as the source of every request |
 
-The other items are the same as in the [Quick start](./quickstart#_1-create-a-folder-and-the-settings-files).
+The other items are the same as in the [Quick start](./quickstart.md#_1-create-a-folder-and-the-settings-files).
 `chmod 600` makes `.env` readable only by you.
 
 Create the **HTTPS front end settings** (`Caddyfile`). Run it as is.
@@ -220,7 +220,7 @@ Thanks to `restart: unless-stopped` in the compose file, the wiki starts automat
 
 ::: warning Before your organization starts using it
 By default, new registration is enabled, and anyone who can open the wiki's URL can create their own account.
-After root signs in for the first time, disable new registration if needed in [Initial setup](./initial-setup#_2-disable-new-registration).
+After root signs in for the first time, disable new registration if needed in [Initial setup](./initial-setup.md#_2-disable-new-registration).
 :::
 
 ## 6. Open it from other PCs
@@ -259,7 +259,7 @@ sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keyc
 
 Open **https://192.168.1.50** in a browser on the PC. You are done if a lock icon appears and there is no warning.
 
-Sign in for the first time with the `ROOT_EMAIL` address in `.env` (same as [Quick start step 3](./quickstart#_3-open-it-in-a-browser)).
+Sign in for the first time with the `ROOT_EMAIL` address in `.env` (same as [Quick start step 3](./quickstart.md#_3-open-it-in-a-browser)).
 
 ::: details If you cannot connect
 If the firewall (ufw) is enabled on the server, open ports 80 and 443.
@@ -277,4 +277,4 @@ On a fresh Ubuntu Server, ufw is disabled (`sudo ufw status` shows `inactive`).
 2. Type on one and check that it appears on the other right away
 3. Reboot the server (`sudo reboot`) and wait a few minutes. Without touching anything, check that the PCs can open it again
 
-That completes the installation. Next, go to [Initial setup](./initial-setup).
+That completes the installation. Next, go to [Initial setup](./initial-setup.md).
